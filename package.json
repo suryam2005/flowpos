@@ -1,0 +1,41 @@
+{
+  "name": "flowpos",
+  "version": "1.0.0",
+  "main": "node_modules/expo/AppEntry.js",
+  "scripts": {
+    "start": "expo start",
+    "android": "expo start --android",
+    "ios": "expo start --ios",
+    "web": "expo start --web"
+  },
+  "dependencies": {
+    "@expo/metro-runtime": "~5.0.4",
+    "@expo/vector-icons": "^14.1.0",
+    "@react-native-async-storage/async-storage": "2.1.2",
+    "@react-navigation/bottom-tabs": "^7.4.4",
+    "@react-navigation/native": "^7.1.16",
+    "@react-navigation/stack": "^7.4.4",
+    "expo": "^54.0.0",
+    "expo-constants": "~17.1.7",
+    "expo-file-system": "~18.1.11",
+    "expo-haptics": "~14.1.4",
+    "expo-image-picker": "~16.1.4",
+    "expo-local-authentication": "~16.0.5",
+    "expo-print": "~13.0.1",
+    "expo-secure-store": "~14.2.3",
+    "expo-sharing": "~12.0.1",
+    "expo-status-bar": "~2.2.3",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "react-native": "0.79.5",
+    "react-native-gesture-handler": "~2.24.0",
+    "react-native-safe-area-context": "5.4.0",
+    "react-native-screens": "~4.11.1",
+    "react-native-sms-android": "^0.4.1",
+    "react-native-web": "^0.20.0"
+  },
+  "devDependencies": {
+    "@babel/core": "^7.20.0"
+  },
+  "private": true
+}
