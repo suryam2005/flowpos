@@ -4,14 +4,13 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
-  Animated,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 
 const WelcomeScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
-  const fadeAnim = React.useRef(new Animated.Value(1)).current;
+  // No animations needed
 
   const steps = [
     {
@@ -37,19 +36,7 @@ const WelcomeScreen = ({ navigation }) => {
   const handleNext = () => {
     if (currentStep < steps.length - 1) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setCurrentStep(currentStep + 1);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
-      });
+      setCurrentStep(currentStep + 1);
     } else {
       handleGetStarted();
     }
@@ -84,7 +71,7 @@ const WelcomeScreen = ({ navigation }) => {
       <View style={styles.content}>
 
         {/* Step Content */}
-        <Animated.View style={[styles.stepContent, { opacity: fadeAnim }]}>
+        <View style={styles.stepContent}>
           <View style={styles.stepHeader}>
             <Text style={styles.emoji}>{currentStepData.emoji}</Text>
             <Text style={styles.title}>{currentStepData.title}</Text>
@@ -96,7 +83,7 @@ const WelcomeScreen = ({ navigation }) => {
               {currentStepData.description}
             </Text>
           </View>
-        </Animated.View>
+        </View>
 
         {/* Step Indicators */}
         <View style={styles.indicators}>

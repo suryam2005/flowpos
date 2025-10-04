@@ -18,27 +18,10 @@ const LoadingSpinner = ({
   color = '#2563eb' 
 }) => {
   const spinValue = useRef(new Animated.Value(0)).current;
-  const fadeValue = useRef(new Animated.Value(0)).current;
-  const scaleValue = useRef(new Animated.Value(0.8)).current;
 
   useEffect(() => {
     if (visible) {
-      // Start animations
-      Animated.parallel([
-        Animated.timing(fadeValue, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }),
-        Animated.spring(scaleValue, {
-          toValue: 1,
-          tension: 100,
-          friction: 8,
-          useNativeDriver: true,
-        }),
-      ]).start();
-
-      // Continuous spin animation
+      // Simple continuous spin animation for spinner only
       const spinAnimation = Animated.loop(
         Animated.timing(spinValue, {
           toValue: 1,
@@ -49,12 +32,6 @@ const LoadingSpinner = ({
       spinAnimation.start();
 
       return () => spinAnimation.stop();
-    } else {
-      Animated.timing(fadeValue, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
     }
   }, [visible]);
 
@@ -73,15 +50,15 @@ const LoadingSpinner = ({
 
   const getContainerStyle = () => {
     if (overlay) {
-      return [styles.overlayContainer, { opacity: fadeValue }];
+      return [styles.overlayContainer, { opacity: 1 }];
     }
-    return [styles.inlineContainer, { opacity: fadeValue, transform: [{ scale: scaleValue }] }];
+    return [styles.inlineContainer, { opacity: 1 }];
   };
 
   if (!visible) return null;
 
   return (
-    <Animated.View style={getContainerStyle()}>
+    <View style={getContainerStyle()}>
       <View style={styles.content}>
         <Animated.View
           style={[
@@ -101,7 +78,7 @@ const LoadingSpinner = ({
           </Text>
         )}
       </View>
-    </Animated.View>
+    </View>
   );
 };
 

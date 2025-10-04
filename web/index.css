@@ -1,0 +1,50 @@
+/* Web-specific styles for React Native Web */
+
+html, body, #root {
+  height: 100%;
+  overflow: hidden;
+}
+
+/* Fix scrolling for React Native Web FlatList */
+div[data-focusable="true"] {
+  overflow: auto !important;
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Custom scrollbar styling */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #cbd5e1;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #94a3b8;
+}
+
+/* Ensure proper touch scrolling on mobile web */
+* {
+  -webkit-overflow-scrolling: touch;
+}
+
+/* Fix for React Native Web containers */
+.rn-view {
+  overflow: visible;
+}
+
+/* Specific fix for scrollable containers */
+[style*="overflow: scroll"], 
+[style*="overflow-y: scroll"],
+[style*="overflow-x: scroll"] {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
+}

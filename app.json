@@ -3,7 +3,7 @@
     "name": "FlowPOS",
     "slug": "flowpos",
     "version": "1.0.0",
-    "orientation": "portrait",
+    "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "light",
     "splash": {
@@ -16,7 +16,8 @@
     ],
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.flowpos.app"
+      "bundleIdentifier": "com.flowpos.app",
+      "requireFullScreen": false
     },
     "android": {
       "adaptiveIcon": {

@@ -226,7 +226,7 @@ const InventoryScreen = () => {
 
       {/* Stock Update Modal */}
       <Modal
-        animationType="slide"
+        animationType="none"
         transparent={true}
         visible={showStockModal}
         onRequestClose={() => setShowStockModal(false)}

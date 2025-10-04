@@ -5,9 +5,9 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 
 const OrderDetailsScreen = ({ navigation, route }) => {

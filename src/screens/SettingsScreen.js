@@ -4,16 +4,16 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Switch,
   ScrollView,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Haptics from 'expo-haptics';
 import { clearAllAppData } from '../utils/dataUtils';
-import { setItemAsync, getItemAsync } from '../utils/secureStorage';
+import { setItemAsync, getItemAsync, deleteItemAsync } from '../utils/secureStorage';
 import { safeGoBack } from '../utils/navigationUtils';
 
 const SettingsScreen = ({ navigation }) => {
@@ -21,6 +21,8 @@ const SettingsScreen = ({ navigation }) => {
   const [useAppleEmoji, setUseAppleEmoji] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
+  const [pinEnabled, setPinEnabled] = useState(true);
+  const [autoPaymentDetection, setAutoPaymentDetection] = useState(true);
 
   useEffect(() => {
     loadSettings();
@@ -39,10 +41,12 @@ const SettingsScreen = ({ navigation }) => {
 
   const loadSettings = async () => {
     try {
-      const [appleFont, appleEmoji, biometric] = await Promise.all([
+      const [appleFont, appleEmoji, biometric, pinSetup, autoDetection] = await Promise.all([
         AsyncStorage.getItem('useAppleFont'),
         AsyncStorage.getItem('useAppleEmoji'),
-        getItemAsync('biometricEnabled')
+        getItemAsync('biometricEnabled'),
+        getItemAsync('pinSetupCompleted'),
+        AsyncStorage.getItem('autoPaymentDetection')
       ]);
       
       if (appleFont !== null) {
@@ -53,6 +57,12 @@ const SettingsScreen = ({ navigation }) => {
       }
       if (biometric !== null) {
         setBiometricEnabled(JSON.parse(biometric));
+      }
+      if (pinSetup !== null) {
+        setPinEnabled(JSON.parse(pinSetup));
+      }
+      if (autoDetection !== null) {
+        setAutoPaymentDetection(JSON.parse(autoDetection));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -75,6 +85,11 @@ const SettingsScreen = ({ navigation }) => {
   const handleAppleEmojiToggle = (value) => {
     setUseAppleEmoji(value);
     saveSetting('useAppleEmoji', value);
+  };
+
+  const handleAutoPaymentDetectionToggle = (value) => {
+    setAutoPaymentDetection(value);
+    saveSetting('autoPaymentDetection', value);
   };
 
   const handleBiometricToggle = async (value) => {
@@ -148,6 +163,77 @@ const SettingsScreen = ({ navigation }) => {
         },
       ]
     );
+  };
+
+  const handleRemoveLock = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
+    
+    Alert.alert(
+      'Remove App Lock',
+      'This will disable PIN and biometric authentication. The app will no longer require authentication to access.\n\nAre you sure you want to continue?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Remove Lock',
+          style: 'destructive',
+          onPress: confirmRemoveLock,
+        },
+      ]
+    );
+  };
+
+  const confirmRemoveLock = () => {
+    Alert.alert(
+      'Final Confirmation',
+      'This will permanently remove all security locks from the app. Anyone with access to your device will be able to use FlowPOS.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Yes, Remove All Locks',
+          style: 'destructive',
+          onPress: performRemoveLock,
+        },
+      ]
+    );
+  };
+
+  const performRemoveLock = async () => {
+    try {
+      // Remove all security settings
+      await Promise.all([
+        deleteItemAsync('pinSetupCompleted'),
+        deleteItemAsync('userPin'),
+        deleteItemAsync('biometricEnabled'),
+      ]);
+      
+      setPinEnabled(false);
+      setBiometricEnabled(false);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      Alert.alert(
+        'Security Removed',
+        'All app locks have been removed. The app will no longer require authentication.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate back to main app
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Main' }],
+              });
+            },
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Error removing locks:', error);
+      Alert.alert(
+        'Error',
+        'Failed to remove security locks. Please try again.'
+      );
+    }
   };
 
   const performDataReset = async () => {
@@ -311,31 +397,77 @@ const SettingsScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Payment Features</Text>
+          
+          <SettingItem
+            title="Auto Payment Detection"
+            description="Automatically detect UPI payment confirmations from SMS messages"
+            value={autoPaymentDetection}
+            onToggle={handleAutoPaymentDetectionToggle}
+          />
+        </View>
+
+        <View style={styles.section}>
           <Text style={styles.sectionTitle}>Security</Text>
           
-          <TouchableOpacity
-            style={styles.settingButton}
-            onPress={handleChangePIN}
-            activeOpacity={0.7}
-          >
-            <View style={styles.settingButtonContent}>
-              <View style={styles.settingButtonInfo}>
-                <Text style={styles.settingButtonTitle}>Change PIN</Text>
-                <Text style={styles.settingButtonDescription}>
-                  Update your app security PIN
-                </Text>
-              </View>
-              <Text style={styles.settingButtonArrow}>→</Text>
-            </View>
-          </TouchableOpacity>
+          {pinEnabled ? (
+            <>
+              <TouchableOpacity
+                style={styles.settingButton}
+                onPress={handleChangePIN}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingButtonContent}>
+                  <View style={styles.settingButtonInfo}>
+                    <Text style={styles.settingButtonTitle}>Change PIN</Text>
+                    <Text style={styles.settingButtonDescription}>
+                      Update your app security PIN
+                    </Text>
+                  </View>
+                  <Text style={styles.settingButtonArrow}>→</Text>
+                </View>
+              </TouchableOpacity>
 
-          {biometricAvailable && (
-            <SettingItem
-              title="Biometric Authentication"
-              description="Use fingerprint or face recognition to unlock the app"
-              value={biometricEnabled}
-              onToggle={handleBiometricToggle}
-            />
+              {biometricAvailable && (
+                <SettingItem
+                  title="Biometric Authentication"
+                  description="Use fingerprint or face recognition to unlock the app"
+                  value={biometricEnabled}
+                  onToggle={handleBiometricToggle}
+                />
+              )}
+
+              <TouchableOpacity
+                style={[styles.settingButton, styles.dangerSettingButton]}
+                onPress={handleRemoveLock}
+                activeOpacity={0.7}
+              >
+                <View style={styles.settingButtonContent}>
+                  <View style={styles.settingButtonInfo}>
+                    <Text style={[styles.settingButtonTitle, styles.dangerSettingTitle]}>Remove App Lock</Text>
+                    <Text style={styles.settingButtonDescription}>
+                      Disable PIN and biometric authentication completely
+                    </Text>
+                  </View>
+                  <Text style={styles.settingButtonArrow}>→</Text>
+                </View>
+              </TouchableOpacity>
+            </>
+          ) : (
+            <View style={styles.noSecurityContainer}>
+              <Text style={styles.noSecurityIcon}>🔓</Text>
+              <Text style={styles.noSecurityTitle}>No Security Lock</Text>
+              <Text style={styles.noSecurityText}>
+                App lock is disabled. Anyone with access to your device can use FlowPOS.
+              </Text>
+              <TouchableOpacity
+                style={styles.enableSecurityButton}
+                onPress={() => navigation.navigate('PinSetup', { isFirstTime: true })}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.enableSecurityText}>Enable Security</Text>
+              </TouchableOpacity>
+            </View>
           )}
         </View>
 
@@ -598,6 +730,51 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 40,
+  },
+  dangerSettingButton: {
+    borderWidth: 1,
+    borderColor: '#fecaca',
+    backgroundColor: '#fef2f2',
+  },
+  dangerSettingTitle: {
+    color: '#dc2626',
+  },
+  noSecurityContainer: {
+    backgroundColor: '#fef3c7',
+    borderRadius: 12,
+    padding: 20,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: '#fde68a',
+  },
+  noSecurityIcon: {
+    fontSize: 48,
+    marginBottom: 12,
+  },
+  noSecurityTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#92400e',
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  noSecurityText: {
+    fontSize: 14,
+    color: '#b45309',
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 16,
+  },
+  enableSecurityButton: {
+    backgroundColor: '#d97706',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  enableSecurityText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
   },
 });
 

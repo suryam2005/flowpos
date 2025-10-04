@@ -5,22 +5,28 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   TextInput,
   Modal,
   RefreshControl,
-  Animated,
   ScrollView,
+  Image,
+  Switch,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { fadeIn } from '../utils/animations';
+
 import InventoryScreen from './manage/InventoryScreen';
 import StoreSettingsScreen from './manage/StoreSettingsScreen';
 import MaterialsScreen from './manage/MaterialsScreen';
 import { PageLoader, InlineLoader } from '../components/LoadingSpinner';
 import { usePageLoading, useTabLoading } from '../hooks/usePageLoading';
+import featureService from '../services/FeatureService';
+import TagInput from '../components/TagInput';
+import ProductImagePicker from '../components/ProductImagePicker';
+import { generateProductTags } from '../utils/tagGenerator';
+
 
 const ManageScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
@@ -40,18 +46,16 @@ const ManageScreen = ({ navigation }) => {
     name: '',
     price: '',
     stock: '',
-    category: 'Food',
-    emoji: '🍔',
+    trackStock: true,
+    tags: [],
+    image: null,
   });
 
-  const [categories, setCategories] = useState(['Food', 'Beverages', 'Desserts']);
-  const [newCategory, setNewCategory] = useState('');
-  const [showCategoryModal, setShowCategoryModal] = useState(false);
-  const [categoryJustAdded, setCategoryJustAdded] = useState(false);
+  const [businessType, setBusinessType] = useState('restaurant');
+
   const tabs = ['Products', 'Inventory', 'Store Settings', 'Materials'];
 
-  // Animation refs
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  // No animations needed
 
   useEffect(() => {
     loadProducts();
@@ -62,8 +66,7 @@ const ManageScreen = ({ navigation }) => {
       switchTab('Products', 0); // No loading for initial tab
     }
 
-    // Animate on mount
-    fadeIn(fadeAnim, 500).start();
+    // No animations needed
 
     return unsubscribe;
   }, [navigation]);
@@ -75,10 +78,7 @@ const ManageScreen = ({ navigation }) => {
     }
 
     try {
-      // Add slight delay for smooth refresh animation
-      if (isRefresh) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
+      // No animation delays needed
 
       // Load products and store setup status
       const [storedProducts, setupCompleted, storeData] = await Promise.all([
@@ -96,7 +96,7 @@ const ManageScreen = ({ navigation }) => {
         setStoreInfo(JSON.parse(storeData));
       }
       
-      // Finish loading animation on initial load
+      // Finish loading on initial load
       if (!isRefresh) {
         finishLoading();
       }
@@ -132,6 +132,12 @@ const ManageScreen = ({ navigation }) => {
   };
 
   const handleAddProduct = async () => {
+    // Check feature limits first
+    const canAdd = await featureService.canAddProduct();
+    if (!canAdd) {
+      return; // Feature service will show upgrade prompt
+    }
+
     // Check if store setup is completed
     try {
       const storeSetupCompleted = await AsyncStorage.getItem('storeSetupCompleted');
@@ -168,8 +174,9 @@ const ManageScreen = ({ navigation }) => {
       name: '',
       price: '',
       stock: '',
-      category: 'Food',
-      emoji: '🍔',
+      trackStock: true,
+      tags: [],
+      image: null,
     });
     setModalVisible(true);
   };
@@ -179,9 +186,10 @@ const ManageScreen = ({ navigation }) => {
     setFormData({
       name: product.name,
       price: product.price.toString(),
-      stock: product.stock.toString(),
-      category: product.category,
-      emoji: product.emoji,
+      stock: product.trackStock ? product.stock.toString() : '',
+      trackStock: product.trackStock !== false, // Default to true if not specified
+      tags: product.tags || [],
+      image: product.image || null,
     });
     setModalVisible(true);
   };
@@ -234,14 +242,16 @@ const ManageScreen = ({ navigation }) => {
       return;
     }
 
-    if (isNaN(stock) || stock < 0) {
+    // Validate stock only if tracking is enabled
+    if (formData.trackStock && (isNaN(stock) || stock < 0)) {
       Alert.alert('Validation Error', 'Please enter a valid stock quantity (0 or greater).');
       return;
     }
 
-    if (!formData.emoji.trim()) {
-      Alert.alert('Validation Error', 'Please add an emoji for your product.');
-      return;
+    // Generate tags if none provided
+    let finalTags = formData.tags;
+    if (finalTags.length === 0) {
+      finalTags = generateProductTags(formData.name.trim(), businessType);
     }
 
     let updatedProducts;
@@ -254,9 +264,10 @@ const ManageScreen = ({ navigation }) => {
             ...p,
             name: formData.name.trim(),
             price,
-            stock,
-            category: formData.category,
-            emoji: formData.emoji,
+            stock: formData.trackStock ? stock : null,
+            trackStock: formData.trackStock,
+            tags: finalTags,
+            image: formData.image,
           }
           : p
       );
@@ -266,9 +277,10 @@ const ManageScreen = ({ navigation }) => {
         id: Date.now().toString(),
         name: formData.name.trim(),
         price,
-        stock,
-        category: formData.category,
-        emoji: formData.emoji,
+        stock: formData.trackStock ? stock : null,
+        trackStock: formData.trackStock,
+        tags: finalTags,
+        image: formData.image,
       };
       updatedProducts = [...products, newProduct];
     }
@@ -289,15 +301,32 @@ const ManageScreen = ({ navigation }) => {
 
   const renderProduct = ({ item }) => (
     <View style={styles.productCard}>
-      <View style={styles.productEmoji}>
-        <Text style={styles.emojiText}>{item.emoji}</Text>
+      <View style={styles.productImage}>
+        {item.image ? (
+          <Image source={{ uri: item.image }} style={styles.productImageStyle} />
+        ) : (
+          <View style={styles.productImagePlaceholder}>
+            <Text style={styles.productImagePlaceholderText}>📦</Text>
+          </View>
+        )}
       </View>
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
         <Text style={styles.productDetails}>
-          ₹{item.price} • Stock: {item.stock}
+          ₹{item.price}{item.trackStock ? ` • Stock: ${item.stock}` : ' • No stock tracking'}
         </Text>
-        <Text style={styles.productCategory}>{item.category}</Text>
+        {item.tags && item.tags.length > 0 && (
+          <View style={styles.productTags}>
+            {item.tags.slice(0, 3).map((tag, index) => (
+              <View key={index} style={styles.productTag}>
+                <Text style={styles.productTagText}>{tag}</Text>
+              </View>
+            ))}
+            {item.tags.length > 3 && (
+              <Text style={styles.moreTags}>+{item.tags.length - 3}</Text>
+            )}
+          </View>
+        )}
       </View>
       <View style={styles.productActions}>
         <TouchableOpacity
@@ -316,67 +345,22 @@ const ManageScreen = ({ navigation }) => {
     </View>
   );
 
-  const renderEmojiSelector = () => (
-    <View style={styles.emojiSelector}>
-      <Text style={styles.inputLabel}>Product Icon (Emoji)</Text>
-      <TextInput
-        ref={lastFocusedInputRef}
-        style={styles.textInput}
-        placeholder="Add a product emoji"
-        value={formData.emoji}
-        onChangeText={(text) => setFormData({ ...formData, emoji: text })}
-        maxLength={2}
-        onFocus={() => {
-          lastFocusedInputRef.current = lastFocusedInputRef.current;
-        }}
-      />
-    </View>
-  );
-
-  const handleDeleteCategory = (categoryToDelete) => {
-    Alert.alert(
-      'Delete Category',
-      `Are you sure you want to delete "${categoryToDelete}" category?`,
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Delete',
-          style: 'destructive',
-          onPress: () => {
-            setCategories(categories.filter(cat => cat !== categoryToDelete));
-            if (formData.category === categoryToDelete) {
-              setFormData({ ...formData, category: categories[0] || 'Food' });
-            }
-          },
-        },
-      ]
-    );
-  };
-
-  const handleAddCategory = () => {
-    if (newCategory.trim() && !categories.includes(newCategory.trim())) {
-      const trimmedCategory = newCategory.trim();
-      setCategories([...categories, trimmedCategory]);
-      setFormData({ ...formData, category: trimmedCategory });
-      
-      // Show success state briefly
-      setCategoryJustAdded(true);
-      
-      // Close modal after brief delay to show success
-      setTimeout(() => {
-        setNewCategory('');
-        setShowCategoryModal(false);
-        setCategoryJustAdded(false);
-        
-        // Restore focus to the emoji input after modal closes
-        setTimeout(() => {
-          if (lastFocusedInputRef.current) {
-            lastFocusedInputRef.current.focus();
-          }
-        }, 50);
-      }, 800);
-    }
-  };
+  // Load business type from store info
+  useEffect(() => {
+    const loadBusinessType = async () => {
+      try {
+        const storeData = await AsyncStorage.getItem('storeInfo');
+        if (storeData) {
+          const store = JSON.parse(storeData);
+          setBusinessType(store.businessType || 'restaurant');
+        }
+      } catch (error) {
+        console.error('Error loading business type:', error);
+      }
+    };
+    
+    loadBusinessType();
+  }, []);
 
   const handleDevClearData = () => {
     Alert.alert(
@@ -433,52 +417,13 @@ const ManageScreen = ({ navigation }) => {
     navigation.navigate('Invoice', { orderData: testOrderData });
   };
 
-  const renderCategorySelector = () => (
-    <View style={styles.categorySelector}>
-      <Text style={styles.inputLabel}>Category</Text>
-      <ScrollView 
-        style={styles.categoryScrollContainer}
-        showsVerticalScrollIndicator={false}
-        nestedScrollEnabled={true}
-        keyboardShouldPersistTaps="always"
-      >
-        <View style={styles.categoryGrid}>
-          {categories.map((category) => (
-            <TouchableOpacity
-              key={category}
-              style={[
-                styles.categoryOption,
-                formData.category === category && styles.categoryOptionSelected
-              ]}
-              onPress={() => setFormData({ ...formData, category })}
-              onLongPress={() => handleDeleteCategory(category)}
-            >
-              <Text style={[
-                styles.categoryOptionText,
-                formData.category === category && styles.categoryOptionTextSelected
-              ]}>
-                {category}
-              </Text>
-            </TouchableOpacity>
-          ))}
-          <TouchableOpacity
-            style={styles.addCategoryOption}
-            onPress={() => setShowCategoryModal(true)}
-            activeOpacity={0.7}
-            delayPressIn={0}
-          >
-            <Text style={styles.addCategoryText}>+ Add</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
-    </View>
-  );
+
 
   return (
     <SafeAreaView style={styles.container}>
       <PageLoader visible={isLoading} text="Loading manage..." />
       
-      <Animated.View style={[styles.content, contentStyle]}>
+      <View style={[styles.content, contentStyle]}>
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.titleContainer}
@@ -490,12 +435,20 @@ const ManageScreen = ({ navigation }) => {
               <Text style={styles.storeSubtitle}>{storeInfo.name}</Text>
             )}
           </TouchableOpacity>
-        <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={() => navigation.navigate('Settings')}
-        >
-          <Text style={styles.settingsIcon}>⚙️</Text>
-        </TouchableOpacity>
+        <View style={styles.headerButtons}>
+          <TouchableOpacity
+            style={styles.subscriptionButton}
+            onPress={() => navigation.navigate('Subscription')}
+          >
+            <Text style={styles.subscriptionIcon}>👑</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.settingsButton}
+            onPress={() => navigation.navigate('Settings')}
+          >
+            <Text style={styles.settingsIcon}>⚙️</Text>
+          </TouchableOpacity>
+        </View>
       </View>
 
       <View style={styles.tabBar}>
@@ -509,10 +462,15 @@ const ManageScreen = ({ navigation }) => {
             {isTabLoading(tab) ? (
               <InlineLoader visible={true} size="small" color="#2563eb" />
             ) : (
-              <Text style={[
-                styles.tabText,
-                activeTab === tab && styles.tabTextActive
-              ]}>
+              <Text 
+                style={[
+                  styles.tabText,
+                  activeTab === tab && styles.tabTextActive
+                ]}
+                numberOfLines={2}
+                adjustsFontSizeToFit={true}
+                minimumFontScale={0.8}
+              >
                 {tab}
               </Text>
             )}
@@ -613,7 +571,7 @@ const ManageScreen = ({ navigation }) => {
       {activeTab === 'Materials' && <MaterialsScreen />}
 
       <Modal
-        animationType="slide"
+        animationType="none"
         transparent={true}
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
@@ -653,16 +611,42 @@ const ManageScreen = ({ navigation }) => {
                   keyboardType="numeric"
                 />
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Stock Quantity"
-                  value={formData.stock}
-                  onChangeText={(text) => setFormData({ ...formData, stock: text })}
-                  keyboardType="numeric"
+                {/* Stock Tracking Toggle */}
+                <View style={styles.stockTrackingContainer}>
+                  <View style={styles.stockTrackingHeader}>
+                    <Text style={styles.inputLabel}>Track Stock Quantity</Text>
+                    <Switch
+                      value={formData.trackStock}
+                      onValueChange={(value) => setFormData({ ...formData, trackStock: value })}
+                      trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
+                      thumbColor={formData.trackStock ? '#2563eb' : '#9ca3af'}
+                    />
+                  </View>
+                  {formData.trackStock && (
+                    <TextInput
+                      style={styles.textInput}
+                      placeholder="Stock Quantity"
+                      value={formData.stock}
+                      onChangeText={(text) => setFormData({ ...formData, stock: text })}
+                      keyboardType="numeric"
+                    />
+                  )}
+                </View>
+
+                {/* Product Image */}
+                <ProductImagePicker
+                  image={formData.image}
+                  onImageChange={(image) => setFormData({ ...formData, image })}
+                  productName={formData.name}
                 />
 
-                {renderEmojiSelector()}
-                {renderCategorySelector()}
+                {/* Product Tags */}
+                <TagInput
+                  tags={formData.tags}
+                  onTagsChange={(tags) => setFormData({ ...formData, tags })}
+                  productName={formData.name}
+                  businessType={businessType}
+                />
 
                 <TouchableOpacity
                   style={styles.saveButton}
@@ -678,70 +662,10 @@ const ManageScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-      <Modal
-        animationType="fade"
-        transparent={true}
-        visible={showCategoryModal}
-        onRequestClose={() => setShowCategoryModal(false)}
-      >
-        <TouchableOpacity 
-          style={styles.modalOverlay}
-          activeOpacity={1}
-          onPress={() => {
-            setShowCategoryModal(false);
-            setNewCategory('');
-          }}
-        >
-          <TouchableOpacity 
-            style={styles.categoryModalContent}
-            activeOpacity={1}
-            onPress={() => {}} // Prevent modal close when tapping inside
-          >
-            {categoryJustAdded ? (
-              <>
-                <Text style={styles.categoryModalTitle}>✅ Category Added!</Text>
-                <Text style={styles.categorySuccessText}>
-                  "{categories[categories.length - 1]}" has been added and selected
-                </Text>
-              </>
-            ) : (
-              <>
-                <Text style={styles.categoryModalTitle}>Add New Category</Text>
-                <TextInput
-                  style={styles.categoryInput}
-                  placeholder="Category name"
-                  value={newCategory}
-                  onChangeText={setNewCategory}
-                  autoFocus={true}
-                  returnKeyType="done"
-                  onSubmitEditing={handleAddCategory}
-                  editable={!categoryJustAdded}
-                />
-                <View style={styles.categoryModalButtons}>
-                  <TouchableOpacity
-                    style={styles.cancelButton}
-                    onPress={() => {
-                      setShowCategoryModal(false);
-                      setNewCategory('');
-                      setCategoryJustAdded(false);
-                    }}
-                  >
-                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity
-                    style={[styles.saveButton, styles.categoryModalSaveButton]}
-                    onPress={handleAddCategory}
-                    disabled={categoryJustAdded}
-                  >
-                    <Text style={styles.saveButtonText}>Add</Text>
-                  </TouchableOpacity>
-                </View>
-              </>
-            )}
-          </TouchableOpacity>
-        </TouchableOpacity>
-      </Modal>
-      </Animated.View>
+
+
+
+      </View>
     </SafeAreaView>
   );
 };
@@ -778,6 +702,21 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     marginTop: 2,
   },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  subscriptionButton: {
+    padding: 8,
+    backgroundColor: '#fef3c7',
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: '#fbbf24',
+  },
+  subscriptionIcon: {
+    fontSize: 16,
+  },
   settingsButton: {
     padding: 8,
   },
@@ -809,6 +748,8 @@ const styles = StyleSheet.create({
     color: '#6b7280',
     textAlign: 'center',
     flexWrap: 'wrap',
+    lineHeight: 14,
+    numberOfLines: 2,
   },
   tabTextActive: {
     fontSize: 11,
@@ -816,6 +757,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     textAlign: 'center',
     flexWrap: 'wrap',
+    lineHeight: 14,
+    numberOfLines: 2,
   },
   productsHeader: {
     flexDirection: 'row',
@@ -877,17 +820,59 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#f3f4f6',
   },
-  productEmoji: {
+  productImage: {
     width: 48,
     height: 48,
-    borderRadius: 24,
-    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    marginRight: 16,
+    overflow: 'hidden',
+  },
+  productImageStyle: {
+    width: '100%',
+    height: '100%',
+  },
+  productImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: '#f3f4f6',
     justifyContent: 'center',
     alignItems: 'center',
-    marginRight: 16,
+    borderRadius: 8,
   },
-  emojiText: {
-    fontSize: 24,
+  productImagePlaceholderText: {
+    fontSize: 20,
+  },
+  productTags: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    marginTop: 4,
+  },
+  productTag: {
+    backgroundColor: '#dbeafe',
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    marginRight: 4,
+    marginBottom: 2,
+  },
+  productTagText: {
+    fontSize: 10,
+    color: '#1e40af',
+    fontWeight: '500',
+  },
+  moreTags: {
+    fontSize: 10,
+    color: '#6b7280',
+    fontStyle: 'italic',
+  },
+  stockTrackingContainer: {
+    marginBottom: 16,
+  },
+  stockTrackingHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 8,
   },
   productInfo: {
     flex: 1,
@@ -1056,10 +1041,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
   },
-  categoryModalSaveButton: {
-    flex: 1,
-    paddingVertical: 12,
-  },
+
   tabContent: {
     flex: 1,
     justifyContent: 'center',
@@ -1094,41 +1076,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#ffffff',
   },
-  categoryModalContent: {
-    backgroundColor: '#ffffff',
-    borderRadius: 12,
-    padding: 20,
-    width: '80%',
-    alignItems: 'center',
-  },
-  categoryModalTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 16,
-  },
-  categorySuccessText: {
-    fontSize: 14,
-    color: '#10b981',
-    textAlign: 'center',
-    marginBottom: 16,
-  },
-  categoryInput: {
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-    fontSize: 14,
-    width: '100%',
-    marginBottom: 16,
-  },
-  categoryModalButtons: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    width: '100%',
-    gap: 12,
-  },
+
   cancelButton: {
     flex: 1,
     paddingVertical: 12,

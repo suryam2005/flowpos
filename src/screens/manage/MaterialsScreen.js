@@ -335,7 +335,7 @@ const MaterialsScreen = () => {
 
       {/* Add Modal */}
       <Modal
-        animationType="slide"
+        animationType="none"
         transparent={true}
         visible={showAddModal}
         onRequestClose={() => setShowAddModal(false)}

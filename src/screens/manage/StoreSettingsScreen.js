@@ -14,6 +14,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
+import { Linking, Platform } from 'react-native';
 
 const StoreSettingsScreen = () => {
   const [storeInfo, setStoreInfo] = useState({
@@ -25,6 +26,9 @@ const StoreSettingsScreen = () => {
     currency: 'INR',
     currencySymbol: '₹',
     qrCodeUri: '',
+    upiId: '',
+    upiId2: '',
+    upiId3: '',
   });
 
   const [taxSettings, setTaxSettings] = useState({
@@ -189,6 +193,44 @@ const StoreSettingsScreen = () => {
           onPress: () => {
             setStoreInfo({ ...storeInfo, qrCodeUri: '' });
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          },
+        },
+      ]
+    );
+  };
+
+  const handleUPIRedirect = () => {
+    if (!storeInfo.upiId) {
+      Alert.alert('UPI ID Required', 'Please enter your UPI ID first to generate payment links.');
+      return;
+    }
+
+    const amount = '100'; // Default amount, can be customized
+    const note = encodeURIComponent(`Payment to ${storeInfo.name || 'Store'}`);
+    
+    // Create UPI payment URL
+    const upiUrl = `upi://pay?pa=${storeInfo.upiId}&pn=${encodeURIComponent(storeInfo.name || 'Store')}&am=${amount}&cu=INR&tn=${note}`;
+    
+    Alert.alert(
+      'UPI Payment Options',
+      'Choose how you want to use your UPI ID:',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Test Payment Link',
+          onPress: () => {
+            Linking.openURL(upiUrl).catch(() => {
+              Alert.alert('Error', 'No UPI apps found on this device.');
+            });
+          },
+        },
+        {
+          text: 'Generate QR Code',
+          onPress: () => {
+            Alert.alert(
+              'QR Code Generator',
+              `Use this UPI ID to generate a QR code:\n\n${storeInfo.upiId}\n\nYou can use any QR code generator app or website to create a payment QR code with this UPI ID.`
+            );
           },
         },
       ]
@@ -380,13 +422,69 @@ const StoreSettingsScreen = () => {
           </>
         ))}
 
-        {/* QR Code Settings */}
-        {renderSection('QR Code Settings', (
+        {/* Payment Settings */}
+        {renderSection('Payment Settings', (
           <>
+            <View style={styles.paymentSection}>
+              <Text style={styles.inputLabel}>Primary UPI ID</Text>
+              <Text style={styles.paymentDescription}>
+                Enter your main UPI ID for digital payments and QR code generation
+              </Text>
+              <View style={styles.upiInputContainer}>
+                <TextInput
+                  style={styles.upiInput}
+                  value={storeInfo.upiId}
+                  onChangeText={(text) => setStoreInfo({ ...storeInfo, upiId: text.toLowerCase() })}
+                  placeholder="yourname@paytm"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {storeInfo.upiId && (
+                  <TouchableOpacity
+                    style={styles.upiTestButton}
+                    onPress={handleUPIRedirect}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.upiTestText}>Test</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+
+            <View style={styles.paymentSection}>
+              <Text style={styles.inputLabel}>Secondary UPI ID (Optional)</Text>
+              <Text style={styles.paymentDescription}>
+                Backup UPI ID in case primary fails
+              </Text>
+              <TextInput
+                style={styles.upiInput}
+                value={storeInfo.upiId2}
+                onChangeText={(text) => setStoreInfo({ ...storeInfo, upiId2: text.toLowerCase() })}
+                placeholder="yourname@gpay"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
+            <View style={styles.paymentSection}>
+              <Text style={styles.inputLabel}>Third UPI ID (Optional)</Text>
+              <Text style={styles.paymentDescription}>
+                Additional backup UPI ID for maximum reliability
+              </Text>
+              <TextInput
+                style={styles.upiInput}
+                value={storeInfo.upiId3}
+                onChangeText={(text) => setStoreInfo({ ...storeInfo, upiId3: text.toLowerCase() })}
+                placeholder="yourname@phonepe"
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+            </View>
+
             <View style={styles.qrSection}>
               <Text style={styles.inputLabel}>UPI QR Code</Text>
               <Text style={styles.qrDescription}>
-                Upload your UPI QR code for digital payments
+                Upload your UPI QR code for quick digital payments
               </Text>
 
               <TouchableOpacity
@@ -565,6 +663,46 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: '#ffffff',
+  },
+  paymentSection: {
+    marginBottom: 24,
+  },
+  paymentDescription: {
+    fontSize: 14,
+    color: '#6b7280',
+    marginBottom: 12,
+    lineHeight: 20,
+  },
+  upiInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  upiInput: {
+    flex: 1,
+    backgroundColor: '#ffffff',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  upiTestButton: {
+    backgroundColor: '#8b5cf6',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 8,
+  },
+  upiTestText: {
+    color: '#ffffff',
+    fontWeight: '600',
+    fontSize: 14,
   },
   qrSection: {
     marginBottom: 16,

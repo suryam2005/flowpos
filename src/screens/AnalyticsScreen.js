@@ -4,14 +4,13 @@ import {
   Text,
   StyleSheet,
   ScrollView,
-  SafeAreaView,
   RefreshControl,
-  Animated,
   Dimensions,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
-import { fadeIn, staggerAnimation } from '../utils/animations';
+
 import { typography, createTextStyle, spacing, screenDimensions } from '../utils/typography';
 import { PageLoader } from '../components/LoadingSpinner';
 import { usePageLoading } from '../hooks/usePageLoading';
@@ -31,16 +30,13 @@ const AnalyticsScreen = ({ navigation }) => {
   // Page loading state
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1200);
   
-  // Animation refs
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const cardAnims = useRef([...Array(4)].map(() => new Animated.Value(1))).current;
+  // No animations needed
 
   useEffect(() => {
     loadAnalytics();
     const unsubscribe = navigation.addListener('focus', loadAnalytics);
     
-    // Animate on mount
-    fadeIn(fadeAnim, 500).start();
+    // No animations needed
     
     return unsubscribe;
   }, [navigation]);
@@ -52,10 +48,7 @@ const AnalyticsScreen = ({ navigation }) => {
     }
     
     try {
-      // Add slight delay for smooth refresh animation
-      if (isRefresh) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
+      // No animation delays needed
       // Load revenue data
       const revenueData = await AsyncStorage.getItem('revenue');
       const revenue = revenueData ? JSON.parse(revenueData) : {
@@ -105,30 +98,6 @@ const AnalyticsScreen = ({ navigation }) => {
       // Finish loading animation on initial load
       if (!isRefresh) {
         finishLoading();
-        
-        // Animate stat cards on initial load
-        setTimeout(() => {
-          const animations = cardAnims.map(anim => 
-            Animated.timing(anim, {
-              toValue: 1,
-              duration: 400,
-              useNativeDriver: true,
-            })
-          );
-          staggerAnimation(animations, 150).start();
-        }, 300);
-      }
-
-      // Animate stat cards with stagger effect on refresh
-      if (isRefresh) {
-        const animations = cardAnims.map(anim => 
-          Animated.timing(anim, {
-            toValue: 1,
-            duration: 300,
-            useNativeDriver: true,
-          })
-        );
-        staggerAnimation(animations, 100).start();
       }
     } catch (error) {
       console.error('Error loading analytics:', error);
@@ -140,8 +109,6 @@ const AnalyticsScreen = ({ navigation }) => {
   };
 
   const onRefresh = () => {
-    // Reset animations
-    cardAnims.forEach(anim => anim.setValue(0));
     loadAnalytics(true);
   };
 
@@ -176,12 +143,12 @@ const AnalyticsScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <PageLoader visible={isLoading} text="Loading analytics..." />
       
-      <Animated.View style={[styles.content, contentStyle]}>
+      <View style={[styles.content, contentStyle]}>
         <View style={styles.header}>
           <Text style={styles.title}>Analytics</Text>
         </View>
 
-        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <View style={{ flex: 1 }}>
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
@@ -268,8 +235,8 @@ const AnalyticsScreen = ({ navigation }) => {
           </View>
         )}
         </ScrollView>
-      </Animated.View>
-      </Animated.View>
+      </View>
+      </View>
     </SafeAreaView>
   );
 };

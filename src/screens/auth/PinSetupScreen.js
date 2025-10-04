@@ -4,11 +4,11 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   Animated,
   Vibration,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { setItemAsync, getItemAsync } from '../../utils/secureStorage';
 import * as Haptics from 'expo-haptics';
 import CustomAlert from '../../components/CustomAlert';

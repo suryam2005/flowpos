@@ -5,20 +5,22 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   Alert,
   Modal,
-  Animated,
   ScrollView,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
-import UPIPaymentModal from '../components/UPIPaymentModal';
+
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
-import { fadeIn, slideInFromBottom, slideOutToBottom, scaleAnimation } from '../utils/animations';
+
 import CustomAlert from '../components/CustomAlert';
+import DynamicQRGenerator from '../components/DynamicQRGenerator';
+import { useQRPayment } from '../hooks/useQRPayment';
+import featureService from '../services/FeatureService';
 
 const CartScreen = ({ navigation }) => {
   const { items, updateQuantity, removeItem, clearCart, getTotal } = useCart();
@@ -26,19 +28,54 @@ const CartScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [customerNameError, setCustomerNameError] = useState('');
+  const [availablePaymentMethods, setAvailablePaymentMethods] = useState(['Cash', 'Card', 'QR Pay']);
   const [phoneNumberError, setPhoneNumberError] = useState('');
-  const [showUpiModal, setShowUpiModal] = useState(false);
+
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
   
-  // Animation refs
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-  const modalSlideAnim = useRef(new Animated.Value(300)).current;
-  const buttonScaleAnim = useRef(new Animated.Value(1)).current;
+  // QR Payment hook
+  const { isQRVisible, paymentData, generatePaymentQR, closeQR, handlePaymentComplete } = useQRPayment();
+  
+  // No animations needed
 
   useEffect(() => {
-    fadeIn(fadeAnim, 500).start();
+    loadAvailablePaymentMethods();
   }, []);
+
+  const loadAvailablePaymentMethods = async () => {
+    try {
+      // Initialize feature service
+      await featureService.initialize();
+      
+      // Get payment methods based on subscription plan
+      const planMethods = featureService.getAvailablePaymentMethods();
+      
+      // Get configured methods from store settings
+      const storeInfo = await AsyncStorage.getItem('storeInfo');
+      let configuredMethods = ['Cash', 'Card', 'QR Pay']; // Default
+      
+      if (storeInfo) {
+        const parsedStore = JSON.parse(storeInfo);
+        if (parsedStore.paymentMethods && parsedStore.paymentMethods.length > 0) {
+          configuredMethods = parsedStore.paymentMethods;
+        }
+      }
+      
+      // Intersection of plan methods and configured methods
+      const availableMethods = configuredMethods.filter(method => 
+        planMethods.includes(method)
+      );
+      
+      setAvailablePaymentMethods(availableMethods);
+      // Set default payment method to first available
+      setPaymentMethod(availableMethods[0] || 'Cash');
+    } catch (error) {
+      console.error('Error loading payment methods:', error);
+      setAvailablePaymentMethods(['Cash']); // Fallback to cash only
+      setPaymentMethod('Cash');
+    }
+  };
 
   const subtotal = getTotal();
   const gst = Math.round(subtotal * 0.18);
@@ -113,17 +150,80 @@ const CartScreen = ({ navigation }) => {
     return null; // No validation errors
   };
 
-  const handleUPIPaymentConfirmed = (paymentDetails) => {
-    // Update payment method to UPI and complete the order
-    setPaymentMethod('UPI');
+
+
+  const handleQRPayment = async () => {
+    // Check if UPI payments are allowed
+    if (!featureService.canUseFeature('upi_payments')) {
+      featureService.showUpgradePrompt('upi_payments');
+      return;
+    }
+
+    // Validate customer details first
+    const validationError = validateCustomerDetails();
+    if (validationError) {
+      setAlertConfig({
+        title: 'Customer Details Required',
+        message: validationError,
+        type: 'warning',
+        buttons: [{ text: 'OK', style: 'default' }],
+      });
+      setShowAlert(true);
+      return;
+    }
+
+    // Generate QR code for payment
+    const success = await generatePaymentQR({
+      amount: total,
+      customerName: customerName || 'Walk-in Customer',
+      orderNote: `Order for ${customerName || 'Walk-in Customer'}`,
+      orderId: await generateOrderNumber(),
+    });
+
+    if (!success) {
+      setAlertConfig({
+        title: 'QR Generation Failed',
+        message: 'Please check your UPI ID in Store Settings and try again.',
+        type: 'error',
+        buttons: [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Go to Settings', 
+            onPress: () => navigation.navigate('Settings')
+          }
+        ],
+      });
+      setShowAlert(true);
+    }
+  };
+
+  const handleQRPaymentComplete = async () => {
+    // Save payment record
+    const paymentRecord = await handlePaymentComplete();
     
-    // Add payment details to the order
-    setTimeout(() => {
-      handleCompleteOrder(paymentDetails);
-    }, 100);
+    if (paymentRecord) {
+      // Complete the order with QR payment details
+      setPaymentMethod('QR Pay');
+      
+      // Complete order and navigate to home
+      await handleCompleteOrder({
+        transactionId: paymentRecord.id,
+        timestamp: paymentRecord.timestamp,
+        method: 'QR Pay',
+      });
+      
+      // Navigate to home (POS screen) after successful payment
+      navigation.navigate('Main', { screen: 'POS' });
+    }
   };
 
   const handleCompleteOrder = async (paymentDetails = null) => {
+    // Check order limits
+    const canProcess = await featureService.canProcessOrder();
+    if (!canProcess) {
+      return; // Feature service will show upgrade prompt
+    }
+
     if (items.length === 0) {
       setAlertConfig({
         title: 'Empty Cart',
@@ -148,11 +248,8 @@ const CartScreen = ({ navigation }) => {
       return;
     }
 
-    // Animate button press
+    // Haptic feedback only
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    scaleAnimation(buttonScaleAnim, 0.95, 100).start(() => {
-      scaleAnimation(buttonScaleAnim, 1, 100).start();
-    });
 
     try {
       const orderId = await generateOrderNumber();
@@ -306,8 +403,8 @@ const CartScreen = ({ navigation }) => {
       ]}
       onPress={() => {
         setPaymentMethod(method);
-        if (method === 'UPI') {
-          setShowUpiModal(true);
+        if (method === 'QR Pay') {
+          handleQRPayment();
         }
       }}
     >
@@ -333,7 +430,7 @@ const CartScreen = ({ navigation }) => {
         <Text style={styles.title}>Order Details</Text>
       </View>
 
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+      <View style={{ flex: 1 }}>
         <ScrollView 
           style={styles.scrollContainer}
           showsVerticalScrollIndicator={false}
@@ -402,29 +499,40 @@ const CartScreen = ({ navigation }) => {
 
             <Text style={styles.inputLabel}>Payment Method</Text>
             <View style={styles.paymentMethods}>
-              {renderPaymentMethod('Cash', '💵')}
-              {renderPaymentMethod('Card', '💳')}
-              {renderPaymentMethod('UPI', '📱')}
+              {availablePaymentMethods.map((method) => {
+                const methodConfig = {
+                  'Cash': { icon: '💵', label: 'Cash' },
+                  'Card': { icon: '💳', label: 'Card' },
+                  'QR Pay': { icon: '📲', label: 'QR Pay' },
+                };
+                const config = methodConfig[method];
+                return config ? (
+                  <View key={method}>
+                    {renderPaymentMethod(method, config.icon)}
+                  </View>
+                ) : null;
+              })}
             </View>
           </View>
 
-          <Animated.View style={{ transform: [{ scale: buttonScaleAnim }] }}>
-            <TouchableOpacity
-              style={styles.completeButton}
-              onPress={handleCompleteOrder}
-            >
-              <Text style={styles.completeButtonText}>Complete Order</Text>
-            </TouchableOpacity>
-          </Animated.View>
+          <TouchableOpacity
+            style={styles.completeButton}
+            onPress={handleCompleteOrder}
+          >
+            <Text style={styles.completeButtonText}>Complete Order</Text>
+          </TouchableOpacity>
         </ScrollView>
-      </Animated.View>
+      </View>
 
-      <UPIPaymentModal
-        visible={showUpiModal}
-        onClose={() => setShowUpiModal(false)}
-        totalAmount={getTotal()}
-        orderItems={items}
-        onPaymentConfirmed={handleUPIPaymentConfirmed}
+
+
+      <DynamicQRGenerator
+        amount={paymentData.amount}
+        visible={isQRVisible}
+        onClose={closeQR}
+        customerName={paymentData.customerName}
+        orderNote={paymentData.orderNote}
+        onPaymentComplete={handleQRPaymentComplete}
       />
 
       {/* Custom Alert */}

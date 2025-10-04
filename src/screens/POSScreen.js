@@ -1,123 +1,70 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   Alert,
   RefreshControl,
-  Animated,
+  Image,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
-import { PageLoader } from '../components/LoadingSpinner';
-import { usePageLoading } from '../hooks/usePageLoading';
-// Removed dummy data dependency
-import { fadeIn } from '../utils/animations';
 import CustomAlert from '../components/CustomAlert';
+import { webScrollFix, webContainerFix, webScrollableContainer } from '../styles/webStyles';
+import { useRealtimeProducts, useRealtimeStoreInfo } from '../hooks/useRealtimeData';
+import ResponsiveText from '../components/ResponsiveText';
+import featureService from '../services/FeatureService';
 
 
 
 const POSScreen = ({ navigation }) => {
-  const [products, setProducts] = useState([]);
-  const [selectedCategory, setSelectedCategory] = useState('All Items');
-  const [refreshing, setRefreshing] = useState(false);
-  const [storeName, setStoreName] = useState('FlowPOS Store');
+  const [selectedTag, setSelectedTag] = useState('All Items');
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
   const { items, addItem, removeItem, clearCart, getItemCount, getTotal } = useCart();
   
-  // Page loading state
-  const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
+  // Real-time data hooks
+  const { data: products, refresh: refreshProducts } = useRealtimeProducts();
+  const { data: storeInfo } = useRealtimeStoreInfo();
   
-  // Animation refs
-  const fadeAnim = useRef(new Animated.Value(0)).current;
+  // Get store name
+  const storeName = storeInfo?.name || 'FlowPOS Store';
 
-  const categories = ['All Items', 'Food', 'Beverages', 'Desserts'];
-
+  // Initialize feature service
   useEffect(() => {
-    loadProducts();
-    loadStoreName();
-    // Fade in animation on mount
-    fadeIn(fadeAnim, 500).start();
-    
-    // Add focus listener to refresh products when returning to this screen
-    const unsubscribe = navigation.addListener('focus', () => {
-      loadProducts();
-      loadStoreName();
+    featureService.initialize();
+  }, []);
+
+  // Generate available tags from products
+  const availableTags = React.useMemo(() => {
+    const allTags = new Set(['All Items']);
+    products.forEach(product => {
+      if (product.tags && Array.isArray(product.tags)) {
+        product.tags.forEach(tag => allTags.add(tag));
+      }
     });
-    
-    return unsubscribe;
-  }, [navigation]);
+    return Array.from(allTags).slice(0, 8); // Limit to 8 tags for UI
+  }, [products]);
 
-  const loadStoreName = async () => {
-    try {
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      if (storeInfo) {
-        const parsedStoreInfo = JSON.parse(storeInfo);
-        if (parsedStoreInfo.name && parsedStoreInfo.name.trim()) {
-          setStoreName(parsedStoreInfo.name);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading store name:', error);
-    }
-  };
-
-  const loadProducts = async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    }
-    
-    try {
-      // Add slight delay for smooth refresh animation
-      if (isRefresh) {
-        await new Promise(resolve => setTimeout(resolve, 800));
-      }
-      
-      const storedProducts = await AsyncStorage.getItem('products');
-      if (storedProducts) {
-        const parsedProducts = JSON.parse(storedProducts);
-        setProducts(parsedProducts);
-      } else {
-        // Start with empty products - no dummy data
-        setProducts([]);
-      }
-      
-      // Finish loading animation on initial load
-      if (!isRefresh) {
-        finishLoading();
-      }
-      
-      // Sync cart with updated product data
-      const cartData = await AsyncStorage.getItem('cart');
-      if (cartData) {
-        // Cart context will handle the sync automatically
-      }
-    } catch (error) {
-      console.error('Error loading products:', error);
-      setProducts([]);
-    } finally {
-      if (isRefresh) {
-        setRefreshing(false);
-      }
-    }
-  };
+  // No animations or loading states needed
 
   const onRefresh = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    loadProducts(true);
+    refreshProducts();
   };
 
-  const filteredProducts = selectedCategory === 'All Items' 
+  const filteredProducts = selectedTag === 'All Items' 
     ? products 
-    : products.filter(product => product.category === selectedCategory);
+    : products.filter(product => 
+        product.tags && product.tags.includes(selectedTag)
+      );
 
   const handleAddToCart = (product) => {
-    if (product.stock <= 0) {
+    // Only check stock if tracking is enabled
+    if (product.trackStock && product.stock <= 0) {
       setAlertConfig({
         title: 'Out of Stock',
         message: `${product.name} is currently out of stock.`,
@@ -173,16 +120,35 @@ const POSScreen = ({ navigation }) => {
         onLongPress={() => handleLongPress(item)}
         activeOpacity={0.8}
       >
-        <View style={styles.productEmoji}>
-          <Text style={styles.emojiText}>{item.emoji}</Text>
+        <View style={styles.productImage}>
+          {item.image ? (
+            <Image source={{ uri: item.image }} style={styles.productImageStyle} />
+          ) : (
+            <View style={styles.productImagePlaceholder}>
+              <Text style={styles.productImagePlaceholderText}>📦</Text>
+            </View>
+          )}
         </View>
-        <Text style={styles.productName}>{item.name}</Text>
-        <Text style={styles.productPrice}>₹{item.price}</Text>
-        <View style={styles.stockContainer}>
-          <Text style={styles.productStock}>{item.stock} available</Text>
-        </View>
+        <ResponsiveText 
+          variant="body" 
+          style={styles.productName}
+          numberOfLines={2}
+          ellipsizeMode="tail"
+        >
+          {item.name}
+        </ResponsiveText>
+        <ResponsiveText variant="price" style={styles.productPrice}>
+          ₹{item.price}
+        </ResponsiveText>
+        {item.trackStock && (
+          <View style={styles.stockContainer}>
+            <ResponsiveText variant="small" style={styles.productStock}>
+              {item.stock} available
+            </ResponsiveText>
+          </View>
+        )}
         
-        {item.stock <= 5 && (
+        {item.trackStock && item.stock <= 5 && (
           <View style={styles.lowStockBadge}>
             <Text style={styles.lowStockText}>Low Stock</Text>
           </View>
@@ -197,61 +163,70 @@ const POSScreen = ({ navigation }) => {
     );
   };
 
-  const renderCategory = ({ item }) => (
+  const renderTag = ({ item }) => (
     <TouchableOpacity
       style={[
         styles.categoryButton,
-        selectedCategory === item && styles.categoryButtonActive
+        selectedTag === item && styles.categoryButtonActive
       ]}
-      onPress={() => setSelectedCategory(item)}
+      onPress={() => setSelectedTag(item)}
     >
-      <Text style={[
-        styles.categoryText,
-        selectedCategory === item && styles.categoryTextActive
-      ]}>
+      <ResponsiveText 
+        variant="caption" 
+        style={[
+          styles.categoryText,
+          selectedTag === item && styles.categoryTextActive
+        ]}
+        numberOfLines={1}
+      >
         {item}
-      </Text>
+      </ResponsiveText>
     </TouchableOpacity>
   );
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
       <Text style={styles.emptyIcon}>📦</Text>
-      <Text style={styles.emptyTitle}>No Products Yet</Text>
-      <Text style={styles.emptyText}>
+      <ResponsiveText variant="title" style={styles.emptyTitle}>
+        No Products Yet
+      </ResponsiveText>
+      <ResponsiveText variant="body" style={styles.emptyText}>
         Start by adding your first products to begin selling
-      </Text>
+      </ResponsiveText>
       <TouchableOpacity
         style={styles.addProductButton}
         onPress={() => navigation.navigate('Main', { screen: 'Manage' })}
         activeOpacity={0.8}
       >
-        <Text style={styles.addProductButtonText}>Add Products</Text>
+        <ResponsiveText variant="button" style={styles.addProductButtonText}>
+          Add Products
+        </ResponsiveText>
       </TouchableOpacity>
     </View>
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      <PageLoader visible={isLoading} text="Loading products..." />
-      
-      <Animated.View style={[styles.content, contentStyle]}>
+    <SafeAreaView style={[styles.container, webContainerFix]}>
+      <View style={styles.content}>
         <View style={styles.header}>
-          <Text style={styles.title}>{storeName}</Text>
+          <ResponsiveText variant="title" style={styles.title}>
+            {storeName}
+          </ResponsiveText>
         </View>
 
       <View style={styles.categorySection}>
         <FlatList
-          data={categories}
-          renderItem={renderCategory}
+          data={availableTags}
+          renderItem={renderTag}
           keyExtractor={(item) => item}
           horizontal
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.categoryContainer}
+          style={webScrollFix}
         />
       </View>
 
-      <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+      <View style={[{ flex: 1 }, webScrollableContainer]}>
         {products.length === 0 ? (
           renderEmptyState()
         ) : (
@@ -262,10 +237,10 @@ const POSScreen = ({ navigation }) => {
             numColumns={2}
             contentContainerStyle={styles.productGrid}
             showsVerticalScrollIndicator={false}
-            style={styles.productList}
+            style={[styles.productList, webScrollFix]}
             refreshControl={
               <RefreshControl
-                refreshing={refreshing}
+                refreshing={false}
                 onRefresh={onRefresh}
                 tintColor="#8b5cf6"
                 colors={['#8b5cf6']}
@@ -276,7 +251,7 @@ const POSScreen = ({ navigation }) => {
             }
           />
         )}
-      </Animated.View>
+      </View>
 
       {getItemCount() > 0 && (
         <View style={styles.cartSummary}>
@@ -286,8 +261,12 @@ const POSScreen = ({ navigation }) => {
             activeOpacity={0.9}
           >
             <View style={styles.cartInfo}>
-              <Text style={styles.cartItems}>{getItemCount()} items</Text>
-              <Text style={styles.cartTotal}>₹{getTotal()}</Text>
+              <ResponsiveText variant="caption" style={styles.cartItems}>
+                {getItemCount()} items
+              </ResponsiveText>
+              <ResponsiveText variant="price" style={styles.cartTotal}>
+                ₹{getTotal()}
+              </ResponsiveText>
             </View>
             <View style={styles.cartActions}>
               <TouchableOpacity
@@ -298,7 +277,9 @@ const POSScreen = ({ navigation }) => {
                 <Text style={styles.clearCartText}>🗑️</Text>
               </TouchableOpacity>
               <View style={styles.cartButton}>
-                <Text style={styles.cartButtonText}>Complete Order</Text>
+                <ResponsiveText variant="button" style={styles.cartButtonText}>
+                  Complete Order
+                </ResponsiveText>
               </View>
             </View>
           </TouchableOpacity>
@@ -314,7 +295,7 @@ const POSScreen = ({ navigation }) => {
         buttons={alertConfig.buttons}
         onClose={() => setShowAlert(false)}
       />
-      </Animated.View>
+      </View>
     </SafeAreaView>
   );
 };
@@ -339,9 +320,9 @@ const styles = StyleSheet.create({
     borderBottomColor: '#e5e7eb',
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
     color: '#1f2937',
+    flexShrink: 1,
+    flexWrap: 'wrap',
   },
   settingsButton: {
     padding: 8,
@@ -377,9 +358,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#1f2937',
   },
   categoryText: {
-    fontSize: 14,
-    fontWeight: '500',
     color: '#6b7280',
+    textAlign: 'center',
+    flexWrap: 'wrap',
+    flexShrink: 1,
   },
   categoryTextActive: {
     color: '#ffffff',
@@ -404,30 +386,40 @@ const styles = StyleSheet.create({
     borderColor: '#f3f4f6',
     position: 'relative',
   },
-  productEmoji: {
+  productImage: {
     width: 60,
     height: 60,
-    borderRadius: 30,
+    borderRadius: 12,
+    marginBottom: 12,
+    overflow: 'hidden',
+  },
+  productImageStyle: {
+    width: '100%',
+    height: '100%',
+  },
+  productImagePlaceholder: {
+    width: '100%',
+    height: '100%',
     backgroundColor: '#f8fafc',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 12,
+    borderRadius: 12,
   },
-  emojiText: {
-    fontSize: 32,
+  productImagePlaceholderText: {
+    fontSize: 28,
   },
   productName: {
-    fontSize: 16,
-    fontWeight: '600',
     color: '#1f2937',
     textAlign: 'center',
     marginBottom: 4,
+    minHeight: 44, // Ensure consistent height for 2 lines
+    flexWrap: 'wrap',
+    flexShrink: 1,
   },
   productPrice: {
-    fontSize: 18,
-    fontWeight: '700',
     color: '#1f2937',
     marginBottom: 4,
+    textAlign: 'center',
   },
   stockContainer: {
     backgroundColor: '#f3f4f6',
@@ -501,13 +493,10 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cartItems: {
-    fontSize: 14,
     color: '#9ca3af',
     marginBottom: 2,
   },
   cartTotal: {
-    fontSize: 18,
-    fontWeight: '700',
     color: '#ffffff',
   },
   cartActions: {
@@ -535,9 +524,8 @@ const styles = StyleSheet.create({
     borderRadius: 12,
   },
   cartButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
     color: '#1f2937',
+    textAlign: 'center',
   },
   emptyState: {
     flex: 1,
@@ -551,18 +539,15 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   emptyTitle: {
-    fontSize: 24,
-    fontWeight: '600',
     color: '#1f2937',
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyText: {
-    fontSize: 16,
     color: '#6b7280',
     textAlign: 'center',
-    lineHeight: 24,
     marginBottom: 32,
+    paddingHorizontal: 20,
   },
   addProductButton: {
     backgroundColor: '#2563eb',
@@ -576,9 +561,8 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   addProductButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
     color: '#ffffff',
+    textAlign: 'center',
   },
 });
 

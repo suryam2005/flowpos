@@ -4,13 +4,12 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   TextInput,
   ScrollView,
-  Animated,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import CustomAlert from '../../components/CustomAlert';
@@ -19,7 +18,7 @@ const StoreSetupScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
-  const fadeAnim = useRef(new Animated.Value(1)).current;
+  // No animations needed
 
   // Store Information
   const [storeData, setStoreData] = useState({
@@ -34,7 +33,13 @@ const StoreSetupScreen = ({ navigation }) => {
     businessType: 'Retail Store',
     gstNumber: '',
 
-    // Step 3: Preferences
+    // Step 3: Payment Setup
+    upiId: '',
+    upiId2: '',
+    upiId3: '',
+    paymentMethods: ['Cash'], // Default to Cash
+
+    // Step 4: Preferences
     currency: 'INR',
     currencySymbol: '₹',
     timezone: 'Asia/Kolkata',
@@ -50,6 +55,11 @@ const StoreSetupScreen = ({ navigation }) => {
       title: 'Business Details',
       subtitle: 'Complete your business profile',
       fields: ['address', 'businessType', 'gstNumber'],
+    },
+    {
+      title: 'Payment Setup',
+      subtitle: 'Configure payment methods and UPI options',
+      fields: ['paymentMethods', 'upiId'],
     },
     {
       title: 'Preferences',
@@ -93,6 +103,12 @@ const StoreSetupScreen = ({ navigation }) => {
       if (field === 'address' && !storeData.address.trim()) {
         return 'Address is required';
       }
+      if (field === 'paymentMethods' && storeData.paymentMethods.length === 0) {
+        return 'Please select at least one payment method';
+      }
+      if (field === 'upiId' && storeData.paymentMethods.includes('QR Pay') && !storeData.upiId.trim()) {
+        return 'UPI ID is required when QR Pay is selected';
+      }
     }
 
     // Email validation (optional but if provided, should be valid)
@@ -105,12 +121,28 @@ const StoreSetupScreen = ({ navigation }) => {
       return 'Please enter a valid phone number';
     }
 
+    // UPI ID validation
+    if (storeData.upiId && !isValidUpiId(storeData.upiId)) {
+      return 'Please enter a valid UPI ID (e.g., yourname@paytm)';
+    }
+    if (storeData.upiId2 && !isValidUpiId(storeData.upiId2)) {
+      return 'Please enter a valid secondary UPI ID';
+    }
+    if (storeData.upiId3 && !isValidUpiId(storeData.upiId3)) {
+      return 'Please enter a valid tertiary UPI ID';
+    }
+
     return null;
   };
 
   const isValidEmail = (email) => {
     const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
     return emailRegex.test(email);
+  };
+
+  const isValidUpiId = (upiId) => {
+    const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+    return upiRegex.test(upiId);
   };
 
   const handleNext = () => {
@@ -128,19 +160,7 @@ const StoreSetupScreen = ({ navigation }) => {
 
     if (currentStep < steps.length - 1) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setCurrentStep(currentStep + 1);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
-      });
+      setCurrentStep(currentStep + 1);
     } else {
       handleComplete();
     }
@@ -149,19 +169,7 @@ const StoreSetupScreen = ({ navigation }) => {
   const handleBack = () => {
     if (currentStep > 0) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start(() => {
-        setCurrentStep(currentStep - 1);
-        Animated.timing(fadeAnim, {
-          toValue: 1,
-          duration: 300,
-          useNativeDriver: true,
-        }).start();
-      });
+      setCurrentStep(currentStep - 1);
     }
   };
 
@@ -176,6 +184,10 @@ const StoreSetupScreen = ({ navigation }) => {
         address: storeData.address,
         businessType: storeData.businessType,
         gstNumber: storeData.gstNumber,
+        upiId: storeData.upiId,
+        upiId2: storeData.upiId2,
+        upiId3: storeData.upiId3,
+        paymentMethods: storeData.paymentMethods,
         currency: storeData.currency,
         currencySymbol: storeData.currencySymbol,
         timezone: storeData.timezone,
@@ -329,6 +341,118 @@ const StoreSetupScreen = ({ navigation }) => {
         return (
           <View style={styles.formContainer}>
             <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Payment Methods</Text>
+              <Text style={styles.inputHint}>
+                Select which payment methods you want to accept
+              </Text>
+              <View style={styles.paymentMethodsGrid}>
+                {[
+                  { id: 'Cash', label: 'Cash', icon: '💵' },
+                  { id: 'Card', label: 'Card', icon: '💳' },
+                  { id: 'QR Pay', label: 'UPI/QR Pay', icon: '📲' },
+                ].map((method) => (
+                  <TouchableOpacity
+                    key={method.id}
+                    style={[
+                      styles.paymentMethodOption,
+                      storeData.paymentMethods.includes(method.id) && styles.paymentMethodOptionSelected
+                    ]}
+                    onPress={() => {
+                      const currentMethods = storeData.paymentMethods;
+                      let newMethods;
+                      
+                      if (currentMethods.includes(method.id)) {
+                        // Remove method (but keep at least Cash)
+                        newMethods = currentMethods.filter(m => m !== method.id);
+                        if (newMethods.length === 0) {
+                          newMethods = ['Cash']; // Always keep Cash as fallback
+                        }
+                      } else {
+                        // Add method
+                        newMethods = [...currentMethods, method.id];
+                      }
+                      
+                      updateStoreData('paymentMethods', newMethods);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.paymentMethodIcon}>{method.icon}</Text>
+                    <Text style={[
+                      styles.paymentMethodText,
+                      storeData.paymentMethods.includes(method.id) && styles.paymentMethodTextSelected
+                    ]}>
+                      {method.label}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
+            {storeData.paymentMethods.includes('QR Pay') && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Primary UPI ID *</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="yourname@paytm"
+                value={storeData.upiId}
+                onChangeText={(text) => updateStoreData('upiId', text.toLowerCase())}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <Text style={styles.inputHint}>
+                Enter your main UPI ID for receiving payments
+              </Text>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Secondary UPI ID (Optional)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="yourname@gpay"
+                value={storeData.upiId2}
+                onChangeText={(text) => updateStoreData('upiId2', text.toLowerCase())}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <Text style={styles.inputHint}>
+                Backup UPI ID in case primary fails
+              </Text>
+            </View>
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Third UPI ID (Optional)</Text>
+              <TextInput
+                style={styles.textInput}
+                placeholder="yourname@phonepe"
+                value={storeData.upiId3}
+                onChangeText={(text) => updateStoreData('upiId3', text.toLowerCase())}
+                keyboardType="email-address"
+                autoCapitalize="none"
+              />
+              <Text style={styles.inputHint}>
+                Additional backup UPI ID for maximum reliability
+              </Text>
+            </View>
+
+            <View style={styles.upiInfo}>
+              <Text style={styles.upiInfoTitle}>💡 UPI ID Tips</Text>
+              <Text style={styles.upiInfoText}>
+                • Use different UPI apps for backup (Paytm, GPay, PhonePe)
+                • Ensure all UPI IDs are active and working
+                • Customers can choose which UPI ID to pay to
+                • QR codes will be generated automatically
+              </Text>
+            </View>
+              </>
+            )}
+          </View>
+        );
+
+      case 3:
+        return (
+          <View style={styles.formContainer}>
+            <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Currency</Text>
               <View style={styles.currencyGrid}>
                 {currencies.map((currency) => (
@@ -420,9 +544,9 @@ const StoreSetupScreen = ({ navigation }) => {
 
         {/* Content */}
         <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
-          <Animated.View style={[styles.content, { opacity: fadeAnim }]}>
+          <View style={styles.content}>
             {renderStepContent()}
-          </Animated.View>
+          </View>
         </ScrollView>
 
         {/* Navigation */}
@@ -642,6 +766,65 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '600',
     color: '#1f2937',
+  },
+  inputHint: {
+    fontSize: 12,
+    color: '#6b7280',
+    marginTop: 4,
+    fontStyle: 'italic',
+  },
+  upiInfo: {
+    backgroundColor: '#eff6ff',
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: '#bfdbfe',
+  },
+  upiInfoTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#1e40af',
+    marginBottom: 8,
+  },
+  upiInfoText: {
+    fontSize: 14,
+    color: '#1e40af',
+    lineHeight: 20,
+  },
+  paymentMethodsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 12,
+  },
+  paymentMethodOption: {
+    backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: '#e5e7eb',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    minWidth: 100,
+    flex: 1,
+  },
+  paymentMethodOptionSelected: {
+    borderColor: '#2563eb',
+    backgroundColor: '#eff6ff',
+  },
+  paymentMethodIcon: {
+    fontSize: 24,
+    marginBottom: 8,
+  },
+  paymentMethodText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#6b7280',
+    textAlign: 'center',
+  },
+  paymentMethodTextSelected: {
+    color: '#2563eb',
+    fontWeight: '600',
   },
   navigation: {
     backgroundColor: '#ffffff',

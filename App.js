@@ -6,20 +6,31 @@ import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getItemAsync } from './src/utils/secureStorage';
+import { Platform } from 'react-native';
+
+// Import CSS for web
+if (Platform.OS === 'web') {
+  require('./web/index.css');
+}
 
 import POSScreen from './src/screens/POSScreen';
+import TabletPOSScreen from './src/screens/TabletPOSScreen';
+import { getDeviceInfo } from './src/utils/deviceUtils';
 import CartScreen from './src/screens/CartScreen';
+import TabletCartScreen from './src/screens/TabletCartScreen';
 import OrdersScreen from './src/screens/OrdersScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
 import ManageScreen from './src/screens/ManageScreen';
 import OrderDetailsScreen from './src/screens/OrderDetailsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
+import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
 import StoreSetupScreen from './src/screens/onboarding/StoreSetupScreen';
 import InvoiceScreen from './src/screens/InvoiceScreen';
 import { CartProvider } from './src/context/CartContext';
 import { AuthProvider } from './src/context/AuthContext';
+import { DataSyncProvider } from './src/context/DataSyncContext';
 import { hasOldDummyData, clearAllAppData } from './src/utils/dataUtils';
 import PinSetupScreen from './src/screens/auth/PinSetupScreen';
 import PinAuthScreen from './src/screens/auth/PinAuthScreen';
@@ -28,6 +39,8 @@ const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
 function MainTabs() {
+  const { isTablet } = getDeviceInfo();
+  
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
@@ -44,26 +57,29 @@ function MainTabs() {
             iconName = focused ? 'settings' : 'settings-outline';
           }
           
-          return <Ionicons name={iconName} size={size} color={color} />;
+          return <Ionicons name={iconName} size={isTablet ? size + 4 : size} color={color} />;
         },
-        tabBarActiveTintColor: '#8b5cf6', // Purple accent
+        tabBarActiveTintColor: '#8b5cf6',
         tabBarInactiveTintColor: '#9ca3af',
         tabBarStyle: {
           backgroundColor: '#ffffff',
           borderTopWidth: 1,
           borderTopColor: '#e5e7eb',
-          paddingBottom: 20, // Reduced to 20px bottom spacing
-          paddingTop: 8,
-          height: 100, // Reduced height
+          paddingBottom: isTablet ? 30 : 20,
+          paddingTop: isTablet ? 12 : 8,
+          height: isTablet ? 120 : 100,
         },
         tabBarLabelStyle: {
-          fontSize: 12,
+          fontSize: isTablet ? 14 : 12,
           fontWeight: '500',
         },
         headerShown: false,
       })}
     >
-      <Tab.Screen name="POS" component={POSScreen} />
+      <Tab.Screen 
+        name="POS" 
+        component={isTablet ? TabletPOSScreen : POSScreen} 
+      />
       <Tab.Screen name="Stats" component={AnalyticsScreen} />
       <Tab.Screen name="Orders" component={OrdersScreen} />
       <Tab.Screen name="Manage" component={ManageScreen} />
@@ -73,6 +89,7 @@ function MainTabs() {
 
 export default function App() {
   const [appState, setAppState] = useState(null); // null, 'welcome', 'setup', 'pinSetup', 'pinAuth', 'main'
+  const { isTablet } = getDeviceInfo();
 
   useEffect(() => {
     checkAppState();
@@ -140,25 +157,31 @@ export default function App() {
 
   return (
     <AuthProvider>
-      <CartProvider>
-        <NavigationContainer>
-          <StatusBar style="dark" />
-          <Stack.Navigator 
-            screenOptions={{ headerShown: false }}
-            initialRouteName={getInitialRoute()}
-          >
-            <Stack.Screen name="Welcome" component={WelcomeScreen} />
-            <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
-            <Stack.Screen name="PinSetup" component={PinSetupScreen} />
-            <Stack.Screen name="PinAuth" component={PinAuthScreen} />
-            <Stack.Screen name="Main" component={MainTabs} />
-            <Stack.Screen name="Cart" component={CartScreen} />
-            <Stack.Screen name="Invoice" component={InvoiceScreen} />
-            <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
-            <Stack.Screen name="Settings" component={SettingsScreen} />
-          </Stack.Navigator>
-        </NavigationContainer>
-      </CartProvider>
+      <DataSyncProvider>
+        <CartProvider>
+          <NavigationContainer>
+            <StatusBar style="dark" />
+            <Stack.Navigator 
+              screenOptions={{ headerShown: false }}
+              initialRouteName={getInitialRoute()}
+            >
+              <Stack.Screen name="Welcome" component={WelcomeScreen} />
+              <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
+              <Stack.Screen name="PinSetup" component={PinSetupScreen} />
+              <Stack.Screen name="PinAuth" component={PinAuthScreen} />
+              <Stack.Screen name="Main" component={MainTabs} />
+              <Stack.Screen 
+                name="Cart" 
+                component={isTablet ? TabletCartScreen : CartScreen} 
+              />
+              <Stack.Screen name="Invoice" component={InvoiceScreen} />
+              <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+              <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+            </Stack.Navigator>
+          </NavigationContainer>
+        </CartProvider>
+      </DataSyncProvider>
     </AuthProvider>
   );
 }

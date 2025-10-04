@@ -75,7 +75,7 @@ const CustomAlert = ({
     <Modal
       transparent={true}
       visible={visible}
-      animationType="fade"
+      animationType="none"
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>

@@ -25,22 +25,11 @@ const UPIPaymentModal = ({
 }) => {
   const [qrCodeUri, setQrCodeUri] = useState(null);
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
-  const [fadeAnim] = useState(new Animated.Value(0));
+  // No animations needed
 
   useEffect(() => {
     if (visible) {
       loadQRCode();
-      Animated.timing(fadeAnim, {
-        toValue: 1,
-        duration: 300,
-        useNativeDriver: true,
-      }).start();
-    } else {
-      Animated.timing(fadeAnim, {
-        toValue: 0,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
     }
   }, [visible]);
 
@@ -119,7 +108,7 @@ const UPIPaymentModal = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <Animated.View 
+        <View 
           style={[
             styles.modalContainer,
             { opacity: fadeAnim }
@@ -224,7 +213,7 @@ const UPIPaymentModal = ({
               </View>
             </View>
           )}
-        </Animated.View>
+        </View>
       </View>
     </Modal>
   );

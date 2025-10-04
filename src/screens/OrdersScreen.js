@@ -5,11 +5,10 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  SafeAreaView,
   RefreshControl,
-  Animated,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { fadeIn } from '../utils/animations';
@@ -23,15 +22,9 @@ const OrdersScreen = ({ navigation }) => {
   // Page loading state
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 800);
 
-  // Animation refs
-  const fadeAnim = useRef(new Animated.Value(0)).current;
-
   useEffect(() => {
     loadOrders();
     const unsubscribe = navigation.addListener('focus', loadOrders);
-
-    // Animate on mount
-    fadeIn(fadeAnim, 500).start();
 
     return unsubscribe;
   }, [navigation]);
@@ -209,12 +202,12 @@ const OrdersScreen = ({ navigation }) => {
     <SafeAreaView style={styles.container}>
       <PageLoader visible={isLoading} text="Loading orders..." />
 
-      <Animated.View style={[styles.content, contentStyle]}>
+      <View style={[styles.content, contentStyle]}>
         <View style={styles.header}>
           <Text style={styles.title}>Orders</Text>
         </View>
 
-        <Animated.View style={{ flex: 1, opacity: fadeAnim }}>
+        <View style={{ flex: 1, opacity: 1 }}>
           {orders.length === 0 ? (
             renderEmptyState()
           ) : (
@@ -237,8 +230,8 @@ const OrdersScreen = ({ navigation }) => {
               }
             />
           )}
-        </Animated.View>
-      </Animated.View>
+        </View>
+      </View>
     </SafeAreaView>
   );
 };
