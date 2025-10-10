@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { colors } from '../../styles/colors';
 
 const InventoryScreen = () => {
   const [products, setProducts] = useState([]);
@@ -107,9 +108,9 @@ const InventoryScreen = () => {
   };
 
   const getStockStatus = (stock) => {
-    if (stock === 0) return { text: 'Out of Stock', color: '#ef4444', bg: '#fee2e2' };
+    if (stock === 0) return { text: 'Out of Stock', color: colors.error.main, bg: '#fee2e2' };
     if (stock <= 5) return { text: 'Low Stock', color: '#f59e0b', bg: '#fef3c7' };
-    return { text: 'In Stock', color: '#10b981', bg: '#d1fae5' };
+    return { text: 'In Stock', color: colors.success.main, bg: '#d1fae5' };
   };
 
   const renderProduct = ({ item }) => {
@@ -284,17 +285,17 @@ const InventoryScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   searchContainer: {
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   searchInput: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -304,33 +305,33 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     paddingHorizontal: 20,
     paddingVertical: 12,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   filterButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     marginRight: 8,
   },
   filterButtonActive: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
   },
   filterButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   filterButtonTextActive: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   productsList: {
     padding: 20,
   },
   productCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -346,7 +347,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
@@ -360,18 +361,18 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 2,
   },
   productCategory: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
     marginBottom: 2,
   },
   productPrice: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   stockInfo: {
     alignItems: 'center',
@@ -380,7 +381,7 @@ const styles = StyleSheet.create({
   stockQuantity: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   statusBadge: {
@@ -402,7 +403,7 @@ const styles = StyleSheet.create({
   updateButtonText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   emptyState: {
     flex: 1,
@@ -417,12 +418,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -433,7 +434,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 24,
     width: '85%',
@@ -448,20 +449,20 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
     fontSize: 18,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   productPreview: {
     alignItems: 'center',
     marginBottom: 20,
     padding: 16,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
     borderRadius: 12,
   },
   productPreviewEmoji: {
@@ -471,12 +472,12 @@ const styles = StyleSheet.create({
   productPreviewName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   currentStock: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   stockInput: {
     borderWidth: 1,
@@ -498,11 +499,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
     borderRadius: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   cancelButtonText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   saveButton: {
     flex: 1,
@@ -510,12 +511,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
     borderRadius: 8,
-    backgroundColor: '#10b981',
+    backgroundColor: colors.success.main,
   },
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 });
 

@@ -14,9 +14,9 @@ class FeatureService {
     free: {
       features: {
         cash_payments: true,
-        card_payments: false,
-        upi_payments: false,
-        sms_detection: false,
+        card_payments: true,
+        upi_payments: true,
+        sms_detection: true,
         cloud_backup: false,
         multi_device_sync: false,
         advanced_analytics: false,

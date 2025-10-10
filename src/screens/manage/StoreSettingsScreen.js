@@ -15,6 +15,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { Linking, Platform } from 'react-native';
+import { colors } from '../../styles/colors';
 
 const StoreSettingsScreen = () => {
   const [storeInfo, setStoreInfo] = useState({
@@ -268,9 +269,9 @@ const StoreSettingsScreen = () => {
       <Switch
         value={value}
         onValueChange={onValueChange}
-        trackColor={{ false: '#f3f4f6', true: '#8b5cf6' }}
-        thumbColor={value ? '#ffffff' : '#ffffff'}
-        ios_backgroundColor="#f3f4f6"
+        trackColor={{ false: colors.gray[100], true: '#8b5cf6' }}
+        thumbColor={value ? colors.background.surface : colors.background.surface}
+        ios_backgroundColor={colors.gray[100]}
       />
     </View>
   );
@@ -539,7 +540,7 @@ const StoreSettingsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -554,7 +555,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   inputGroup: {
@@ -567,7 +568,7 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   textInput: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
@@ -581,7 +582,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   switchGroup: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -601,12 +602,12 @@ const styles = StyleSheet.create({
   switchLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 2,
   },
   switchDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   currencyGroup: {
     marginBottom: 16,
@@ -617,7 +618,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   currencyOption: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
@@ -627,12 +628,12 @@ const styles = StyleSheet.create({
   },
   currencyOptionSelected: {
     borderColor: '#8b5cf6',
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   currencyOptionText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 2,
   },
   currencyOptionTextSelected: {
@@ -640,20 +641,20 @@ const styles = StyleSheet.create({
   },
   currencyName: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
   },
   saveContainer: {
     padding: 20,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: colors.border.light,
   },
   saveButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.success.main,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#10b981',
+    shadowColor: colors.success.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -662,14 +663,14 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   paymentSection: {
     marginBottom: 24,
   },
   paymentDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 12,
     lineHeight: 20,
   },
@@ -680,7 +681,7 @@ const styles = StyleSheet.create({
   },
   upiInput: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 1,
     borderColor: '#d1d5db',
     borderRadius: 8,
@@ -700,7 +701,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   upiTestText: {
-    color: '#ffffff',
+    color: colors.background.surface,
     fontWeight: '600',
     fontSize: 14,
   },
@@ -709,12 +710,12 @@ const styles = StyleSheet.create({
   },
   qrDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 16,
     lineHeight: 20,
   },
   qrUploadButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 2,
     borderColor: '#d1d5db',
     borderStyle: 'dashed',
@@ -730,7 +731,7 @@ const styles = StyleSheet.create({
   qrUploadText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   qrPreview: {
     backgroundColor: '#f0fdf4',
@@ -748,7 +749,7 @@ const styles = StyleSheet.create({
     width: 120,
     height: 120,
     borderRadius: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
   },
   qrPreviewActions: {
     flexDirection: 'row',

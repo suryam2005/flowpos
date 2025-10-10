@@ -14,6 +14,7 @@ import { getItemAsync, deleteItemAsync } from '../../utils/secureStorage';
 import * as LocalAuthentication from 'expo-local-authentication';
 import * as Haptics from 'expo-haptics';
 import CustomAlert from '../../components/CustomAlert';
+import { colors } from '../../styles/colors';
 
 const PinAuthScreen = ({ navigation, onAuthenticated }) => {
   const [pin, setPin] = useState('');
@@ -36,12 +37,28 @@ const PinAuthScreen = ({ navigation, onAuthenticated }) => {
       if (nextAppState === 'active') {
         // Reset PIN when app becomes active (security measure)
         setPin('');
+        // Try biometric authentication again when app becomes active
+        if (biometricAvailable) {
+          setTimeout(() => {
+            handleBiometricAuth(true);
+          }, 500);
+        }
       }
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription?.remove();
-  }, []);
+  }, [biometricAvailable]);
+
+  // Auto-trigger biometric authentication when screen loads
+  useEffect(() => {
+    if (biometricAvailable) {
+      // Small delay to ensure screen is fully loaded
+      setTimeout(() => {
+        handleBiometricAuth(true);
+      }, 1000);
+    }
+  }, [biometricAvailable]);
 
   const loadPinLength = async () => {
     try {
@@ -83,12 +100,13 @@ const PinAuthScreen = ({ navigation, onAuthenticated }) => {
     }
   };
 
-  const handleBiometricAuth = async () => {
+  const handleBiometricAuth = async (isAutoTrigger = false) => {
     try {
       const result = await LocalAuthentication.authenticateAsync({
         promptMessage: 'Authenticate to access FlowPOS',
         cancelLabel: 'Use PIN',
         fallbackLabel: 'Use PIN instead',
+        disableDeviceFallback: false, // Allow device fallback to PIN/password
       });
 
       if (result.success) {
@@ -98,9 +116,30 @@ const PinAuthScreen = ({ navigation, onAuthenticated }) => {
         } else {
           navigation.replace('Main');
         }
+      } else if (result.error === 'UserCancel' && isAutoTrigger) {
+        // User cancelled auto-triggered biometric, show PIN interface
+        // Don't show error, just let them use PIN
+      } else if (result.error === 'BiometricUnavailable' || result.error === 'UserFallback') {
+        // Biometric failed, user can use PIN
+        setAlertConfig({
+          title: 'Biometric Authentication Failed',
+          message: 'Please enter your PIN to continue.',
+          type: 'info',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        setShowAlert(true);
       }
     } catch (error) {
       console.error('Biometric authentication error:', error);
+      if (!isAutoTrigger) {
+        setAlertConfig({
+          title: 'Authentication Error',
+          message: 'Biometric authentication is not available. Please use your PIN.',
+          type: 'error',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        setShowAlert(true);
+      }
     }
   };
 
@@ -276,7 +315,7 @@ const PinAuthScreen = ({ navigation, onAuthenticated }) => {
       {biometricAvailable ? (
         <TouchableOpacity
           style={styles.numberButton}
-          onPress={handleBiometricAuth}
+          onPress={() => handleBiometricAuth(false)}
           activeOpacity={0.7}
         >
           <Text style={styles.biometricText}>👆</Text>
@@ -324,11 +363,15 @@ const PinAuthScreen = ({ navigation, onAuthenticated }) => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.title}>Enter Your PIN</Text>
+        <Text style={styles.title}>
+          {biometricAvailable ? 'Authenticate' : 'Enter Your PIN'}
+        </Text>
         <Text style={styles.subtitle}>
           {isLocked 
             ? `Too many attempts. Try again in ${lockoutTime}s`
-            : 'Enter your PIN to access FlowPOS'
+            : biometricAvailable 
+              ? 'Use fingerprint or enter your PIN to access FlowPOS'
+              : 'Enter your PIN to access FlowPOS'
           }
         </Text>
       </View>
@@ -369,7 +412,7 @@ const PinAuthScreen = ({ navigation, onAuthenticated }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   header: {
     paddingHorizontal: 24,
@@ -380,13 +423,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -408,8 +451,8 @@ const styles = StyleSheet.create({
     backgroundColor: 'transparent',
   },
   pinDotFilled: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   numberPad: {
     flexDirection: 'row',
@@ -422,7 +465,7 @@ const styles = StyleSheet.create({
     width: 80,
     height: 80,
     borderRadius: 40,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     justifyContent: 'center',
     alignItems: 'center',
     margin: 8,
@@ -433,19 +476,19 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   numberButtonDisabled: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   numberButtonText: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   numberButtonTextDisabled: {
-    color: '#9ca3af',
+    color: colors.text.tertiary,
   },
   backspaceText: {
     fontSize: 24,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   biometricText: {
     fontSize: 24,
@@ -460,7 +503,7 @@ const styles = StyleSheet.create({
   },
   forgotButtonText: {
     fontSize: 16,
-    color: '#2563eb',
+    color: colors.primary.main,
     fontWeight: '500',
   },
 });

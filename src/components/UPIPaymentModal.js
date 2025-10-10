@@ -25,7 +25,6 @@ const UPIPaymentModal = ({
 }) => {
   const [qrCodeUri, setQrCodeUri] = useState(null);
   const [isWaitingForPayment, setIsWaitingForPayment] = useState(false);
-  // No animations needed
 
   useEffect(() => {
     if (visible) {
@@ -108,12 +107,7 @@ const UPIPaymentModal = ({
       onRequestClose={onClose}
     >
       <View style={styles.overlay}>
-        <View 
-          style={[
-            styles.modalContainer,
-            { opacity: fadeAnim }
-          ]}
-        >
+        <View style={styles.modalContainer}>
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.title}>UPI Payment</Text>

@@ -12,6 +12,7 @@ import featureService from '../services/FeatureService';
 import ResponsiveText from '../components/ResponsiveText';
 import { getDeviceInfo } from '../utils/deviceUtils';
 import { safeGoBack } from '../utils/navigationUtils';
+import { colors } from '../styles/colors';
 
 const SubscriptionScreen = ({ navigation }) => {
   const [currentPlan, setCurrentPlan] = useState('free');
@@ -200,8 +201,8 @@ const SubscriptionScreen = ({ navigation }) => {
                     styles.progressFill,
                     { 
                       width: `${Math.min(stat.percentage, 100)}%`,
-                      backgroundColor: stat.percentage > 80 ? '#ef4444' : 
-                                     stat.percentage > 60 ? '#f59e0b' : '#10b981'
+                      backgroundColor: stat.percentage > 80 ? colors.error.main : 
+                                     stat.percentage > 60 ? colors.warning.main : colors.success.main
                     }
                   ]}
                 />
@@ -333,7 +334,7 @@ const SubscriptionScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -341,9 +342,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -354,19 +355,19 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
   },
   backButtonText: {
     fontSize: 20,
-    color: '#374151',
+    color: colors.text.primary,
     fontWeight: '600',
   },
   headerTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     flex: 1,
     textAlign: 'center',
   },
@@ -380,14 +381,14 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   content: {
     flex: 1,
     padding: 20,
   },
   currentPlanInfo: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
@@ -400,13 +401,13 @@ const styles = StyleSheet.create({
   },
   currentPlanLabel: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 8,
   },
   currentPlanName: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   currentPlanPrice: {
@@ -415,7 +416,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   usageContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
@@ -426,7 +427,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   usageTitle: {
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   usageItem: {
@@ -439,14 +440,14 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   usageName: {
-    color: '#374151',
+    color: colors.text.primary,
   },
   usageNumbers: {
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colors.border.light,
     borderRadius: 4,
     overflow: 'hidden',
   },
@@ -455,25 +456,25 @@ const styles = StyleSheet.create({
     borderRadius: 4,
   },
   warningText: {
-    color: '#ef4444',
+    color: colors.error.main,
     marginTop: 4,
   },
   plansContainer: {
     marginBottom: 24,
   },
   plansTitle: {
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   plansGrid: {
     gap: 16,
   },
   planCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 20,
     borderWidth: 2,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
     position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -485,14 +486,14 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   currentPlanCard: {
-    borderColor: '#8b5cf6',
+    borderColor: colors.primary.main,
     backgroundColor: '#faf5ff',
   },
   planHeader: {
     marginBottom: 16,
   },
   planName: {
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   priceContainer: {
@@ -504,19 +505,19 @@ const styles = StyleSheet.create({
     marginRight: 4,
   },
   priceUnit: {
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   currentBadge: {
     position: 'absolute',
     top: 16,
     right: 16,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
   },
   currentBadgeText: {
-    color: '#ffffff',
+    color: colors.background.surface,
     fontSize: 12,
     fontWeight: '600',
   },
@@ -524,7 +525,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   featuresTitle: {
-    color: '#374151',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   limitsContainer: {
@@ -532,7 +533,7 @@ const styles = StyleSheet.create({
   },
   limitItem: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 4,
   },
   keyFeatures: {
@@ -549,24 +550,24 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   upgradeButtonPrimary: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
   },
   upgradeButtonSecondary: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.medium,
   },
   upgradeButtonText: {
     fontWeight: '600',
   },
   upgradeButtonTextPrimary: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   upgradeButtonTextSecondary: {
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   benefitsContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 20,
     marginBottom: 24,
@@ -577,7 +578,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   benefitsTitle: {
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   benefitsList: {
@@ -585,11 +586,11 @@ const styles = StyleSheet.create({
   },
   benefitItem: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.text.primary,
     lineHeight: 20,
   },
   supportContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 20,
     marginBottom: 40,
@@ -603,27 +604,27 @@ const styles = StyleSheet.create({
   supportTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   supportText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     marginBottom: 16,
   },
   supportButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.medium,
   },
   supportButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.text.primary,
   },
 });
 

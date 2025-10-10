@@ -26,6 +26,9 @@ import featureService from '../services/FeatureService';
 import TagInput from '../components/TagInput';
 import ProductImagePicker from '../components/ProductImagePicker';
 import { generateProductTags } from '../utils/tagGenerator';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
+import { colors } from '../styles/colors';
 
 
 const ManageScreen = ({ navigation }) => {
@@ -39,6 +42,9 @@ const ManageScreen = ({ navigation }) => {
   // Page and tab loading states
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
   const { activeTab, loadingTab, switchTab, isTabLoading } = useTabLoading();
+  
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('Manage');
   
   // Refs for maintaining focus
   const lastFocusedInputRef = useRef(null);
@@ -229,13 +235,8 @@ const ManageScreen = ({ navigation }) => {
       return;
     }
 
-    if (!formData.stock) {
-      Alert.alert('Validation Error', 'Stock quantity is required.');
-      return;
-    }
-
     const price = parseInt(formData.price);
-    const stock = parseInt(formData.stock);
+    let stock = 0;
 
     if (isNaN(price) || price <= 0) {
       Alert.alert('Validation Error', 'Please enter a valid price (greater than 0).');
@@ -243,9 +244,16 @@ const ManageScreen = ({ navigation }) => {
     }
 
     // Validate stock only if tracking is enabled
-    if (formData.trackStock && (isNaN(stock) || stock < 0)) {
-      Alert.alert('Validation Error', 'Please enter a valid stock quantity (0 or greater).');
-      return;
+    if (formData.trackStock) {
+      if (!formData.stock) {
+        Alert.alert('Validation Error', 'Stock quantity is required when stock tracking is enabled.');
+        return;
+      }
+      stock = parseInt(formData.stock);
+      if (isNaN(stock) || stock < 0) {
+        Alert.alert('Validation Error', 'Please enter a valid stock quantity (0 or greater).');
+        return;
+      }
     }
 
     // Generate tags if none provided
@@ -414,7 +422,7 @@ const ManageScreen = ({ navigation }) => {
     };
 
     console.log('Testing invoice with data:', testOrderData);
-    navigation.navigate('Invoice', { orderData: testOrderData });
+    navigation.navigate('Invoice', { orderData: testOrderData, autoRedirect: false });
   };
 
 
@@ -460,7 +468,7 @@ const ManageScreen = ({ navigation }) => {
             disabled={isTabLoading(tab)}
           >
             {isTabLoading(tab) ? (
-              <InlineLoader visible={true} size="small" color="#2563eb" />
+              <InlineLoader visible={true} size="small" color={colors.primary.main} />
             ) : (
               <Text 
                 style={[
@@ -552,11 +560,11 @@ const ManageScreen = ({ navigation }) => {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor="#8b5cf6"
-                  colors={['#8b5cf6']}
-                  progressBackgroundColor="#ffffff"
+                  tintColor={colors.primary.main}
+                  colors={[colors.primary.main]}
+                  progressBackgroundColor={colors.background.surface}
                   title="Pull to refresh products..."
-                  titleColor="#6b7280"
+                  titleColor={colors.text.secondary}
                 />
               }
             />
@@ -618,8 +626,8 @@ const ManageScreen = ({ navigation }) => {
                     <Switch
                       value={formData.trackStock}
                       onValueChange={(value) => setFormData({ ...formData, trackStock: value })}
-                      trackColor={{ false: '#d1d5db', true: '#93c5fd' }}
-                      thumbColor={formData.trackStock ? '#2563eb' : '#9ca3af'}
+                      trackColor={{ false: colors.border.medium, true: '#93c5fd' }}
+                      thumbColor={formData.trackStock ? colors.primary.main : colors.text.tertiary}
                     />
                   </View>
                   {formData.trackStock && (
@@ -662,8 +670,12 @@ const ManageScreen = ({ navigation }) => {
         </View>
       </Modal>
 
-
-
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        currentScreen="Manage"
+        onComplete={completeTour}
+      />
 
       </View>
     </SafeAreaView>
@@ -673,7 +685,7 @@ const ManageScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -684,10 +696,9 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    paddingTop: 60, // Proper space for status bar like YouTube app
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   titleContainer: {
     flex: 1,
@@ -695,11 +706,11 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   storeSubtitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginTop: 2,
   },
   headerButtons: {
@@ -709,7 +720,7 @@ const styles = StyleSheet.create({
   },
   subscriptionButton: {
     padding: 8,
-    backgroundColor: '#fef3c7',
+    backgroundColor: colors.warning.background,
     borderRadius: 20,
     borderWidth: 1,
     borderColor: '#fbbf24',
@@ -725,9 +736,9 @@ const styles = StyleSheet.create({
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   tab: {
     flex: 1,
@@ -741,11 +752,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 4,
     alignItems: 'center',
     borderBottomWidth: 2,
-    borderBottomColor: '#2563eb',
+    borderBottomColor: colors.primary.main,
   },
   tabText: {
     fontSize: 11,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     flexWrap: 'wrap',
     lineHeight: 14,
@@ -753,7 +764,7 @@ const styles = StyleSheet.create({
   },
   tabTextActive: {
     fontSize: 11,
-    color: '#2563eb',
+    color: colors.primary.main,
     fontWeight: '600',
     textAlign: 'center',
     flexWrap: 'wrap',
@@ -766,7 +777,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
   },
   productsHeaderLeft: {
     flex: 1,
@@ -774,18 +785,18 @@ const styles = StyleSheet.create({
   productsTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   setupWarning: {
     marginTop: 4,
   },
   setupWarningText: {
     fontSize: 12,
-    color: '#f59e0b',
+    color: colors.warning.main,
     fontWeight: '500',
   },
   addButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -793,20 +804,20 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   addButtonDisabled: {
-    backgroundColor: '#9ca3af',
+    backgroundColor: colors.text.tertiary,
   },
   addButtonTextDisabled: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   productsList: {
     padding: 20,
     paddingBottom: 140, // Reduced spacing
   },
   productCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -818,7 +829,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: colors.gray[100],
   },
   productImage: {
     width: 48,
@@ -830,11 +841,12 @@ const styles = StyleSheet.create({
   productImageStyle: {
     width: '100%',
     height: '100%',
+    resizeMode: 'contain', // Show full image without cropping
   },
   productImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
@@ -848,7 +860,7 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   productTag: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: colors.primary.background,
     borderRadius: 8,
     paddingHorizontal: 6,
     paddingVertical: 2,
@@ -862,7 +874,7 @@ const styles = StyleSheet.create({
   },
   moreTags: {
     fontSize: 10,
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontStyle: 'italic',
   },
   stockTrackingContainer: {
@@ -881,19 +893,19 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
     flexWrap: 'wrap',
     flexShrink: 1,
   },
   productDetails: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 2,
   },
   productCategory: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
   },
   productActions: {
     flexDirection: 'row',
@@ -923,7 +935,7 @@ const styles = StyleSheet.create({
     paddingVertical: 20,
   },
   modalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 20,
   },
@@ -936,29 +948,29 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
     fontSize: 18,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   textInput: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.medium,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
     marginBottom: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
   },
   inputLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   emojiSelector: {
@@ -972,15 +984,15 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
     margin: 4,
   },
   emojiOptionSelected: {
-    backgroundColor: '#dbeafe',
+    backgroundColor: colors.primary.background,
     borderWidth: 2,
-    borderColor: '#2563eb',
+    borderColor: colors.primary.main,
   },
   emojiOptionText: {
     fontSize: 20,
@@ -1000,27 +1012,27 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     alignItems: 'center',
     margin: 4,
     minWidth: 60,
   },
   categoryOptionSelected: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
   },
   categoryOptionText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   categoryOptionTextSelected: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   addCategoryOption: {
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     alignItems: 'center',
     margin: 4,
     minWidth: 60,
@@ -1028,10 +1040,10 @@ const styles = StyleSheet.create({
   addCategoryText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   saveButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.success.main,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -1039,7 +1051,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 
   tabContent: {
@@ -1051,12 +1063,12 @@ const styles = StyleSheet.create({
   tabContentTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 12,
   },
   tabContentText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -1066,7 +1078,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   addCategoryButton: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1074,7 +1086,7 @@ const styles = StyleSheet.create({
   addCategoryButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 
   cancelButton: {
@@ -1082,14 +1094,14 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   cancelButtonText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   emptyProductsState: {
     flex: 1,
@@ -1105,23 +1117,23 @@ const styles = StyleSheet.create({
   emptyProductsTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyProductsText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
   },
   firstProductButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#2563eb',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1130,14 +1142,14 @@ const styles = StyleSheet.create({
   firstProductButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   setupButton: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#8b5cf6',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -1146,7 +1158,7 @@ const styles = StyleSheet.create({
   setupButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 });
 

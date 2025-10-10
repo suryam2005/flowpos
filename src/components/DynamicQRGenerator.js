@@ -15,6 +15,7 @@ import * as Haptics from 'expo-haptics';
 import { getDeviceInfo } from '../utils/deviceUtils';
 import ResponsiveText from './ResponsiveText';
 import { useUPIListener } from '../hooks/useUPIListener';
+import { colors } from '../styles/colors';
 
 const DynamicQRGenerator = ({ 
   amount, 
@@ -56,13 +57,13 @@ const DynamicQRGenerator = ({
       // Reset payment ID
       setPaymentId('');
     }
-  }, [visible, paymentId, isAutoListening, stopTrackingPayment]);
+  }, [visible]);
 
   useEffect(() => {
     if (storeInfo && amount && visible && selectedUpiId) {
       generateQRCode();
     }
-  }, [storeInfo, amount, visible, customerName, orderNote, selectedUpiId]);
+  }, [storeInfo, amount, visible, selectedUpiId]);
 
   const loadStoreInfo = async () => {
     try {
@@ -104,6 +105,11 @@ const DynamicQRGenerator = ({
       return;
     }
 
+    // Prevent regenerating if already generating or if QR already exists for same params
+    if (isGenerating) {
+      return;
+    }
+
     setIsGenerating(true);
 
     try {
@@ -127,7 +133,7 @@ const DynamicQRGenerator = ({
       setQrValue(upiUrl);
       
       // Start tracking this payment for automatic confirmation
-      if (paymentId && isListening) {
+      if (paymentId && isListening && !isAutoListening) {
         trackPayment(paymentId, amount, selectedUpiId, customerName);
         setIsAutoListening(true);
       }
@@ -177,6 +183,7 @@ const DynamicQRGenerator = ({
     if (lastConfirmation && paymentId && isAutoListening && visible) {
       // Check if this confirmation is for our current payment (exact amount match)
       if (lastConfirmation.activePayment && 
+          lastConfirmation.paymentId === paymentId &&
           Math.abs(lastConfirmation.amount - amount) < 0.01) {
         
         // Stop tracking immediately
@@ -209,7 +216,18 @@ const DynamicQRGenerator = ({
         );
       }
     }
-  }, [lastConfirmation, paymentId, isAutoListening, amount, onPaymentComplete, onClose, visible]);
+  }, [lastConfirmation]);
+
+  // Cleanup effect - only run on unmount
+  useEffect(() => {
+    return () => {
+      // Cleanup when component unmounts - use current values
+      if (paymentId && isAutoListening) {
+        stopTrackingPayment(paymentId);
+      }
+    };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!visible) return null;
 
@@ -377,7 +395,7 @@ const styles = StyleSheet.create({
   modalContainer: {
     width: '90%',
     maxWidth: 400,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 20,
     maxHeight: '90%',
   },
@@ -391,19 +409,19 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     padding: 20,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   modalTitle: {
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   closeButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   closeButtonText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   modalContent: {
     padding: 20,
@@ -417,7 +435,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   amountLabel: {
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 4,
   },
   amountValue: {
@@ -429,12 +447,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   storeName: {
-    color: '#1f2937',
+    color: colors.text.primary,
     fontWeight: '600',
     marginBottom: 4,
   },
   upiId: {
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   customerName: {
@@ -452,18 +470,18 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   qrCodeWrapper: {
     alignItems: 'center',
     padding: 20,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   qrInstructions: {
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     marginTop: 12,
   },
@@ -478,13 +496,13 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   retryButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
   },
   retryButtonText: {
-    color: '#ffffff',
+    color: colors.background.surface,
     fontWeight: '600',
   },
 
@@ -501,10 +519,10 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   confirmButtonText: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   disclaimer: {
-    color: '#9ca3af',
+    color: colors.text.tertiary,
     textAlign: 'center',
     lineHeight: 18,
   },
@@ -513,7 +531,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   upiSelectionLabel: {
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 8,
   },
   upiOptions: {
@@ -523,23 +541,23 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   upiOption: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   upiOptionSelected: {
     backgroundColor: '#8b5cf6',
     borderColor: '#8b5cf6',
   },
   upiOptionText: {
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   upiOptionTextSelected: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   autoListenIndicator: {
     flexDirection: 'row',

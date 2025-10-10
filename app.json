@@ -4,10 +4,10 @@
     "slug": "flowpos",
     "version": "1.0.0",
     "orientation": "default",
-    "icon": "./assets/icon.png",
+    "icon": "./assets/icon-new.png",
     "userInterfaceStyle": "light",
     "splash": {
-      "image": "./assets/splash.png",
+      "image": "./assets/splash-new.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
@@ -21,30 +21,25 @@
     },
     "android": {
       "adaptiveIcon": {
-        "foregroundImage": "./assets/adaptive-icon.png",
+        "foregroundImage": "./assets/adaptive-icon-new.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.flowpos.app",
-      "versionCode": 1,
       "permissions": [
         "CAMERA",
         "USE_FINGERPRINT",
         "USE_BIOMETRIC",
         "VIBRATE",
-        "READ_EXTERNAL_STORAGE",
-        "WRITE_EXTERNAL_STORAGE",
         "READ_SMS",
         "RECEIVE_SMS",
         "android.permission.USE_FINGERPRINT",
         "android.permission.USE_BIOMETRIC",
         "android.permission.READ_SMS",
-        "android.permission.RECEIVE_SMS",
-        "android.permission.WRITE_EXTERNAL_STORAGE",
-        "android.permission.READ_EXTERNAL_STORAGE"
+        "android.permission.RECEIVE_SMS"
       ]
     },
     "web": {
-      "favicon": "./assets/favicon.png"
+      "favicon": "./assets/favicon-new.png"
     },
     "plugins": [
       "expo-secure-store"

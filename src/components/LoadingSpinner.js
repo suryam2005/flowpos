@@ -7,6 +7,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { typography, createTextStyle, spacing } from '../utils/typography';
+import { colors } from '../styles/colors';
 
 const { width } = Dimensions.get('window');
 
@@ -15,7 +16,7 @@ const LoadingSpinner = ({
   text = 'Loading...', 
   size = 'medium',
   overlay = false,
-  color = '#2563eb' 
+  color = colors.primary.main 
 }) => {
   const spinValue = useRef(new Animated.Value(0)).current;
 
@@ -89,7 +90,7 @@ export const PageLoader = ({ visible, text = 'Loading...' }) => (
     text={text}
     size="large"
     overlay={true}
-    color="#2563eb"
+    color={colors.primary.main}
   />
 );
 
@@ -131,7 +132,7 @@ const styles = StyleSheet.create({
     marginBottom: spacing.sm,
   },
   loadingText: {
-    ...createTextStyle('body2', '#6b7280'),
+    ...createTextStyle('body2', colors.text.secondary),
     textAlign: 'center',
   },
 });

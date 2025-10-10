@@ -7,6 +7,7 @@ import {
   Modal,
   Animated,
 } from 'react-native';
+import { colors } from '../styles/colors';
 
 const CustomAlert = ({ 
   visible, 
@@ -37,7 +38,7 @@ const CustomAlert = ({
         return {
           icon: '✅',
           iconBg: '#d1fae5',
-          iconColor: '#10b981',
+          iconColor: colors.success.main,
         };
       case 'warning':
         return {
@@ -49,13 +50,13 @@ const CustomAlert = ({
         return {
           icon: '❌',
           iconBg: '#fee2e2',
-          iconColor: '#ef4444',
+          iconColor: colors.error.main,
         };
       default:
         return {
           icon: 'ℹ️',
           iconBg: '#dbeafe',
-          iconColor: '#2563eb',
+          iconColor: colors.primary.main,
         };
     }
   };
@@ -137,7 +138,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   alertContainer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 20,
     padding: 24,
     width: '100%',
@@ -167,13 +168,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     textAlign: 'center',
     marginBottom: 8,
   },
   message: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
   },
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   button: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingVertical: 14,
     borderRadius: 12,
     alignItems: 'center',
@@ -197,21 +198,21 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   cancelButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   destructiveButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: colors.error.main,
   },
   buttonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   cancelButtonText: {
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   destructiveButtonText: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 });
 

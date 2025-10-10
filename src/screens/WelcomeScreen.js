@@ -7,6 +7,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
+import { colors } from '../styles/colors';
 
 const WelcomeScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -118,7 +119,7 @@ const WelcomeScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 24,
     paddingVertical: 16,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   headerSpacer: {
     flex: 1,
@@ -134,14 +135,14 @@ const styles = StyleSheet.create({
   skipButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 20,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   skipText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontWeight: '500',
   },
   content: {
@@ -165,13 +166,13 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 26,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     fontWeight: '500',
   },
@@ -181,7 +182,7 @@ const styles = StyleSheet.create({
   },
   descriptionText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -195,23 +196,23 @@ const styles = StyleSheet.create({
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#d1d5db',
+    backgroundColor: colors.border.medium,
     marginHorizontal: 4,
   },
   indicatorActive: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     width: 24,
   },
   navigation: {
     paddingBottom: 20,
   },
   nextButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 48,
     paddingVertical: 16,
     borderRadius: 16,
     alignItems: 'center',
-    shadowColor: '#2563eb',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -220,7 +221,7 @@ const styles = StyleSheet.create({
   nextButtonText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 });
 

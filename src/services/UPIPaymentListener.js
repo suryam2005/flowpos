@@ -1,6 +1,7 @@
 import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SMS from 'expo-sms';
+import SmsListener from 'react-native-android-sms-listener';
 
 class UPIPaymentListener {
   constructor() {
@@ -19,7 +20,7 @@ class UPIPaymentListener {
       timestamp: Date.now(),
       status: 'pending'
     });
-    
+
     console.log(`Tracking payment: ${paymentId} for ₹${amount} to ${upiId}`);
   }
 
@@ -46,14 +47,29 @@ class UPIPaymentListener {
     });
   }
 
-  // Request SMS permissions
+  // Request SMS permissions with proper explanation
   async requestSMSPermissions() {
     if (Platform.OS === 'android') {
       try {
+        // Check if permissions are already granted
+        const readSmsGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.READ_SMS);
+        const receiveSmsGranted = await PermissionsAndroid.check(PermissionsAndroid.PERMISSIONS.RECEIVE_SMS);
+        
+        if (readSmsGranted && receiveSmsGranted) {
+          return true;
+        }
+
+        // Request permissions with clear rationale
         const granted = await PermissionsAndroid.requestMultiple([
           PermissionsAndroid.PERMISSIONS.READ_SMS,
           PermissionsAndroid.PERMISSIONS.RECEIVE_SMS,
-        ]);
+        ], {
+          title: 'SMS Permissions for Payment Detection',
+          message: 'FlowPOS needs SMS access to automatically detect UPI payment confirmations from your bank. This helps confirm payments instantly without manual verification.',
+          buttonNeutral: 'Ask Me Later',
+          buttonNegative: 'Cancel',
+          buttonPositive: 'Allow',
+        });
 
         return (
           granted['android.permission.READ_SMS'] === PermissionsAndroid.RESULTS.GRANTED &&
@@ -70,25 +86,25 @@ class UPIPaymentListener {
   // Parse UPI payment confirmation message
   parsePaymentMessage(message) {
     const messageText = message.toLowerCase();
-    
+
     // Common UPI payment confirmation patterns
     const patterns = [
       // GPay patterns
       /(?:received|credited).*?rs\.?\s*(\d+(?:\.\d{2})?)/i,
       /(?:received|credited).*?₹\s*(\d+(?:\.\d{2})?)/i,
-      
+
       // PhonePe patterns
       /(?:money received|payment received).*?rs\.?\s*(\d+(?:\.\d{2})?)/i,
       /(?:money received|payment received).*?₹\s*(\d+(?:\.\d{2})?)/i,
-      
+
       // Paytm patterns
       /(?:received|credited).*?rs\.?\s*(\d+(?:\.\d{2})?)/i,
       /(?:payment.*?received).*?₹\s*(\d+(?:\.\d{2})?)/i,
-      
+
       // Bank SMS patterns
       /(?:credited|received).*?(?:rs\.?|₹)\s*(\d+(?:\.\d{2})?)/i,
       /(?:upi.*?credit).*?(?:rs\.?|₹)\s*(\d+(?:\.\d{2})?)/i,
-      
+
       // Generic patterns
       /(?:received|credited|paid).*?(\d+(?:\.\d{2})?).*?(?:rupees|rs|₹)/i,
     ];
@@ -99,7 +115,7 @@ class UPIPaymentListener {
       'upi credit', 'transaction successful', 'payment successful'
     ];
 
-    const hasConfirmationKeyword = confirmationKeywords.some(keyword => 
+    const hasConfirmationKeyword = confirmationKeywords.some(keyword =>
       messageText.includes(keyword)
     );
 
@@ -244,16 +260,16 @@ class UPIPaymentListener {
     // This is a simplified implementation
     // In a production app, you might want to use a native module
     // or implement a more sophisticated SMS checking mechanism
-    
+
     // For now, we'll simulate SMS checking by looking at stored messages
     try {
       const recentMessages = await AsyncStorage.getItem('recentSMSMessages');
       if (recentMessages) {
         const messages = JSON.parse(recentMessages);
         const now = Date.now();
-        
+
         // Check messages from last 2 minutes
-        const recentSMS = messages.filter(msg => 
+        const recentSMS = messages.filter(msg =>
           now - msg.timestamp < 2 * 60 * 1000
         );
 
@@ -269,7 +285,7 @@ class UPIPaymentListener {
   // Process incoming SMS message
   processSMSMessage(messageBody, sender) {
     const parsedPayment = this.parsePaymentMessage(messageBody);
-    
+
     if (!parsedPayment) {
       return; // Not a payment confirmation message
     }
@@ -278,10 +294,10 @@ class UPIPaymentListener {
 
     // Check if this matches any active payment
     const match = this.matchActivePayment(parsedPayment);
-    
+
     if (match && match.confidence >= 85) { // Higher threshold for auto-confirmation
       console.log(`Payment auto-confirmed with ${match.confidence}% confidence`);
-      
+
       // Update payment status
       const activePayment = match.activePayment;
       activePayment.status = 'confirmed';
@@ -315,7 +331,7 @@ class UPIPaymentListener {
     try {
       const confirmations = await AsyncStorage.getItem('paymentConfirmations');
       const confirmationList = confirmations ? JSON.parse(confirmations) : [];
-      
+
       confirmationList.unshift({
         paymentId,
         ...confirmationData,

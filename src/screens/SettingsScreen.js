@@ -15,14 +15,21 @@ import * as Haptics from 'expo-haptics';
 import { clearAllAppData } from '../utils/dataUtils';
 import { setItemAsync, getItemAsync, deleteItemAsync } from '../utils/secureStorage';
 import { safeGoBack } from '../utils/navigationUtils';
+import { useAppTour } from '../hooks/useAppTour';
+import { colors } from '../styles/colors';
 
 const SettingsScreen = ({ navigation }) => {
-  const [useAppleFont, setUseAppleFont] = useState(false);
-  const [useAppleEmoji, setUseAppleEmoji] = useState(false);
+  const [darkTheme, setDarkTheme] = useState(false);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [biometricAvailable, setBiometricAvailable] = useState(false);
   const [pinEnabled, setPinEnabled] = useState(true);
   const [autoPaymentDetection, setAutoPaymentDetection] = useState(true);
+  const [notifications, setNotifications] = useState(true);
+  const [autoWhatsAppInvoice, setAutoWhatsAppInvoice] = useState(true);
+  const [requireCustomerDetails, setRequireCustomerDetails] = useState(true);
+
+  // App tour guide
+  const { startTour, skipAllTours } = useAppTour('Settings');
 
   useEffect(() => {
     loadSettings();
@@ -41,19 +48,18 @@ const SettingsScreen = ({ navigation }) => {
 
   const loadSettings = async () => {
     try {
-      const [appleFont, appleEmoji, biometric, pinSetup, autoDetection] = await Promise.all([
-        AsyncStorage.getItem('useAppleFont'),
-        AsyncStorage.getItem('useAppleEmoji'),
+      const [darkThemeValue, biometric, pinSetup, autoDetection, notificationsValue, autoWhatsApp, customerDetailsRequired] = await Promise.all([
+        AsyncStorage.getItem('darkTheme'),
         getItemAsync('biometricEnabled'),
         getItemAsync('pinSetupCompleted'),
-        AsyncStorage.getItem('autoPaymentDetection')
+        AsyncStorage.getItem('autoPaymentDetection'),
+        AsyncStorage.getItem('notifications'),
+        AsyncStorage.getItem('autoWhatsAppInvoice'),
+        AsyncStorage.getItem('requireCustomerDetails')
       ]);
       
-      if (appleFont !== null) {
-        setUseAppleFont(JSON.parse(appleFont));
-      }
-      if (appleEmoji !== null) {
-        setUseAppleEmoji(JSON.parse(appleEmoji));
+      if (darkThemeValue !== null) {
+        setDarkTheme(JSON.parse(darkThemeValue));
       }
       if (biometric !== null) {
         setBiometricEnabled(JSON.parse(biometric));
@@ -63,6 +69,15 @@ const SettingsScreen = ({ navigation }) => {
       }
       if (autoDetection !== null) {
         setAutoPaymentDetection(JSON.parse(autoDetection));
+      }
+      if (notificationsValue !== null) {
+        setNotifications(JSON.parse(notificationsValue));
+      }
+      if (autoWhatsApp !== null) {
+        setAutoWhatsAppInvoice(JSON.parse(autoWhatsApp));
+      }
+      if (customerDetailsRequired !== null) {
+        setRequireCustomerDetails(JSON.parse(customerDetailsRequired));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -77,19 +92,35 @@ const SettingsScreen = ({ navigation }) => {
     }
   };
 
-  const handleAppleFontToggle = (value) => {
-    setUseAppleFont(value);
-    saveSetting('useAppleFont', value);
-  };
-
-  const handleAppleEmojiToggle = (value) => {
-    setUseAppleEmoji(value);
-    saveSetting('useAppleEmoji', value);
+  const handleDarkThemeToggle = (value) => {
+    setDarkTheme(value);
+    saveSetting('darkTheme', value);
+    // Note: In a real implementation, you would apply the theme change here
+    Alert.alert(
+      'Theme Changed',
+      'Dark theme will be applied after restarting the app.',
+      [{ text: 'OK' }]
+    );
   };
 
   const handleAutoPaymentDetectionToggle = (value) => {
     setAutoPaymentDetection(value);
     saveSetting('autoPaymentDetection', value);
+  };
+
+  const handleNotificationsToggle = (value) => {
+    setNotifications(value);
+    saveSetting('notifications', value);
+  };
+
+  const handleAutoWhatsAppInvoiceToggle = (value) => {
+    setAutoWhatsAppInvoice(value);
+    saveSetting('autoWhatsAppInvoice', value);
+  };
+
+  const handleRequireCustomerDetailsToggle = (value) => {
+    setRequireCustomerDetails(value);
+    saveSetting('requireCustomerDetails', value);
   };
 
   const handleBiometricToggle = async (value) => {
@@ -335,10 +366,30 @@ const SettingsScreen = ({ navigation }) => {
     );
   };
 
+  const handleShowAppTour = () => {
+    Alert.alert(
+      'App Tour',
+      'Would you like to see the app tour again? This will show you how to use different features.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Start Tour', 
+          onPress: () => {
+            // Reset tour status and start from POS screen
+            navigation.navigate('Main', { screen: 'POS' });
+            setTimeout(() => {
+              startTour();
+            }, 500);
+          }
+        },
+      ]
+    );
+  };
+
   const handleRateApp = () => {
     Alert.alert(
       'Rate FlowPOS',
-      'Enjoying FlowPOS? Please rate us on the App Store!',
+      'Enjoying FlowPOS? Please rate us on the Play Store!',
       [
         { text: 'Later', style: 'cancel' },
         { text: 'Rate Now', onPress: () => {
@@ -357,9 +408,9 @@ const SettingsScreen = ({ navigation }) => {
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{ false: '#f3f4f6', true: '#8b5cf6' }}
-        thumbColor={value ? '#ffffff' : '#ffffff'}
-        ios_backgroundColor="#f3f4f6"
+        trackColor={{ false: colors.gray[100], true: colors.primary.main }}
+        thumbColor={value ? colors.background.surface : colors.background.surface}
+        ios_backgroundColor={colors.gray[100]}
       />
     </View>
   );
@@ -382,17 +433,17 @@ const SettingsScreen = ({ navigation }) => {
           <Text style={styles.sectionTitle}>Appearance</Text>
           
           <SettingItem
-            title="Apple Font (SF Pro)"
-            description="Use Apple's San Francisco Pro font family for a cleaner look"
-            value={useAppleFont}
-            onToggle={handleAppleFontToggle}
+            title="Dark Theme"
+            description="Use dark colors for better viewing in low light conditions"
+            value={darkTheme}
+            onToggle={handleDarkThemeToggle}
           />
           
           <SettingItem
-            title="Apple Emoji Style"
-            description="Use Apple-style emoji rendering for consistent appearance"
-            value={useAppleEmoji}
-            onToggle={handleAppleEmojiToggle}
+            title="Notifications"
+            description="Receive notifications for orders, payments, and app updates"
+            value={notifications}
+            onToggle={handleNotificationsToggle}
           />
         </View>
 
@@ -404,6 +455,20 @@ const SettingsScreen = ({ navigation }) => {
             description="Automatically detect UPI payment confirmations from SMS messages"
             value={autoPaymentDetection}
             onToggle={handleAutoPaymentDetectionToggle}
+          />
+          
+          <SettingItem
+            title="Auto WhatsApp Invoice"
+            description="Automatically send invoice via WhatsApp after payment completion"
+            value={autoWhatsAppInvoice}
+            onToggle={handleAutoWhatsAppInvoiceToggle}
+          />
+          
+          <SettingItem
+            title="Require Customer Details"
+            description="Make customer name and phone number mandatory for checkout"
+            value={requireCustomerDetails}
+            onToggle={handleRequireCustomerDetailsToggle}
           />
         </View>
 
@@ -551,6 +616,22 @@ const SettingsScreen = ({ navigation }) => {
           
           <TouchableOpacity 
             style={styles.actionButton}
+            onPress={handleShowAppTour}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.actionButtonText}>🎯 Show App Tour</Text>
+          </TouchableOpacity>
+
+          <TouchableOpacity 
+            style={styles.actionButton}
+            onPress={() => navigation.navigate('WhatsAppSetup')}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.actionButtonText}>📱 WhatsApp Setup</Text>
+          </TouchableOpacity>
+          
+          <TouchableOpacity 
+            style={styles.actionButton}
             onPress={handleRateApp}
             activeOpacity={0.8}
           >
@@ -565,7 +646,7 @@ const SettingsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -574,21 +655,21 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     paddingTop: 60,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   backButton: {
     padding: 8,
   },
   backIcon: {
     fontSize: 20,
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   placeholder: {
     width: 36,
@@ -603,11 +684,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   settingItem: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -627,16 +708,16 @@ const styles = StyleSheet.create({
   settingTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   settingDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     lineHeight: 20,
   },
   aboutItem: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -651,15 +732,15 @@ const styles = StyleSheet.create({
   },
   aboutLabel: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   aboutValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   settingButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     marginBottom: 12,
     shadowColor: '#000',
@@ -680,21 +761,21 @@ const styles = StyleSheet.create({
   settingButtonTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   settingButtonDescription: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     lineHeight: 20,
   },
   settingButtonArrow: {
     fontSize: 18,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
     marginLeft: 12,
   },
   actionButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -705,15 +786,15 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   actionButtonText: {
     fontSize: 16,
     fontWeight: '500',
-    color: '#374151',
+    color: colors.text.primary,
   },
   dangerButton: {
-    backgroundColor: '#ef4444',
+    backgroundColor: colors.error.main,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -722,25 +803,25 @@ const styles = StyleSheet.create({
   dangerButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   warningText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 20,
     marginBottom: 40,
   },
   dangerSettingButton: {
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: colors.error.border,
     backgroundColor: '#fef2f2',
   },
   dangerSettingTitle: {
     color: '#dc2626',
   },
   noSecurityContainer: {
-    backgroundColor: '#fef3c7',
+    backgroundColor: colors.warning.background,
     borderRadius: 12,
     padding: 20,
     alignItems: 'center',
@@ -772,7 +853,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   enableSecurityText: {
-    color: '#ffffff',
+    color: colors.background.surface,
     fontWeight: '600',
     fontSize: 14,
   },

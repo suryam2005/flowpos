@@ -5,6 +5,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { colors } from '../styles/colors';
 
 const LoadingScreen = () => {
   return (
@@ -21,7 +22,7 @@ const LoadingScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -35,12 +36,12 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 32,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 12,
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
 });
 

@@ -13,11 +13,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import CustomAlert from '../../components/CustomAlert';
+import { colors, componentColors } from '../../styles/colors';
+import { createButtonStyle, createButtonTextStyle, createCardStyle, createInputStyle } from '../../styles/theme';
 
 const StoreSetupScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
+  const scrollViewRef = useRef(null);
   // No animations needed
 
   // Store Information
@@ -31,7 +34,11 @@ const StoreSetupScreen = ({ navigation }) => {
     // Step 2: Business Details
     address: '',
     businessType: 'Retail Store',
+    customBusinessType: '',
     gstNumber: '',
+    gstPercentage: '',
+    currency: 'INR',
+    currencySymbol: '₹',
 
     // Step 3: Payment Setup
     upiId: '',
@@ -39,9 +46,7 @@ const StoreSetupScreen = ({ navigation }) => {
     upiId3: '',
     paymentMethods: ['Cash'], // Default to Cash
 
-    // Step 4: Preferences
-    currency: 'INR',
-    currencySymbol: '₹',
+    // Step 4: Overview
     timezone: 'Asia/Kolkata',
   });
 
@@ -53,8 +58,8 @@ const StoreSetupScreen = ({ navigation }) => {
     },
     {
       title: 'Business Details',
-      subtitle: 'Complete your business profile',
-      fields: ['address', 'businessType', 'gstNumber'],
+      subtitle: 'Complete your business profile and currency',
+      fields: ['address', 'businessType', 'currency'],
     },
     {
       title: 'Payment Setup',
@@ -62,9 +67,9 @@ const StoreSetupScreen = ({ navigation }) => {
       fields: ['paymentMethods', 'upiId'],
     },
     {
-      title: 'Preferences',
-      subtitle: 'Set your business preferences',
-      fields: ['currency', 'timezone'],
+      title: 'Setup Overview',
+      subtitle: 'Review your store configuration',
+      fields: [],
     },
   ];
 
@@ -100,8 +105,17 @@ const StoreSetupScreen = ({ navigation }) => {
       if (field === 'phone' && !storeData.phone.trim()) {
         return 'Phone number is required';
       }
+      if (field === 'email' && !storeData.email.trim()) {
+        return 'Email address is required';
+      }
       if (field === 'address' && !storeData.address.trim()) {
         return 'Address is required';
+      }
+      if (field === 'businessType' && storeData.businessType === 'Other' && !storeData.customBusinessType.trim()) {
+        return 'Please specify your business type';
+      }
+      if (field === 'currency' && !storeData.currency) {
+        return 'Please select a currency';
       }
       if (field === 'paymentMethods' && storeData.paymentMethods.length === 0) {
         return 'Please select at least one payment method';
@@ -111,7 +125,7 @@ const StoreSetupScreen = ({ navigation }) => {
       }
     }
 
-    // Email validation (optional but if provided, should be valid)
+    // Email validation (required and must be valid)
     if (storeData.email && !isValidEmail(storeData.email)) {
       return 'Please enter a valid email address';
     }
@@ -119,6 +133,14 @@ const StoreSetupScreen = ({ navigation }) => {
     // Phone validation
     if (storeData.phone && storeData.phone.length < 10) {
       return 'Please enter a valid phone number';
+    }
+
+    // GST validation
+    if (storeData.gstNumber && storeData.gstNumber.trim() && !storeData.gstPercentage) {
+      return 'Please enter GST percentage when GST number is provided';
+    }
+    if (storeData.gstPercentage && (isNaN(storeData.gstPercentage) || storeData.gstPercentage < 0 || storeData.gstPercentage > 100)) {
+      return 'GST percentage must be a number between 0 and 100';
     }
 
     // UPI ID validation
@@ -161,6 +183,10 @@ const StoreSetupScreen = ({ navigation }) => {
     if (currentStep < steps.length - 1) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setCurrentStep(currentStep + 1);
+      // Scroll to top when moving to next step
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }, 100);
     } else {
       handleComplete();
     }
@@ -170,6 +196,10 @@ const StoreSetupScreen = ({ navigation }) => {
     if (currentStep > 0) {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       setCurrentStep(currentStep - 1);
+      // Scroll to top when moving to previous step
+      setTimeout(() => {
+        scrollViewRef.current?.scrollTo({ y: 0, animated: true });
+      }, 100);
     }
   };
 
@@ -182,8 +212,12 @@ const StoreSetupScreen = ({ navigation }) => {
         phone: storeData.phone,
         email: storeData.email,
         address: storeData.address,
-        businessType: storeData.businessType,
+        businessType: storeData.businessType === 'Other' ? storeData.customBusinessType : storeData.businessType,
+        originalBusinessType: storeData.businessType,
+        customBusinessType: storeData.customBusinessType,
         gstNumber: storeData.gstNumber,
+        gstPercentage: storeData.gstPercentage,
+        hasGst: !!(storeData.gstNumber && storeData.gstNumber.trim()),
         upiId: storeData.upiId,
         upiId2: storeData.upiId2,
         upiId3: storeData.upiId3,
@@ -202,13 +236,13 @@ const StoreSetupScreen = ({ navigation }) => {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
       setAlertConfig({
-        title: 'Setup Complete!',
-        message: `Welcome to FlowPOS, ${storeData.ownerName}! Your store "${storeData.storeName}" is ready to go.`,
+        title: 'Setup Complete! 🎉',
+        message: `Welcome to FlowPOS, ${storeData.ownerName}! Your store "${storeData.storeName}" is ready to go. Next, let's add some products to get started.`,
         type: 'success',
         buttons: [{
-          text: 'Set Up Security',
+          text: 'Add Products',
           style: 'default',
-          onPress: () => navigation.navigate('PinSetup', { isFirstTime: true })
+          onPress: () => navigation.navigate('ProductOnboarding')
         }],
       });
       setShowAlert(true);
@@ -227,6 +261,11 @@ const StoreSetupScreen = ({ navigation }) => {
   const updateStoreData = (field, value) => {
     setStoreData(prev => ({ ...prev, [field]: value }));
   };
+
+  // Ensure scroll to top when step changes
+  React.useEffect(() => {
+    scrollViewRef.current?.scrollTo({ y: 0, animated: false });
+  }, [currentStep]);
 
   const renderStepContent = () => {
     const step = steps[currentStep];
@@ -270,7 +309,7 @@ const StoreSetupScreen = ({ navigation }) => {
             </View>
 
             <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email (Optional)</Text>
+              <Text style={styles.inputLabel}>Email Address *</Text>
               <TextInput
                 style={styles.textInput}
                 placeholder="Enter email address"
@@ -323,6 +362,53 @@ const StoreSetupScreen = ({ navigation }) => {
               </ScrollView>
             </View>
 
+            {storeData.businessType === 'Other' && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Specify Business Type *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter your business type"
+                  value={storeData.customBusinessType}
+                  onChangeText={(text) => updateStoreData('customBusinessType', text)}
+                  autoCapitalize="words"
+                />
+              </View>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Currency</Text>
+              <View style={styles.currencyGrid}>
+                {currencies.map((currency) => (
+                  <TouchableOpacity
+                    key={currency.code}
+                    style={[
+                      styles.currencyOption,
+                      storeData.currency === currency.code && styles.currencyOptionSelected
+                    ]}
+                    onPress={() => {
+                      updateStoreData('currency', currency.code);
+                      updateStoreData('currencySymbol', currency.symbol);
+                    }}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[
+                      styles.currencySymbol,
+                      storeData.currency === currency.code && styles.currencySymbolSelected
+                    ]}>
+                      {currency.symbol}
+                    </Text>
+                    <Text style={[
+                      styles.currencyCode,
+                      storeData.currency === currency.code && styles.currencyCodeSelected
+                    ]}>
+                      {currency.code}
+                    </Text>
+                    <Text style={styles.currencyName}>{currency.name}</Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            </View>
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>GST Number (Optional)</Text>
               <TextInput
@@ -334,12 +420,41 @@ const StoreSetupScreen = ({ navigation }) => {
                 maxLength={15}
               />
             </View>
+
+            {storeData.gstNumber && storeData.gstNumber.trim() && (
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>GST Percentage *</Text>
+                <TextInput
+                  style={styles.textInput}
+                  placeholder="Enter GST percentage (e.g., 18)"
+                  value={storeData.gstPercentage}
+                  onChangeText={(text) => updateStoreData('gstPercentage', text)}
+                  keyboardType="numeric"
+                  maxLength={5}
+                />
+                <Text style={styles.inputHint}>
+                  This percentage will be added to bills when GST is applicable
+                </Text>
+              </View>
+            )}
           </View>
         );
 
       case 2:
         return (
           <View style={styles.formContainer}>
+            {storeData.paymentMethods.includes('QR Pay') && (
+              <View style={styles.upiInfo}>
+                <Text style={styles.upiInfoTitle}>💡 UPI ID Tips</Text>
+                <Text style={styles.upiInfoText}>
+                  • Use different UPI apps for backup (Paytm, GPay, PhonePe){'\n'}
+                  • Ensure all UPI IDs are active and working{'\n'}
+                  • Customers can choose which UPI ID to pay to{'\n'}
+                  • QR codes will be generated automatically
+                </Text>
+              </View>
+            )}
+
             <View style={styles.inputGroup}>
               <Text style={styles.inputLabel}>Payment Methods</Text>
               <Text style={styles.inputHint}>
@@ -392,58 +507,48 @@ const StoreSetupScreen = ({ navigation }) => {
               <>
                 <View style={styles.inputGroup}>
                   <Text style={styles.inputLabel}>Primary UPI ID *</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="yourname@paytm"
-                value={storeData.upiId}
-                onChangeText={(text) => updateStoreData('upiId', text.toLowerCase())}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              <Text style={styles.inputHint}>
-                Enter your main UPI ID for receiving payments
-              </Text>
-            </View>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="yourname@paytm"
+                    value={storeData.upiId}
+                    onChangeText={(text) => updateStoreData('upiId', text.toLowerCase())}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <Text style={styles.inputHint}>
+                    Enter your main UPI ID for receiving payments
+                  </Text>
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Secondary UPI ID (Optional)</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="yourname@gpay"
-                value={storeData.upiId2}
-                onChangeText={(text) => updateStoreData('upiId2', text.toLowerCase())}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              <Text style={styles.inputHint}>
-                Backup UPI ID in case primary fails
-              </Text>
-            </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Secondary UPI ID (Optional)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="yourname@gpay"
+                    value={storeData.upiId2}
+                    onChangeText={(text) => updateStoreData('upiId2', text.toLowerCase())}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <Text style={styles.inputHint}>
+                    Backup UPI ID in case primary fails
+                  </Text>
+                </View>
 
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Third UPI ID (Optional)</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="yourname@phonepe"
-                value={storeData.upiId3}
-                onChangeText={(text) => updateStoreData('upiId3', text.toLowerCase())}
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
-              <Text style={styles.inputHint}>
-                Additional backup UPI ID for maximum reliability
-              </Text>
-            </View>
-
-            <View style={styles.upiInfo}>
-              <Text style={styles.upiInfoTitle}>💡 UPI ID Tips</Text>
-              <Text style={styles.upiInfoText}>
-                • Use different UPI apps for backup (Paytm, GPay, PhonePe)
-                • Ensure all UPI IDs are active and working
-                • Customers can choose which UPI ID to pay to
-                • QR codes will be generated automatically
-              </Text>
-            </View>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>Third UPI ID (Optional)</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="yourname@phonepe"
+                    value={storeData.upiId3}
+                    onChangeText={(text) => updateStoreData('upiId3', text.toLowerCase())}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <Text style={styles.inputHint}>
+                    Additional backup UPI ID for maximum reliability
+                  </Text>
+                </View>
               </>
             )}
           </View>
@@ -452,58 +557,66 @@ const StoreSetupScreen = ({ navigation }) => {
       case 3:
         return (
           <View style={styles.formContainer}>
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Currency</Text>
-              <View style={styles.currencyGrid}>
-                {currencies.map((currency) => (
-                  <TouchableOpacity
-                    key={currency.code}
-                    style={[
-                      styles.currencyOption,
-                      storeData.currency === currency.code && styles.currencyOptionSelected
-                    ]}
-                    onPress={() => {
-                      updateStoreData('currency', currency.code);
-                      updateStoreData('currencySymbol', currency.symbol);
-                    }}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={[
-                      styles.currencySymbol,
-                      storeData.currency === currency.code && styles.currencySymbolSelected
-                    ]}>
-                      {currency.symbol}
-                    </Text>
-                    <Text style={[
-                      styles.currencyCode,
-                      storeData.currency === currency.code && styles.currencyCodeSelected
-                    ]}>
-                      {currency.code}
-                    </Text>
-                    <Text style={styles.currencyName}>{currency.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
+            <View style={styles.overviewContainer}>
+              <Text style={styles.overviewTitle}>🎉 Setup Complete!</Text>
+              <Text style={styles.overviewSubtitle}>
+                Review your store configuration below. You can always change these settings later.
+              </Text>
             </View>
 
             <View style={styles.setupSummary}>
-              <Text style={styles.summaryTitle}>Setup Summary</Text>
+              <Text style={styles.summaryTitle}>Store Information</Text>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Store:</Text>
+                <Text style={styles.summaryLabel}>Store Name:</Text>
                 <Text style={styles.summaryValue}>{storeData.storeName}</Text>
               </View>
               <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Owner:</Text>
-                <Text style={styles.summaryValue}>{storeData.ownerName}</Text>
-              </View>
-              <View style={styles.summaryItem}>
-                <Text style={styles.summaryLabel}>Type:</Text>
-                <Text style={styles.summaryValue}>{storeData.businessType}</Text>
+                <Text style={styles.summaryLabel}>Business Type:</Text>
+                <Text style={styles.summaryValue}>
+                  {storeData.businessType === 'Other' ? storeData.customBusinessType : storeData.businessType}
+                </Text>
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>Currency:</Text>
                 <Text style={styles.summaryValue}>{storeData.currencySymbol} {storeData.currency}</Text>
               </View>
+              {storeData.gstNumber && (
+                <View style={styles.summaryItem}>
+                  <Text style={styles.summaryLabel}>GST:</Text>
+                  <Text style={styles.summaryValue}>{storeData.gstNumber} ({storeData.gstPercentage}%)</Text>
+                </View>
+              )}
+            </View>
+
+            <View style={styles.setupSummary}>
+              <Text style={styles.summaryTitle}>Payment Methods</Text>
+              <View style={styles.paymentMethodsSummary}>
+                {storeData.paymentMethods.map((method, index) => (
+                  <View key={method} style={styles.paymentMethodSummaryItem}>
+                    <Text style={styles.paymentMethodSummaryIcon}>
+                      {method === 'Cash' ? '💵' : method === 'Card' ? '💳' : '📲'}
+                    </Text>
+                    <Text style={styles.paymentMethodSummaryText}>{method}</Text>
+                  </View>
+                ))}
+              </View>
+              {storeData.paymentMethods.includes('QR Pay') && storeData.upiId && (
+                <View style={styles.upiSummary}>
+                  <Text style={styles.upiSummaryTitle}>UPI IDs:</Text>
+                  <Text style={styles.upiSummaryText}>• {storeData.upiId}</Text>
+                  {storeData.upiId2 && <Text style={styles.upiSummaryText}>• {storeData.upiId2}</Text>}
+                  {storeData.upiId3 && <Text style={styles.upiSummaryText}>• {storeData.upiId3}</Text>}
+                </View>
+              )}
+            </View>
+
+            <View style={styles.nextStepsContainer}>
+              <Text style={styles.nextStepsTitle}>What's Next?</Text>
+              <Text style={styles.nextStepsText}>
+                • Add your first products to start selling{'\n'}
+                • Set up optional PIN security{'\n'}
+                • Take a quick app tour to learn the features
+              </Text>
             </View>
           </View>
         );
@@ -543,7 +656,12 @@ const StoreSetupScreen = ({ navigation }) => {
         </View>
 
         {/* Content */}
-        <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
+        <ScrollView 
+          ref={scrollViewRef}
+          style={styles.scrollContainer} 
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.scrollContentContainer}
+        >
           <View style={styles.content}>
             {renderStepContent()}
           </View>
@@ -591,58 +709,61 @@ const StoreSetupScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   keyboardAvoid: {
     flex: 1,
   },
   header: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     paddingHorizontal: 24,
     paddingTop: 20,
     paddingBottom: 16,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   headerContent: {
     alignItems: 'center',
   },
   stepCounter: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontWeight: '500',
     marginBottom: 8,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   progressContainer: {
     paddingHorizontal: 24,
     paddingVertical: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
   },
   progressBar: {
     height: 4,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colors.gray[200],
     borderRadius: 2,
     overflow: 'hidden',
   },
   progressFill: {
     height: '100%',
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     borderRadius: 2,
   },
   scrollContainer: {
     flex: 1,
+  },
+  scrollContentContainer: {
+    flexGrow: 1,
   },
   content: {
     padding: 24,
@@ -656,18 +777,18 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   textInput: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.light,
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 14,
     fontSize: 16,
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   textArea: {
     height: 80,
@@ -675,81 +796,93 @@ const styles = StyleSheet.create({
   },
   businessTypeScroll: {
     marginTop: 8,
+    paddingVertical: 4,
   },
   businessTypeOption: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.light,
     borderRadius: 20,
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 10,
     marginRight: 8,
+    marginVertical: 2,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   businessTypeOptionSelected: {
-    backgroundColor: '#2563eb',
-    borderColor: '#2563eb',
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   businessTypeText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontWeight: '500',
+    textAlign: 'center',
   },
   businessTypeTextSelected: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   currencyGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    gap: 12,
+    justifyContent: 'space-between',
     marginTop: 8,
   },
   currencyOption: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.light,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    minWidth: '45%',
+    justifyContent: 'center',
+    width: '48%',
+    marginBottom: 12,
+    minHeight: 100,
   },
   currencyOptionSelected: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#2563eb',
+    backgroundColor: colors.primary.background,
+    borderColor: colors.primary.main,
   },
   currencySymbol: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 4,
+    textAlign: 'center',
   },
   currencySymbolSelected: {
-    color: '#2563eb',
+    color: colors.primary.main,
   },
   currencyCode: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.text.primary,
     marginBottom: 2,
+    textAlign: 'center',
   },
   currencyCodeSelected: {
-    color: '#2563eb',
+    color: colors.primary.main,
   },
   currencyName: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
+    textAlign: 'center',
+    lineHeight: 16,
   },
   setupSummary: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 20,
     marginTop: 20,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   summaryTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   summaryItem: {
@@ -760,12 +893,12 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   summaryValue: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   inputHint: {
     fontSize: 12,
@@ -774,22 +907,22 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
   },
   upiInfo: {
-    backgroundColor: '#eff6ff',
+    backgroundColor: colors.primary.background,
     borderRadius: 12,
     padding: 16,
     marginTop: 20,
     borderWidth: 1,
-    borderColor: '#bfdbfe',
+    borderColor: colors.primary.border,
   },
   upiInfoTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1e40af',
+    color: colors.primary.main,
     marginBottom: 8,
   },
   upiInfoText: {
     fontSize: 14,
-    color: '#1e40af',
+    color: colors.primary.main,
     lineHeight: 20,
   },
   paymentMethodsGrid: {
@@ -799,9 +932,9 @@ const styles = StyleSheet.create({
     marginTop: 12,
   },
   paymentMethodOption: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderWidth: 2,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
@@ -809,8 +942,8 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   paymentMethodOptionSelected: {
-    borderColor: '#2563eb',
-    backgroundColor: '#eff6ff',
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.background,
   },
   paymentMethodIcon: {
     fontSize: 24,
@@ -819,19 +952,19 @@ const styles = StyleSheet.create({
   paymentMethodText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
   },
   paymentMethodTextSelected: {
-    color: '#2563eb',
+    color: colors.primary.main,
     fontWeight: '600',
   },
   navigation: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     paddingHorizontal: 24,
     paddingVertical: 16,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: colors.border.light,
   },
   navigationButtons: {
     flexDirection: 'row',
@@ -839,7 +972,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -847,11 +980,11 @@ const styles = StyleSheet.create({
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   nextButton: {
     flex: 2,
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
@@ -862,7 +995,85 @@ const styles = StyleSheet.create({
   nextButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
+  },
+  overviewContainer: {
+    alignItems: 'center',
+    marginBottom: 24,
+  },
+  overviewTitle: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text.primary,
+    marginBottom: 8,
+    textAlign: 'center',
+  },
+  overviewSubtitle: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 22,
+  },
+  paymentMethodsSummary: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+  },
+  paymentMethodSummaryItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#f3f4f6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+  },
+  paymentMethodSummaryIcon: {
+    fontSize: 16,
+    marginRight: 6,
+  },
+  paymentMethodSummaryText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#374151',
+  },
+  upiSummary: {
+    marginTop: 12,
+    padding: 12,
+    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  upiSummaryTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: 4,
+  },
+  upiSummaryText: {
+    fontSize: 13,
+    color: '#6b7280',
+    marginBottom: 2,
+  },
+  nextStepsContainer: {
+    backgroundColor: colors.success.background,
+    borderRadius: 12,
+    padding: 16,
+    marginTop: 20,
+    borderWidth: 1,
+    borderColor: colors.success.border,
+  },
+  nextStepsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.success.main,
+    marginBottom: 8,
+  },
+  nextStepsText: {
+    fontSize: 14,
+    color: colors.success.main,
+    lineHeight: 20,
   },
 });
 

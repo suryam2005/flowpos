@@ -14,6 +14,9 @@ import * as Haptics from 'expo-haptics';
 import { fadeIn } from '../utils/animations';
 import { PageLoader } from '../components/LoadingSpinner';
 import { usePageLoading } from '../hooks/usePageLoading';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
+import { colors } from '../styles/colors';
 
 const OrdersScreen = ({ navigation }) => {
   const [orders, setOrders] = useState([]);
@@ -21,6 +24,9 @@ const OrdersScreen = ({ navigation }) => {
 
   // Page loading state
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 800);
+  
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('Orders');
 
   useEffect(() => {
     loadOrders();
@@ -221,17 +227,24 @@ const OrdersScreen = ({ navigation }) => {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor="#8b5cf6"
-                  colors={['#8b5cf6']}
-                  progressBackgroundColor="#ffffff"
+                  tintColor={colors.primary.main}
+                  colors={[colors.primary.main]}
+                  progressBackgroundColor={colors.background.surface}
                   title="Pull to refresh orders..."
-                  titleColor="#6b7280"
+                  titleColor={colors.text.secondary}
                 />
               }
             />
           )}
         </View>
       </View>
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        currentScreen="Orders"
+        onComplete={completeTour}
+      />
     </SafeAreaView>
   );
 };
@@ -239,7 +252,7 @@ const OrdersScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -250,22 +263,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    paddingTop: 60, // Proper space for status bar like YouTube app
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   ordersList: {
     padding: 20,
     paddingBottom: 140, // Reduced spacing
   },
   orderCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -275,7 +287,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: colors.gray[100],
     overflow: 'hidden', // Prevent content overflow
   },
   orderHeader: {
@@ -287,15 +299,15 @@ const styles = StyleSheet.create({
   orderId: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 2,
   },
   orderDate: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   statusBadge: {
-    backgroundColor: '#d1fae5',
+    backgroundColor: colors.success.background,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -310,12 +322,12 @@ const styles = StyleSheet.create({
   },
   itemText: {
     fontSize: 14,
-    color: '#374151',
+    color: colors.text.primary,
     marginBottom: 2,
   },
   moreItems: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontStyle: 'italic',
   },
   orderFooter: {
@@ -324,40 +336,40 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
+    borderTopColor: colors.gray[100],
   },
   orderInfo: {
     flex: 1,
   },
   paymentMethod: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 2,
   },
   orderTotal: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   invoiceActions: {
     flexDirection: 'row',
     gap: 8,
   },
   invoiceButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   invoiceButtonText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#374151',
+    color: colors.text.primary,
   },
   sendButton: {
-    backgroundColor: '#10b981',
+    backgroundColor: colors.success.main,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 6,
@@ -365,7 +377,7 @@ const styles = StyleSheet.create({
   sendButtonText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   emptyState: {
     flex: 1,
@@ -380,12 +392,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },

@@ -8,6 +8,8 @@ import {
   Alert,
   RefreshControl,
   Image,
+  Dimensions,
+  TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import * as Haptics from 'expo-haptics';
@@ -17,14 +19,21 @@ import { webScrollFix, webContainerFix, webScrollableContainer } from '../styles
 import { useRealtimeProducts, useRealtimeStoreInfo } from '../hooks/useRealtimeData';
 import ResponsiveText from '../components/ResponsiveText';
 import featureService from '../services/FeatureService';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
+import { colors } from '../styles/colors';
 
 
 
-const POSScreen = ({ navigation }) => {
+const POSScreen = ({ navigation, route }) => {
   const [selectedTag, setSelectedTag] = useState('All Items');
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
+  const [searchQuery, setSearchQuery] = useState('');
+  const [showSearch, setShowSearch] = useState(false);
   const { items, addItem, removeItem, clearCart, getItemCount, getTotal } = useCart();
+  
+  // Responsive layout - no fixed calculations, use flex instead
   
   // Real-time data hooks
   const { data: products, refresh: refreshProducts } = useRealtimeProducts();
@@ -37,6 +46,22 @@ const POSScreen = ({ navigation }) => {
   useEffect(() => {
     featureService.initialize();
   }, []);
+
+  // App tour guide
+  const { showTour, completeTour, startTour } = useAppTour('POS');
+
+  // Handle tour trigger from route params
+  useEffect(() => {
+    if (route?.params?.startTour) {
+      // Small delay to ensure screen is fully loaded
+      setTimeout(() => {
+        startTour();
+      }, 1000);
+      
+      // Clear the param to prevent re-triggering
+      navigation.setParams({ startTour: undefined });
+    }
+  }, [route?.params?.startTour, startTour, navigation]);
 
   // Generate available tags from products
   const availableTags = React.useMemo(() => {
@@ -56,11 +81,25 @@ const POSScreen = ({ navigation }) => {
     refreshProducts();
   };
 
-  const filteredProducts = selectedTag === 'All Items' 
-    ? products 
-    : products.filter(product => 
-        product.tags && product.tags.includes(selectedTag)
+  const filteredProducts = React.useMemo(() => {
+    let filtered = selectedTag === 'All Items' 
+      ? products 
+      : products.filter(product => 
+          product.tags && product.tags.includes(selectedTag)
+        );
+    
+    // Apply search filter
+    if (searchQuery.trim()) {
+      filtered = filtered.filter(product =>
+        product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (product.tags && product.tags.some(tag => 
+          tag.toLowerCase().includes(searchQuery.toLowerCase())
+        ))
       );
+    }
+    
+    return filtered;
+  }, [products, selectedTag, searchQuery]);
 
   const handleAddToCart = (product) => {
     // Only check stock if tracking is enabled
@@ -120,6 +159,7 @@ const POSScreen = ({ navigation }) => {
         onLongPress={() => handleLongPress(item)}
         activeOpacity={0.8}
       >
+        {/* Image Section - 60% of card */}
         <View style={styles.productImage}>
           {item.image ? (
             <Image source={{ uri: item.image }} style={styles.productImageStyle} />
@@ -129,25 +169,29 @@ const POSScreen = ({ navigation }) => {
             </View>
           )}
         </View>
-        <ResponsiveText 
-          variant="body" 
-          style={styles.productName}
-          numberOfLines={2}
-          ellipsizeMode="tail"
-        >
-          {item.name}
-        </ResponsiveText>
-        <ResponsiveText variant="price" style={styles.productPrice}>
-          ₹{item.price}
-        </ResponsiveText>
-        {item.trackStock && (
-          <View style={styles.stockContainer}>
-            <ResponsiveText variant="small" style={styles.productStock}>
-              {item.stock} available
-            </ResponsiveText>
-          </View>
-        )}
         
+        {/* Content Section - 40% of card */}
+        <View style={styles.productContent}>
+          <Text 
+            style={styles.productName}
+            numberOfLines={2}
+            ellipsizeMode="tail"
+          >
+            {item.name}
+          </Text>
+          <Text style={styles.productPrice}>
+            ₹{item.price}
+          </Text>
+          {item.trackStock && (
+            <View style={styles.stockContainer}>
+              <Text style={styles.productStock}>
+                {item.stock} available
+              </Text>
+            </View>
+          )}
+        </View>
+        
+        {/* Badges */}
         {item.trackStock && item.stock <= 5 && (
           <View style={styles.lowStockBadge}>
             <Text style={styles.lowStockText}>Low Stock</Text>
@@ -179,7 +223,7 @@ const POSScreen = ({ navigation }) => {
         ]}
         numberOfLines={1}
       >
-        {item}
+        {item.toUpperCase()}
       </ResponsiveText>
     </TouchableOpacity>
   );
@@ -215,15 +259,45 @@ const POSScreen = ({ navigation }) => {
         </View>
 
       <View style={styles.categorySection}>
-        <FlatList
-          data={availableTags}
-          renderItem={renderTag}
-          keyExtractor={(item) => item}
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.categoryContainer}
-          style={webScrollFix}
-        />
+        {showSearch ? (
+          <View style={styles.searchContainer}>
+            <TextInput
+              style={styles.searchInput}
+              placeholder="Search products..."
+              placeholderTextColor={colors.text.tertiary}
+              value={searchQuery}
+              onChangeText={setSearchQuery}
+              autoFocus
+            />
+            <TouchableOpacity
+              style={styles.searchCloseButton}
+              onPress={() => {
+                setShowSearch(false);
+                setSearchQuery('');
+              }}
+            >
+              <Text style={styles.searchCloseText}>✕</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <View style={styles.categoryRow}>
+            <TouchableOpacity
+              style={styles.searchButton}
+              onPress={() => setShowSearch(true)}
+            >
+              <Text style={styles.searchButtonText}>🔍</Text>
+            </TouchableOpacity>
+            <FlatList
+              data={availableTags}
+              renderItem={renderTag}
+              keyExtractor={(item) => item}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.categoryContainer}
+              style={[webScrollFix, { flex: 1 }]}
+            />
+          </View>
+        )}
       </View>
 
       <View style={[{ flex: 1 }, webScrollableContainer]}>
@@ -238,15 +312,16 @@ const POSScreen = ({ navigation }) => {
             contentContainerStyle={styles.productGrid}
             showsVerticalScrollIndicator={false}
             style={[styles.productList, webScrollFix]}
+            columnWrapperStyle={styles.productRow}
             refreshControl={
               <RefreshControl
                 refreshing={false}
                 onRefresh={onRefresh}
-                tintColor="#8b5cf6"
-                colors={['#8b5cf6']}
-                progressBackgroundColor="#ffffff"
+                tintColor={colors.primary.main}
+                colors={[colors.primary.main]}
+                progressBackgroundColor={colors.background.surface}
                 title="Pull to refresh products..."
-                titleColor="#6b7280"
+                titleColor={colors.text.secondary}
               />
             }
           />
@@ -295,6 +370,13 @@ const POSScreen = ({ navigation }) => {
         buttons={alertConfig.buttons}
         onClose={() => setShowAlert(false)}
       />
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        currentScreen="POS"
+        onComplete={completeTour}
+      />
       </View>
     </SafeAreaView>
   );
@@ -303,7 +385,7 @@ const POSScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -314,13 +396,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    paddingTop: 60, // Proper space for status bar like YouTube app
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   title: {
-    color: '#1f2937',
+    color: colors.text.primary,
     flexShrink: 1,
     flexWrap: 'wrap',
   },
@@ -329,17 +410,63 @@ const styles = StyleSheet.create({
   },
   settingsIcon: {
     fontSize: 22,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   categorySection: {
     height: 68, // Fixed height
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
-  categoryContainer: {
+  categoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingLeft: 20,
+    paddingVertical: 16,
+    height: 68,
+  },
+  searchButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginRight: 12,
+  },
+  searchButtonText: {
+    fontSize: 16,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+  },
+  searchInput: {
+    flex: 1,
+    height: 36,
+    backgroundColor: colors.gray[100],
+    borderRadius: 18,
+    paddingHorizontal: 16,
+    fontSize: 14,
+    color: colors.text.primary,
+  },
+  searchCloseButton: {
+    width: 36,
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: colors.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: 12,
+  },
+  searchCloseText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  categoryContainer: {
+    paddingRight: 20,
     alignItems: 'center',
   },
   productList: {
@@ -350,87 +477,117 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginRight: 8,
     borderRadius: 16,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     minWidth: 80,
     alignItems: 'center',
   },
   categoryButtonActive: {
-    backgroundColor: '#1f2937',
+    backgroundColor: colors.primary.main,
   },
   categoryText: {
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     flexWrap: 'wrap',
     flexShrink: 1,
   },
   categoryTextActive: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   productGrid: {
-    padding: 20,
+    padding: 16,
     paddingBottom: 180, // Extra padding for cart summary + nav bar + spacing
   },
+  productRow: {
+    justifyContent: 'space-between',
+    paddingHorizontal: 0,
+  },
   productCard: {
-    flex: 1,
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    backgroundColor: colors.background.surface,
+    borderRadius: 12,
     padding: 16,
-    margin: 6,
+    marginVertical: 4,
     alignItems: 'center',
-    shadowColor: '#000',
+    shadowColor: colors.shadow.md,
     shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.1,
+    shadowOpacity: 1,
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: colors.border.light,
     position: 'relative',
+    minHeight: 200,
+    justifyContent: 'flex-start',
+    // Responsive 2-column layout
+    flex: 1,
+    maxWidth: '48%', // Ensures 2 columns with some gap
   },
   productImage: {
-    width: 60,
-    height: 60,
-    borderRadius: 12,
+    width: '100%',
+    height: 100, // Fixed height for consistency
+    borderRadius: 8,
     marginBottom: 12,
     overflow: 'hidden',
+    backgroundColor: colors.background.surface,
+    shadowColor: colors.shadow.sm,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.5,
+    shadowRadius: 2,
+    elevation: 2,
+    borderWidth: 1,
+    borderColor: colors.border.light,
   },
   productImageStyle: {
     width: '100%',
     height: '100%',
+    resizeMode: 'cover', // Crop image to fit space properly
   },
   productImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 12,
   },
   productImagePlaceholderText: {
-    fontSize: 28,
+    fontSize: 48, // Larger icon for bigger image area
+  },
+  productContent: {
+    width: '100%',
+    alignItems: 'center',
+    justifyContent: 'flex-start',
+    paddingHorizontal: 8,
+    paddingTop: 4,
+    paddingBottom: 8,
   },
   productName: {
-    color: '#1f2937',
+    fontSize: 14,
+    color: colors.text.primary,
     textAlign: 'center',
-    marginBottom: 4,
-    minHeight: 44, // Ensure consistent height for 2 lines
+    marginBottom: 8,
     flexWrap: 'wrap',
     flexShrink: 1,
+    lineHeight: 18,
+    fontWeight: '600',
+    width: '100%',
   },
   productPrice: {
-    color: '#1f2937',
+    fontSize: 16,
+    color: colors.primary.main,
     marginBottom: 4,
     textAlign: 'center',
+    fontWeight: '700',
   },
   stockContainer: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
     marginTop: 4,
   },
   productStock: {
-    fontSize: 12,
-    color: '#6b7280',
+    fontSize: 13,
+    color: colors.text.secondary,
     fontWeight: '500',
     textAlign: 'center',
   },
@@ -438,7 +595,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    backgroundColor: '#fef3c7',
+    backgroundColor: colors.warning.background,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
@@ -450,12 +607,12 @@ const styles = StyleSheet.create({
   },
   quantityBadge: {
     position: 'absolute',
-    top: 8,
-    right: 8,
-    backgroundColor: '#ef4444',
-    width: 24,
-    height: 24,
-    borderRadius: 12,
+    top: 16, // More space from top
+    right: 16, // More space from right edge
+    backgroundColor: colors.error.main,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     justifyContent: 'center',
     alignItems: 'center',
     shadowColor: '#000',
@@ -466,7 +623,7 @@ const styles = StyleSheet.create({
   },
   quantityText: {
     fontSize: 12,
-    color: '#ffffff',
+    color: colors.background.surface,
     fontWeight: '700',
   },
   cartSummary: {
@@ -481,7 +638,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   cartSummaryContent: {
-    backgroundColor: '#1f2937',
+    backgroundColor: colors.gray[800],
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -493,11 +650,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cartItems: {
-    color: '#9ca3af',
+    color: colors.gray[400],
     marginBottom: 2,
   },
   cartTotal: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   cartActions: {
     flexDirection: 'row',
@@ -505,26 +662,26 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   clearCartButton: {
-    backgroundColor: '#fee2e2',
+    backgroundColor: colors.error.background,
     width: 36,
     height: 36,
     borderRadius: 18,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#fecaca',
+    borderColor: colors.error.border,
   },
   clearCartText: {
     fontSize: 16,
   },
   cartButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
   },
   cartButtonText: {
-    color: '#1f2937',
+    color: colors.text.primary,
     textAlign: 'center',
   },
   emptyState: {
@@ -539,29 +696,29 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   emptyTitle: {
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyText: {
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     marginBottom: 32,
     paddingHorizontal: 20,
   },
   addProductButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#2563eb',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
   addProductButtonText: {
-    color: '#ffffff',
+    color: colors.background.surface,
     textAlign: 'center',
   },
 });

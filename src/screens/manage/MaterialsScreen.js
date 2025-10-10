@@ -12,6 +12,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
+import { colors } from '../../styles/colors';
 
 const MaterialsScreen = () => {
   const [materials, setMaterials] = useState([]);
@@ -166,9 +167,9 @@ const MaterialsScreen = () => {
   };
 
   const getStockStatus = (current, min) => {
-    if (current === 0) return { text: 'Out of Stock', color: '#ef4444', bg: '#fee2e2' };
+    if (current === 0) return { text: 'Out of Stock', color: colors.error.main, bg: '#fee2e2' };
     if (current <= min) return { text: 'Low Stock', color: '#f59e0b', bg: '#fef3c7' };
-    return { text: 'In Stock', color: '#10b981', bg: '#d1fae5' };
+    return { text: 'In Stock', color: colors.success.main, bg: '#d1fae5' };
   };
 
   const renderMaterial = ({ item }) => {
@@ -455,13 +456,13 @@ const MaterialsScreen = () => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   tabBar: {
     flexDirection: 'row',
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   tabButton: {
     flex: 1,
@@ -474,7 +475,7 @@ const styles = StyleSheet.create({
   },
   tabButtonText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   tabButtonTextActive: {
     color: '#8b5cf6',
@@ -487,7 +488,7 @@ const styles = StyleSheet.create({
     padding: 20,
   },
   itemCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 12,
@@ -506,7 +507,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     flex: 1,
   },
   statusBadge: {
@@ -523,12 +524,12 @@ const styles = StyleSheet.create({
   },
   itemCategory: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
     marginBottom: 4,
   },
   itemInfo: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 2,
   },
   itemActions: {
@@ -537,7 +538,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -545,7 +546,7 @@ const styles = StyleSheet.create({
   actionButtonText: {
     fontSize: 12,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   emptyState: {
     flex: 1,
@@ -560,12 +561,12 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   emptyText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
   },
@@ -586,7 +587,7 @@ const styles = StyleSheet.create({
   addButtonText: {
     fontSize: 14,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   modalOverlay: {
     flex: 1,
@@ -595,7 +596,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 24,
     width: '90%',
@@ -610,14 +611,14 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   closeButton: {
     padding: 8,
   },
   closeButtonText: {
     fontSize: 18,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   modalInput: {
     borderWidth: 1,
@@ -643,11 +644,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
     borderRadius: 8,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
   },
   cancelButtonText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   saveButton: {
     flex: 1,
@@ -660,7 +661,7 @@ const styles = StyleSheet.create({
   saveButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 });
 

@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
+import { colors } from '../styles/colors';
 
 const OrderDetailsScreen = ({ navigation, route }) => {
   const { order } = route.params;
@@ -126,7 +127,7 @@ const OrderDetailsScreen = ({ navigation, route }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
     paddingTop: 60, // Proper space for status bar like YouTube app
   },
   scrollContainer: {
@@ -134,7 +135,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
   },
   receiptCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 24,
     marginBottom: 50,
@@ -153,27 +154,27 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#d1fae5',
+    backgroundColor: colors.success.background,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 16,
   },
   checkmark: {
     fontSize: 28,
-    color: '#10b981',
+    color: colors.success.main,
     fontWeight: 'bold',
   },
   orderStatus: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 8,
   },
   orderId: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
-    backgroundColor: '#f3f4f6',
+    color: colors.text.primary,
+    backgroundColor: colors.gray[100],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -184,7 +185,7 @@ const styles = StyleSheet.create({
   },
   infoText: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 4,
   },
   itemsSection: {
@@ -193,7 +194,7 @@ const styles = StyleSheet.create({
   itemsTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginHorizontal: 20,
     marginBottom: 12,
   },
@@ -202,13 +203,13 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: colors.gray[100],
   },
   itemEmoji: {
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -222,17 +223,17 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 2,
   },
   itemPrice: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   itemTotal: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   summarySection: {
     paddingTop: 16,
@@ -245,27 +246,27 @@ const styles = StyleSheet.create({
   },
   summaryLabel: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   summaryValue: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   divider: {
     height: 1,
-    backgroundColor: '#e5e7eb',
+    backgroundColor: colors.border.light,
     marginVertical: 8,
   },
   totalLabel: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   totalValue: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#10b981',
+    color: colors.success.main,
   },
   footer: {
     alignItems: 'center',
@@ -275,12 +276,12 @@ const styles = StyleSheet.create({
   thankYou: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   tagline: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   actionButtons: {
     flexDirection: 'row',
@@ -288,25 +289,25 @@ const styles = StyleSheet.create({
   },
   backButton: {
     flex: 1,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
+    borderColor: colors.border.light,
   },
   backButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   newOrderButton: {
     flex: 1,
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',
-    shadowColor: '#2563eb',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -315,7 +316,7 @@ const styles = StyleSheet.create({
   newOrderButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
 });
 

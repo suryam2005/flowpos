@@ -27,6 +27,8 @@ import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
 import StoreSetupScreen from './src/screens/onboarding/StoreSetupScreen';
+import ProductOnboardingScreen from './src/screens/onboarding/ProductOnboardingScreen';
+import WhatsAppSetupScreen from './src/screens/WhatsAppSetupScreen';
 import InvoiceScreen from './src/screens/InvoiceScreen';
 import { CartProvider } from './src/context/CartContext';
 import { AuthProvider } from './src/context/AuthContext';
@@ -100,10 +102,12 @@ export default function App() {
       // First, check if we need to clear old dummy data
       await clearOldDummyData();
       
-      const [hasCompletedOnboarding, storeSetupCompleted, pinSetupCompleted] = await Promise.all([
+      const [hasCompletedOnboarding, storeSetupCompleted, productsOnboardingCompleted, pinSetupCompleted, pinSetupSkipped] = await Promise.all([
         AsyncStorage.getItem('hasCompletedOnboarding'),
         AsyncStorage.getItem('storeSetupCompleted'),
-        getItemAsync('pinSetupCompleted')
+        AsyncStorage.getItem('productsOnboardingCompleted'),
+        getItemAsync('pinSetupCompleted'),
+        getItemAsync('pinSetupSkipped')
       ]);
       
       if (!hasCompletedOnboarding) {
@@ -112,12 +116,18 @@ export default function App() {
       } else if (!storeSetupCompleted) {
         // Onboarding done but store setup not completed
         setAppState('setup');
-      } else if (!pinSetupCompleted) {
-        // Store setup done but PIN not set up
+      } else if (!productsOnboardingCompleted) {
+        // Store setup done but products not added
+        setAppState('productOnboarding');
+      } else if (!pinSetupCompleted && !pinSetupSkipped) {
+        // Products added but PIN not set up and not skipped
         setAppState('pinSetup');
-      } else {
-        // Everything set up - require PIN authentication
+      } else if (pinSetupCompleted) {
+        // PIN is set up - require authentication
         setAppState('pinAuth');
+      } else {
+        // PIN was skipped or not needed - go directly to main
+        setAppState('main');
       }
     } catch (error) {
       console.error('Error checking app state:', error);
@@ -148,6 +158,7 @@ export default function App() {
     switch (appState) {
       case 'welcome': return 'Welcome';
       case 'setup': return 'StoreSetup';
+      case 'productOnboarding': return 'ProductOnboarding';
       case 'pinSetup': return 'PinSetup';
       case 'pinAuth': return 'PinAuth';
       case 'main': return 'Main';
@@ -167,6 +178,7 @@ export default function App() {
             >
               <Stack.Screen name="Welcome" component={WelcomeScreen} />
               <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
+              <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
               <Stack.Screen name="PinSetup" component={PinSetupScreen} />
               <Stack.Screen name="PinAuth" component={PinAuthScreen} />
               <Stack.Screen name="Main" component={MainTabs} />
@@ -177,6 +189,7 @@ export default function App() {
               <Stack.Screen name="Invoice" component={InvoiceScreen} />
               <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
               <Stack.Screen name="Subscription" component={SubscriptionScreen} />
             </Stack.Navigator>
           </NavigationContainer>

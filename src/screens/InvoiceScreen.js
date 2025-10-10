@@ -8,21 +8,28 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import SimpleInvoicePreview from '../components/SimpleInvoicePreview';
 import { generateInvoiceNumber } from '../utils/invoiceGenerator';
+import { colors } from '../styles/colors';
 
 const InvoiceScreen = ({ route, navigation }) => {
   const [invoiceData, setInvoiceData] = useState(null);
-  const { orderData } = route.params || {};
+  const { orderData, autoRedirect = false, autoRedirectToHome = false } = route.params || {};
 
   useEffect(() => {
     console.log('InvoiceScreen received orderData:', orderData);
     if (orderData) {
       generateInvoiceData();
       
-      // Auto-redirect to POS after 10 seconds if this is a new order (not from orders history)
-      if (orderData.timestamp && isRecentOrder(orderData.timestamp)) {
+      // Auto-redirect after 5 seconds only if explicitly requested (new orders)
+      if (autoRedirect) {
         const timer = setTimeout(() => {
           navigation.navigate('Main', { screen: 'POS' });
-        }, 10000);
+        }, 5000);
+        
+        return () => clearTimeout(timer);
+      } else if (autoRedirectToHome) {
+        const timer = setTimeout(() => {
+          navigation.navigate('TabletHome');
+        }, 5000);
         
         return () => clearTimeout(timer);
       }
@@ -53,14 +60,31 @@ const InvoiceScreen = ({ route, navigation }) => {
         throw new Error('Invalid order data');
       }
 
+      // Load GST settings to determine if tax should be applied
+      const storeSetupData = await AsyncStorage.getItem('storeInfo');
+      const storeSetup = storeSetupData ? JSON.parse(storeSetupData) : {};
+      const hasGSTNumber = storeSetup.gstNumber && storeSetup.gstNumber.trim() !== '';
+      
       // Use existing totals from order or calculate if not available
       const subtotal = orderData.subtotal || orderData.items.reduce((sum, item) => {
         const price = parseFloat(item.price) || 0;
         const quantity = parseInt(item.quantity) || 0;
         return sum + (price * quantity);
       }, 0);
-      const tax = orderData.gst || orderData.tax || (subtotal * 0.18);
+      
+      // Only include tax if GST is enabled and order has tax
+      const tax = hasGSTNumber ? (orderData.gst || orderData.tax || 0) : 0;
+      const gstPercentage = storeSetup.gstPercentage || 18;
       const grandTotal = orderData.total || orderData.grandTotal || (subtotal + tax);
+
+      console.log('Tax calculation debug:', {
+        hasGSTNumber,
+        orderDataGst: orderData.gst,
+        orderDataTax: orderData.tax,
+        calculatedTax: tax,
+        subtotal,
+        grandTotal
+      });
 
       const invoice = {
         // Store details with fallbacks
@@ -92,7 +116,7 @@ const InvoiceScreen = ({ route, navigation }) => {
           total: item.price * item.quantity
         })),
         subtotal,
-        tax,
+        ...(tax > 0 && { tax, gst: tax, gstPercentage }), // Only include tax fields if tax > 0
         grandTotal,
       };
 
@@ -142,7 +166,7 @@ const InvoiceScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   loadingContainer: {
     flex: 1,
@@ -152,7 +176,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
   },
 });

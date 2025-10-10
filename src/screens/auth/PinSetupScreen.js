@@ -169,6 +169,35 @@ const PinSetupScreen = ({ navigation, route }) => {
     }
   };
 
+  const handleSkipPin = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+    
+    setAlertConfig({
+      title: 'Skip PIN Setup?',
+      message: 'You can set up a PIN later in Settings for added security. Are you sure you want to skip this step?',
+      type: 'warning',
+      buttons: [
+        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Skip', 
+          style: 'default',
+          onPress: async () => {
+            try {
+              // Mark PIN setup as skipped (not completed)
+              await setItemAsync('pinSetupSkipped', 'true');
+              Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+              safeReplace(navigation, 'Main');
+            } catch (error) {
+              console.error('Error skipping PIN setup:', error);
+              safeReplace(navigation, 'Main');
+            }
+          }
+        }
+      ],
+    });
+    setShowAlert(true);
+  };
+
   const renderPinDots = (currentPin) => (
     <View style={styles.pinDotsContainer}>
       {Array.from({ length: pinLength }, (_, index) => (
@@ -348,6 +377,22 @@ const PinSetupScreen = ({ navigation, route }) => {
         </TouchableOpacity>
       </View>
 
+      {/* Skip PIN option for first-time setup */}
+      {isFirstTime && !isChangingPin && (
+        <View style={styles.skipContainer}>
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={handleSkipPin}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.skipButtonText}>Skip PIN Setup</Text>
+          </TouchableOpacity>
+          <Text style={styles.skipDescription}>
+            You can set up a PIN later in Settings for added security
+          </Text>
+        </View>
+      )}
+
       <CustomAlert
         visible={showAlert}
         title={alertConfig.title}
@@ -412,17 +457,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    paddingHorizontal: 40,
-    marginBottom: 20,
+    paddingHorizontal: 30,
+    marginBottom: 15,
   },
   numberButton: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
+    width: 65,
+    height: 65,
+    borderRadius: 32.5,
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
-    margin: 8,
+    margin: 6,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
@@ -430,18 +475,19 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   numberButtonText: {
-    fontSize: 24,
+    fontSize: 20,
     fontWeight: '600',
     color: '#1f2937',
   },
   backspaceText: {
-    fontSize: 24,
+    fontSize: 20,
     color: '#6b7280',
   },
   actionContainer: {
     flexDirection: 'row',
     paddingHorizontal: 24,
     gap: 12,
+    marginBottom: 10,
   },
   backButton: {
     flex: 1,
@@ -514,6 +560,33 @@ const styles = StyleSheet.create({
   },
   pinLengthOptionTextSelected: {
     color: '#2563eb',
+  },
+  skipContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingTop: 10,
+    paddingBottom: 20,
+    marginTop: 10,
+  },
+  skipButton: {
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderRadius: 8,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: '#d1d5db',
+  },
+  skipButtonText: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: '#6b7280',
+  },
+  skipDescription: {
+    fontSize: 14,
+    color: '#9ca3af',
+    textAlign: 'center',
+    marginTop: 8,
+    lineHeight: 20,
   },
 });
 

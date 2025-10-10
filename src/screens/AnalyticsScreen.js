@@ -6,6 +6,7 @@ import {
   ScrollView,
   RefreshControl,
   Dimensions,
+  Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -14,6 +15,9 @@ import * as Haptics from 'expo-haptics';
 import { typography, createTextStyle, spacing, screenDimensions } from '../utils/typography';
 import { PageLoader } from '../components/LoadingSpinner';
 import { usePageLoading } from '../hooks/usePageLoading';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
+import { colors } from '../styles/colors';
 
 const AnalyticsScreen = ({ navigation }) => {
   const [analytics, setAnalytics] = useState({
@@ -29,6 +33,9 @@ const AnalyticsScreen = ({ navigation }) => {
   
   // Page loading state
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1200);
+  
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('Analytics');
   
   // No animations needed
 
@@ -112,7 +119,7 @@ const AnalyticsScreen = ({ navigation }) => {
     loadAnalytics(true);
   };
 
-  const StatCard = ({ title, value, subtitle, color = '#1f2937', index }) => (
+  const StatCard = ({ title, value, subtitle, color = colors.text.primary, index }) => (
     <View style={styles.statCard}>
       <Text style={styles.statTitle}>{title}</Text>
       <Text style={[styles.statValue, { color }]}>{value}</Text>
@@ -125,12 +132,22 @@ const AnalyticsScreen = ({ navigation }) => {
       <View style={styles.productRank}>
         <Text style={styles.rankText}>{index + 1}</Text>
       </View>
-      <View style={styles.productEmoji}>
-        <Text style={styles.emojiText}>{product.emoji}</Text>
+      <View style={styles.productImage}>
+        {product.image ? (
+          <Image source={{ uri: product.image }} style={styles.productImageStyle} />
+        ) : (
+          <View style={styles.productImagePlaceholder}>
+            <Text style={styles.productImagePlaceholderText}>📦</Text>
+          </View>
+        )}
       </View>
       <View style={styles.productInfo}>
-        <Text style={styles.productName}>{product.name}</Text>
-        <Text style={styles.productCategory}>{product.category}</Text>
+        <Text style={styles.productName} numberOfLines={1} ellipsizeMode="tail">
+          {product.name}
+        </Text>
+        <Text style={styles.productCategory} numberOfLines={1}>
+          {product.category || 'General'}
+        </Text>
       </View>
       <View style={styles.productStats}>
         <Text style={styles.productPrice}>₹{product.price}</Text>
@@ -156,11 +173,11 @@ const AnalyticsScreen = ({ navigation }) => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#8b5cf6"
-              colors={['#8b5cf6']}
-              progressBackgroundColor="#ffffff"
+              tintColor={colors.primary.main}
+              colors={[colors.primary.main]}
+              progressBackgroundColor={colors.background.surface}
               title="Pull to refresh analytics..."
-              titleColor="#6b7280"
+              titleColor={colors.text.secondary}
             />
           }
         >
@@ -169,7 +186,7 @@ const AnalyticsScreen = ({ navigation }) => {
             title="Total Revenue"
             value={`₹${analytics.totalRevenue || 0}`}
             subtitle="All time"
-            color="#2563eb"
+            color={colors.primary.main}
             index={0}
           />
 
@@ -177,7 +194,7 @@ const AnalyticsScreen = ({ navigation }) => {
             title="Total Orders"
             value={analytics.totalOrders || 0}
             subtitle="Completed"
-            color="#10b981"
+            color={colors.success.main}
             index={1}
           />
 
@@ -185,7 +202,7 @@ const AnalyticsScreen = ({ navigation }) => {
             title="Products"
             value={analytics.totalProducts || 0}
             subtitle="In inventory"
-            color="#f59e0b"
+            color={colors.warning.main}
             index={2}
           />
 
@@ -193,7 +210,7 @@ const AnalyticsScreen = ({ navigation }) => {
             title="Avg Order"
             value={`₹${analytics.avgOrderValue || 0}`}
             subtitle="Per order"
-            color="#8b5cf6"
+            color={colors.primary.main}
             index={3}
           />
         </View>
@@ -237,6 +254,13 @@ const AnalyticsScreen = ({ navigation }) => {
         </ScrollView>
       </View>
       </View>
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        currentScreen="Analytics"
+        onComplete={completeTour}
+      />
     </SafeAreaView>
   );
 };
@@ -244,7 +268,7 @@ const AnalyticsScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -255,15 +279,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    paddingTop: 60, // Proper space for status bar like YouTube app
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   scrollContent: {
     padding: 20,
@@ -276,7 +299,7 @@ const styles = StyleSheet.create({
     marginBottom: 24,
   },
   statCard: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     width: '48%',
@@ -287,11 +310,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: colors.gray[100],
   },
   statTitle: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 8,
   },
   statValue: {
@@ -301,7 +324,7 @@ const styles = StyleSheet.create({
   },
   statSubtitle: {
     fontSize: 12,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
   },
   revenueSection: {
     marginBottom: 24,
@@ -309,11 +332,11 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   revenueCards: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     shadowColor: '#000',
@@ -322,11 +345,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: colors.gray[100],
   },
   revenueCard: {
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
+    borderBottomColor: colors.gray[100],
   },
   revenueCardContent: {
     flexDirection: 'row',
@@ -337,16 +360,16 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   revenueLabel: {
-    ...createTextStyle('body1', '#6b7280'),
+    ...createTextStyle('body1', colors.text.secondary),
   },
   revenueValue: {
-    ...createTextStyle('price', '#1f2937'),
+    ...createTextStyle('price', colors.text.primary),
   },
   popularSection: {
     marginBottom: 24,
   },
   popularProductItem: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     marginBottom: 8,
@@ -358,13 +381,13 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: colors.gray[100],
   },
   productRank: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -372,45 +395,67 @@ const styles = StyleSheet.create({
   rankText: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
-  productEmoji: {
+  productImage: {
     width: 40,
     height: 40,
-    borderRadius: 20,
-    backgroundColor: '#f8fafc',
+    borderRadius: 8,
+    backgroundColor: colors.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
+    overflow: 'hidden',
   },
-  emojiText: {
-    fontSize: 20,
+  productImageStyle: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
+  },
+  productImagePlaceholder: {
+    width: '100%',
+    height: '100%',
+    backgroundColor: colors.gray[100],
+    justifyContent: 'center',
+    alignItems: 'center',
+    borderRadius: 8,
+  },
+  productImagePlaceholderText: {
+    fontSize: 16,
   },
   productInfo: {
     flex: 1,
+    marginRight: 12,
+    justifyContent: 'center',
   },
   productName: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '600',
-    color: '#1f2937',
-    marginBottom: 2,
+    color: colors.text.primary,
+    marginBottom: 4,
+    lineHeight: 18,
   },
   productCategory: {
     fontSize: 12,
-    color: '#6b7280',
+    color: colors.text.secondary,
+    textTransform: 'capitalize',
   },
   productStats: {
     alignItems: 'flex-end',
+    justifyContent: 'center',
+    minWidth: 80,
   },
   productPrice: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '700',
-    color: '#1f2937',
-    marginBottom: 2,
+    color: colors.text.primary,
+    marginBottom: 4,
+    textAlign: 'right',
   },
   productSold: {
-    fontSize: 12,
-    color: '#6b7280',
+    fontSize: 11,
+    color: colors.text.secondary,
+    textAlign: 'right',
   },
 });
 
