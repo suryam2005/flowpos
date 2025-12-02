@@ -38,6 +38,20 @@ const InvoiceScreen = ({ route, navigation }) => {
     }
   }, [orderData]);
 
+  // Prevent back navigation to customer details screen
+  useEffect(() => {
+    if (autoRedirect || autoRedirectToHome) {
+      const unsubscribe = navigation.addListener('beforeRemove', (e) => {
+        // Prevent default back behavior
+        e.preventDefault();
+        // Navigate to POS instead
+        navigation.navigate('Main', { screen: 'POS' });
+      });
+      
+      return unsubscribe;
+    }
+  }, [navigation, autoRedirect, autoRedirectToHome]);
+
   const isRecentOrder = (timestamp) => {
     const orderTime = new Date(timestamp);
     const now = new Date();

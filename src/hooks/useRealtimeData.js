@@ -32,15 +32,26 @@ export const useRealtimeData = (dataType = 'all') => {
     }
   };
 
+  // Get fetchFreshData from context
+  const { fetchFreshData } = useDataSync();
+
   return {
     data: getData(),
     isLoading,
     error,
     lastSync,
-    refresh: () => {
+    refresh: async () => {
       setIsLoading(true);
-      // The data sync context will handle the actual refresh
-      setTimeout(() => setIsLoading(false), 500);
+      try {
+        // Trigger actual backend fetch
+        if (fetchFreshData) {
+          await fetchFreshData();
+        }
+      } catch (err) {
+        setError(err.message);
+      } finally {
+        setTimeout(() => setIsLoading(false), 500);
+      }
     }
   };
 };

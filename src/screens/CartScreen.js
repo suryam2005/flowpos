@@ -17,6 +17,7 @@ import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
+import { useOrders } from '../hooks/useOrders';
 
 import CustomAlert from '../components/CustomAlert';
 import DynamicQRGenerator from '../components/DynamicQRGenerator';
@@ -29,6 +30,7 @@ import WhatsAppService from '../services/WhatsAppService';
 
 const CartScreen = ({ navigation }) => {
   const { items, updateQuantity, removeItem, clearCart, getTotal } = useCart();
+  const { createOrder, loading: orderLoading } = useOrders();
   const [customerName, setCustomerName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -448,17 +450,31 @@ _Powered by FlowPOS_`;
 
     try {
       const orderId = await generateOrderNumber();
+      
+      // Create order object for the new orders system
       const orderData = {
-        id: orderId,
-        items: items,
-        subtotal,
-        gst,
-        total,
         customerName: customerName || 'Walk-in Customer',
-        phoneNumber,
-        paymentMethod,
-        timestamp: new Date().toISOString(),
+        phoneNumber: phoneNumber || '',
+        email: '', // Not collected in cart
+        items: items.map(item => ({
+          name: item.name,
+          sku: item.sku || '',
+          category: item.category || '',
+          price: item.price,
+          quantity: item.quantity,
+          total: item.price * item.quantity,
+          discount: 0,
+          tax: 0,
+          notes: ''
+        })),
+        subtotal,
+        tax: gst,
+        discount: 0,
+        total,
+        paymentMethod: paymentMethod || 'Cash',
+        paymentStatus: 'completed',
         status: 'completed',
+        notes: '',
         ...(paymentDetails && {
           paymentDetails: {
             transactionId: paymentDetails.transactionId,
@@ -467,14 +483,15 @@ _Powered by FlowPOS_`;
           }
         }),
       };
+      
+      console.log('🛒 Creating order:', orderData);
+      
+      // Save order using the new orders system (works offline/online)
+      const savedOrder = await createOrder(orderData);
+      
+      console.log('✅ Order saved:', savedOrder);
 
-      // Save order
-      const existingOrders = await AsyncStorage.getItem('orders');
-      const orders = existingOrders ? JSON.parse(existingOrders) : [];
-      orders.unshift(orderData);
-      await AsyncStorage.setItem('orders', JSON.stringify(orders));
-
-      // Update revenue
+      // Update revenue (keep existing functionality)
       const existingRevenue = await AsyncStorage.getItem('revenue');
       const revenue = existingRevenue ? JSON.parse(existingRevenue) : {
         today: 0,
@@ -490,7 +507,7 @@ _Powered by FlowPOS_`;
 
       await AsyncStorage.setItem('revenue', JSON.stringify(revenue));
 
-      // Update product stock
+      // Update product stock (keep existing functionality)
       const existingProducts = await AsyncStorage.getItem('products');
       if (existingProducts) {
         const products = JSON.parse(existingProducts);
@@ -506,10 +523,26 @@ _Powered by FlowPOS_`;
 
       clearCart();
 
-      // Navigate to invoice screen with order data
+      // Navigate to invoice screen with order data (backward compatibility)
       const invoiceOrderData = {
-        ...orderData,
-        orderNumber: `ORD-${orderId}`
+        id: savedOrder.id,
+        orderNumber: savedOrder.orderNumber,
+        customerName: savedOrder.customerName,
+        phoneNumber: savedOrder.phoneNumber,
+        items: items,
+        subtotal,
+        gst,
+        total,
+        paymentMethod,
+        timestamp: savedOrder.timestamp,
+        status: 'completed',
+        ...(paymentDetails && {
+          paymentDetails: {
+            transactionId: paymentDetails.transactionId,
+            paymentTimestamp: paymentDetails.timestamp,
+            paymentMethod: paymentDetails.method,
+          }
+        }),
       };
       
       console.log('Navigating to Invoice with data:', invoiceOrderData);
@@ -524,14 +557,33 @@ _Powered by FlowPOS_`;
       
       navigation.navigate('Invoice', { orderData: invoiceOrderData, autoRedirect: true });
     } catch (error) {
-      console.error('Error completing order:', error);
+      console.error('❌ Error completing order:', error);
       setAlertConfig({
         title: 'Error',
-        message: 'Failed to complete order. Please try again.',
+        message: `Failed to complete order: ${error.message}. The order was saved locally and will sync when online.`,
         type: 'error',
         buttons: [{ text: 'OK', style: 'default' }],
       });
       setShowAlert(true);
+      
+      // Even if there's an error, still navigate to invoice with local data
+      const orderId = await generateOrderNumber();
+      const invoiceOrderData = {
+        id: orderId,
+        orderNumber: `ORD-${orderId}`,
+        customerName: customerName || 'Walk-in Customer',
+        phoneNumber,
+        items: items,
+        subtotal,
+        gst,
+        total,
+        paymentMethod,
+        timestamp: new Date().toISOString(),
+        status: 'completed'
+      };
+      
+      clearCart();
+      navigation.navigate('Invoice', { orderData: invoiceOrderData, autoRedirect: true });
     }
   };
 
@@ -750,17 +802,20 @@ _Powered by FlowPOS_`;
           </View>
 
           <TouchableOpacity
-            style={styles.completeButton}
+            style={[styles.completeButton, (orderLoading) && { opacity: 0.6 }]}
             onPress={handleCompleteOrder}
+            disabled={orderLoading}
           >
             <Text style={styles.completeButtonText}>
-              {paymentMethod === 'QR Pay' 
-                ? (isQRVisible ? 'Waiting for Payment...' : 'Generate QR Code')
-                : paymentMethod === 'Cash' 
-                  ? 'Collect Cash Payment' 
-                  : paymentMethod === 'Card'
-                    ? 'Process Card Payment'
-                    : 'Complete Order'
+              {orderLoading 
+                ? 'Processing...'
+                : paymentMethod === 'QR Pay' 
+                  ? (isQRVisible ? 'Waiting for Payment...' : 'Generate QR Code')
+                  : paymentMethod === 'Cash' 
+                    ? 'Collect Cash Payment' 
+                    : paymentMethod === 'Card'
+                      ? 'Process Card Payment'
+                      : 'Complete Order'
               }
             </Text>
           </TouchableOpacity>

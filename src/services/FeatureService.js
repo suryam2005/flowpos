@@ -17,7 +17,6 @@ class FeatureService {
         card_payments: true,
         upi_payments: true,
         sms_detection: true,
-        cloud_backup: false,
         multi_device_sync: false,
         advanced_analytics: false,
         custom_branding: false,
@@ -27,7 +26,6 @@ class FeatureService {
       limits: {
         products: 50,
         orders_per_month: 100,
-        storage_gb: 0,
         devices: 1,
       },
       price: 0,
@@ -39,7 +37,6 @@ class FeatureService {
         card_payments: true,
         upi_payments: true,
         sms_detection: true,
-        cloud_backup: true,
         multi_device_sync: false,
         advanced_analytics: false,
         custom_branding: false,
@@ -48,9 +45,8 @@ class FeatureService {
       },
       limits: {
         products: 500,
-        orders_per_month: 1000,
-        storage_gb: 1,
-        devices: 2,
+        orders_per_month: 3000,
+        devices: 3,
       },
       price: 299,
       name: 'Starter Plan'
@@ -61,7 +57,6 @@ class FeatureService {
         card_payments: true,
         upi_payments: true,
         sms_detection: true,
-        cloud_backup: true,
         multi_device_sync: true,
         advanced_analytics: true,
         custom_branding: true,
@@ -71,8 +66,7 @@ class FeatureService {
       limits: {
         products: 2000,
         orders_per_month: 5000,
-        storage_gb: 5,
-        devices: 5,
+        devices: 10,
       },
       price: 599,
       name: 'Business Plan'
@@ -83,7 +77,6 @@ class FeatureService {
         card_payments: true,
         upi_payments: true,
         sms_detection: true,
-        cloud_backup: true,
         multi_device_sync: true,
         advanced_analytics: true,
         custom_branding: true,
@@ -93,7 +86,6 @@ class FeatureService {
       limits: {
         products: -1, // unlimited
         orders_per_month: -1, // unlimited
-        storage_gb: -1, // unlimited
         devices: -1, // unlimited
       },
       price: 1299,
@@ -114,19 +106,27 @@ class FeatureService {
     }
   }
 
-  // Load user plan from storage or API
+  // Load user plan from database via AuthContext
   async loadUserPlan() {
     try {
-      // First try to load from local storage
-      const storedPlan = await AsyncStorage.getItem('userPlan');
-      if (storedPlan) {
-        this.userPlan = storedPlan;
+      // Import AuthContext dynamically to avoid circular dependency
+      const { useAuth } = await import('../context/AuthContext');
+      
+      // Try to get from AsyncStorage first (for offline support)
+      const storedUserData = await AsyncStorage.getItem('userData');
+      if (storedUserData) {
+        const userData = JSON.parse(storedUserData);
+        if (userData.subscription_plan) {
+          this.userPlan = userData.subscription_plan;
+          await AsyncStorage.setItem('userPlan', this.userPlan);
+        }
       }
 
-      // TODO: In production, fetch from API
-      // const response = await api.get('/user/subscription');
-      // this.userPlan = response.data.plan;
-      // await AsyncStorage.setItem('userPlan', this.userPlan);
+      // If no plan found, default to free
+      if (!this.userPlan) {
+        this.userPlan = 'free';
+        await AsyncStorage.setItem('userPlan', this.userPlan);
+      }
 
       this.updateFeatures();
     } catch (error) {
@@ -174,22 +174,52 @@ class FeatureService {
     try {
       switch (limitName) {
         case 'products':
-          const products = await AsyncStorage.getItem('products');
-          return products ? JSON.parse(products).length : 0;
+          // Fetch real count from backend via ProductsService
+          try {
+            const productsService = require('./ProductsService').default;
+            const products = await productsService.getProducts();
+            console.log('📊 [FeatureService] Real products count:', products.length);
+            return products.length;
+          } catch (error) {
+            console.error('Error fetching products count:', error);
+            // Fallback to AsyncStorage
+            const products = await AsyncStorage.getItem('products');
+            return products ? JSON.parse(products).length : 0;
+          }
 
         case 'orders_per_month':
-          const orders = await AsyncStorage.getItem('orders');
-          if (!orders) return 0;
-          
-          const orderList = JSON.parse(orders);
-          const currentMonth = new Date().getMonth();
-          const currentYear = new Date().getFullYear();
-          
-          return orderList.filter(order => {
-            const orderDate = new Date(order.timestamp);
-            return orderDate.getMonth() === currentMonth && 
-                   orderDate.getFullYear() === currentYear;
-          }).length;
+          // Fetch real count from backend via OrdersService
+          try {
+            const ordersService = require('./OrdersService').default;
+            const orders = await ordersService.getOrders();
+            
+            const currentMonth = new Date().getMonth();
+            const currentYear = new Date().getFullYear();
+            
+            const thisMonthOrders = orders.filter(order => {
+              const orderDate = new Date(order.timestamp || order.createdAt || order.created_at);
+              return orderDate.getMonth() === currentMonth && 
+                     orderDate.getFullYear() === currentYear;
+            });
+            
+            console.log('📊 [FeatureService] Real orders this month:', thisMonthOrders.length);
+            return thisMonthOrders.length;
+          } catch (error) {
+            console.error('Error fetching orders count:', error);
+            // Fallback to AsyncStorage
+            const orders = await AsyncStorage.getItem('orders');
+            if (!orders) return 0;
+            
+            const orderList = JSON.parse(orders);
+            const currentMonth = new Date().getMonth();
+            const currentYear = new Date().getFullYear();
+            
+            return orderList.filter(order => {
+              const orderDate = new Date(order.timestamp);
+              return orderDate.getMonth() === currentMonth && 
+                     orderDate.getFullYear() === currentYear;
+            }).length;
+          }
 
         case 'devices':
           // TODO: Implement device tracking

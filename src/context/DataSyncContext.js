@@ -1,5 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, useRef } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import productsService from '../services/ProductsService';
+import ordersService from '../services/OrdersService';
 
 const DataSyncContext = createContext();
 
@@ -43,9 +45,12 @@ export const DataSyncProvider = ({ children }) => {
     });
   };
 
-  // Load data from storage
+  // Load data from storage AND fetch from backend
   const loadData = async (silent = false) => {
     try {
+      console.log('📊 [DataSync] Loading data...');
+      
+      // First, load from AsyncStorage for immediate display
       const [productsData, ordersData, storeData] = await Promise.all([
         AsyncStorage.getItem('products'),
         AsyncStorage.getItem('orders'),
@@ -84,14 +89,64 @@ export const DataSyncProvider = ({ children }) => {
         }
       }
 
+      // Don't auto-fetch on initial load - let screens control when to fetch
+      // This prevents duplicate API calls
+
       if (hasChanges) {
         setLastSync(Date.now());
       }
 
       return currentDataRef.current;
     } catch (error) {
-      console.error('Error loading data:', error);
+      console.error('❌ [DataSync] Error loading data:', error);
       return { products: [], orders: [], storeInfo: null };
+    }
+  };
+
+  // Debounce timer for fetch
+  const fetchTimerRef = useRef(null);
+  const lastFetchRef = useRef(0);
+
+  // Fetch fresh data from backend with debounce
+  const fetchFreshData = async () => {
+    try {
+      // Debounce: Don't fetch if we fetched less than 2 seconds ago
+      const now = Date.now();
+      if (now - lastFetchRef.current < 2000) {
+        console.log('⏭️ [DataSync] Skipping fetch - too soon since last fetch');
+        return;
+      }
+
+      // Clear any pending fetch
+      if (fetchTimerRef.current) {
+        clearTimeout(fetchTimerRef.current);
+      }
+
+      lastFetchRef.current = now;
+      console.log('🌐 [DataSync] Fetching products from backend...');
+      
+      // Fetch products from backend
+      const freshProducts = await productsService.getProducts();
+      console.log('✅ [DataSync] Fetched products:', freshProducts.length);
+      
+      if (freshProducts && freshProducts.length > 0) {
+        // Save to AsyncStorage
+        await AsyncStorage.setItem('products', JSON.stringify(freshProducts));
+        
+        // Update state
+        setProducts(freshProducts);
+        currentDataRef.current.products = freshProducts;
+        notifyListeners('products', freshProducts);
+        setLastSync(Date.now());
+        
+        console.log('✅ [DataSync] Products synced successfully');
+      } else if (freshProducts && freshProducts.length === 0) {
+        console.log('ℹ️ [DataSync] No products found for user');
+      }
+      
+    } catch (error) {
+      console.error('❌ [DataSync] Error fetching fresh data:', error);
+      // Don't throw - just log the error and continue with cached data
     }
   };
 
@@ -222,6 +277,7 @@ export const DataSyncProvider = ({ children }) => {
     
     // Methods
     loadData,
+    fetchFreshData,
     saveProducts,
     saveOrders,
     saveStoreInfo,

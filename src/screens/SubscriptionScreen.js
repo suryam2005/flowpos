@@ -13,8 +13,10 @@ import ResponsiveText from '../components/ResponsiveText';
 import { getDeviceInfo } from '../utils/deviceUtils';
 import { safeGoBack } from '../utils/navigationUtils';
 import { colors } from '../styles/colors';
+import { useAuth } from '../context/AuthContext';
 
 const SubscriptionScreen = ({ navigation }) => {
+  const { user, refreshUserData, getUserSubscriptionPlan } = useAuth();
   const [currentPlan, setCurrentPlan] = useState('free');
   const [usageStats, setUsageStats] = useState({});
   const [isLoading, setIsLoading] = useState(true);
@@ -27,14 +29,23 @@ const SubscriptionScreen = ({ navigation }) => {
   const loadSubscriptionData = async () => {
     setIsLoading(true);
     try {
-      await featureService.initialize();
-      const planInfo = featureService.getPlanInfo();
-      const stats = await featureService.getUsageStats();
+      // Get fresh user data from database
+      await refreshUserData();
       
-      setCurrentPlan(planInfo.currentPlan);
+      // Get current subscription plan from database
+      const dbPlan = await getUserSubscriptionPlan();
+      setCurrentPlan(dbPlan);
+      
+      // Initialize feature service with real plan
+      await featureService.initialize();
+      const stats = await featureService.getUsageStats();
       setUsageStats(stats);
     } catch (error) {
       console.error('Error loading subscription data:', error);
+      // Fallback to user data from context
+      if (user?.subscription_plan) {
+        setCurrentPlan(user.subscription_plan);
+      }
     } finally {
       setIsLoading(false);
     }

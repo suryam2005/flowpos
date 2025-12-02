@@ -26,7 +26,6 @@ import SettingsScreen from './src/screens/SettingsScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
-import StoreSetupScreen from './src/screens/onboarding/StoreSetupScreen';
 import ProductOnboardingScreen from './src/screens/onboarding/ProductOnboardingScreen';
 import WhatsAppSetupScreen from './src/screens/WhatsAppSetupScreen';
 import InvoiceScreen from './src/screens/InvoiceScreen';
@@ -34,8 +33,26 @@ import { CartProvider } from './src/context/CartContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { DataSyncProvider } from './src/context/DataSyncContext';
 import { hasOldDummyData, clearAllAppData } from './src/utils/dataUtils';
-import PinSetupScreen from './src/screens/auth/PinSetupScreen';
 import PinAuthScreen from './src/screens/auth/PinAuthScreen';
+
+// New Auth Screens
+import SignupScreen from './src/screens/auth/SignupScreen';
+import LoginScreen from './src/screens/auth/LoginScreen';
+import OTPVerificationScreen from './src/screens/auth/OTPVerificationScreen';
+import PasswordSetupScreen from './src/screens/auth/PasswordSetupScreen';
+import ForgotPasswordScreen from './src/screens/auth/ForgotPasswordScreen';
+import ResetPasswordOTPScreen from './src/screens/auth/ResetPasswordOTPScreen';
+import NewPasswordScreen from './src/screens/auth/NewPasswordScreen';
+import StoreSetupScreen from './src/screens/auth/StoreSetupScreen';
+import ProfileScreen from './src/screens/ProfileScreen';
+import EditProfileScreen from './src/screens/profile/EditProfileScreen';
+import StoreInformationScreen from './src/screens/profile/StoreInformationScreen';
+import ChangePasswordScreen from './src/screens/profile/ChangePasswordScreen';
+import ChangePasswordOTPScreen from './src/screens/profile/ChangePasswordOTPScreen';
+import NotificationsScreen from './src/screens/profile/NotificationsScreen';
+import AccountSettingsScreen from './src/screens/profile/AccountSettingsScreen';
+import PrivacySecurityScreen from './src/screens/profile/PrivacySecurityScreen';
+import HelpSupportScreen from './src/screens/profile/HelpSupportScreen';
 
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
@@ -90,7 +107,7 @@ function MainTabs() {
 }
 
 export default function App() {
-  const [appState, setAppState] = useState(null); // null, 'welcome', 'setup', 'pinSetup', 'pinAuth', 'main'
+  const [appState, setAppState] = useState(null); // null, 'welcome', 'setup', 'productOnboarding', 'main'
   const { isTablet } = getDeviceInfo();
 
   useEffect(() => {
@@ -102,31 +119,66 @@ export default function App() {
       // First, check if we need to clear old dummy data
       await clearOldDummyData();
       
-      const [hasCompletedOnboarding, storeSetupCompleted, productsOnboardingCompleted, pinSetupCompleted, pinSetupSkipped] = await Promise.all([
-        AsyncStorage.getItem('hasCompletedOnboarding'),
-        AsyncStorage.getItem('storeSetupCompleted'),
-        AsyncStorage.getItem('productsOnboardingCompleted'),
-        getItemAsync('pinSetupCompleted'),
-        getItemAsync('pinSetupSkipped')
+      // Check if user is authenticated (has access token or user data)
+      const [accessToken, userData] = await Promise.all([
+        AsyncStorage.getItem('accessToken'),
+        AsyncStorage.getItem('userData')
       ]);
       
-      if (!hasCompletedOnboarding) {
-        // First time user - show welcome screen
+      const isAuthenticated = !!(accessToken && userData);
+      console.log('🔐 User authentication status:', isAuthenticated);
+      
+      // If not authenticated, always show welcome screen
+      if (!isAuthenticated) {
+        console.log('👋 No authentication found - showing welcome screen');
         setAppState('welcome');
-      } else if (!storeSetupCompleted) {
-        // Onboarding done but store setup not completed
+        return;
+      }
+      
+      // User is authenticated, check onboarding status
+      const [hasCompletedOnboarding, storeSetupCompleted, productsOnboardingCompleted] = await Promise.all([
+        AsyncStorage.getItem('hasCompletedOnboarding'),
+        AsyncStorage.getItem('storeSetupCompleted'),
+        AsyncStorage.getItem('productsOnboardingCompleted')
+      ]);
+      
+      // Additional check: if user has store data in storage, consider setup completed
+      let hasStoreData = false;
+      try {
+        const storeInfo = await AsyncStorage.getItem('storeInfo');
+        hasStoreData = storeInfo && JSON.parse(storeInfo).store_name;
+      } catch (error) {
+        console.log('Error parsing store info:', error);
+        hasStoreData = false;
+      }
+      
+      console.log('📊 App state check:', {
+        hasCompletedOnboarding: !!hasCompletedOnboarding,
+        storeSetupCompleted: !!storeSetupCompleted,
+        productsOnboardingCompleted: !!productsOnboardingCompleted,
+        hasStoreData
+      });
+      
+      if (!hasCompletedOnboarding) {
+        // Authenticated user but hasn't completed onboarding - show welcome screen
+        console.log('👋 Authenticated user needs onboarding - showing welcome screen');
+        setAppState('welcome');
+      } else if (!storeSetupCompleted && !hasStoreData) {
+        // Onboarding done but store setup not completed and no store data exists
+        console.log('🏪 User needs store setup - showing setup screen');
         setAppState('setup');
       } else if (!productsOnboardingCompleted) {
         // Store setup done but products not added
+        console.log('📦 User needs product onboarding - showing product screen');
         setAppState('productOnboarding');
-      } else if (!pinSetupCompleted && !pinSetupSkipped) {
-        // Products added but PIN not set up and not skipped
-        setAppState('pinSetup');
-      } else if (pinSetupCompleted) {
-        // PIN is set up - require authentication
-        setAppState('pinAuth');
       } else {
-        // PIN was skipped or not needed - go directly to main
+        // All setup completed - go to main app
+        console.log('✅ All setup completed - going to main app');
+        // Ensure store setup is marked as completed if we have store data
+        if (hasStoreData && !storeSetupCompleted) {
+          await AsyncStorage.setItem('storeSetupCompleted', 'true');
+          console.log('✅ Store setup marked as completed based on existing store data');
+        }
         setAppState('main');
       }
     } catch (error) {
@@ -159,8 +211,6 @@ export default function App() {
       case 'welcome': return 'Welcome';
       case 'setup': return 'StoreSetup';
       case 'productOnboarding': return 'ProductOnboarding';
-      case 'pinSetup': return 'PinSetup';
-      case 'pinAuth': return 'PinAuth';
       case 'main': return 'Main';
       default: return 'Welcome';
     }
@@ -177,10 +227,7 @@ export default function App() {
               initialRouteName={getInitialRoute()}
             >
               <Stack.Screen name="Welcome" component={WelcomeScreen} />
-              <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
               <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
-              <Stack.Screen name="PinSetup" component={PinSetupScreen} />
-              <Stack.Screen name="PinAuth" component={PinAuthScreen} />
               <Stack.Screen name="Main" component={MainTabs} />
               <Stack.Screen 
                 name="Cart" 
@@ -189,8 +236,29 @@ export default function App() {
               <Stack.Screen name="Invoice" component={InvoiceScreen} />
               <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />
+              <Stack.Screen name="Profile" component={ProfileScreen} />
+              <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+              <Stack.Screen name="StoreInformation" component={StoreInformationScreen} />
+              <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+              <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTPScreen} />
+              <Stack.Screen name="Notifications" component={NotificationsScreen} />
+              <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+              <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
+              <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
               <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
               <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+              
+              {/* Auth Screens */}
+              <Stack.Screen name="Signup" component={SignupScreen} />
+              <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+              <Stack.Screen name="PasswordSetup" component={PasswordSetupScreen} />
+              <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
+              <Stack.Screen name="Login" component={LoginScreen} />
+              
+              {/* Forgot Password Screens */}
+              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+              <Stack.Screen name="ResetPasswordOTP" component={ResetPasswordOTPScreen} />
+              <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
             </Stack.Navigator>
           </NavigationContainer>
         </CartProvider>

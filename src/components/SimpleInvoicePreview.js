@@ -546,13 +546,17 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     borderWidth: 1,
     borderColor: colors.border.light,
+    minHeight: 52,
   },
   shareButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text.primary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
   whatsappButton: {
     flex: 1,
@@ -560,11 +564,15 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 52,
   },
   whatsappButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.background.surface,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

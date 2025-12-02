@@ -28,8 +28,6 @@ const StoreSetupScreen = ({ navigation }) => {
     // Step 1: Basic Store Info
     storeName: '',
     ownerName: '',
-    phone: '',
-    email: '',
 
     // Step 2: Business Details
     address: '',
@@ -54,7 +52,7 @@ const StoreSetupScreen = ({ navigation }) => {
     {
       title: 'Store Information',
       subtitle: 'Tell us about your business',
-      fields: ['storeName', 'ownerName', 'phone', 'email'],
+      fields: ['storeName', 'ownerName'],
     },
     {
       title: 'Business Details',
@@ -102,12 +100,6 @@ const StoreSetupScreen = ({ navigation }) => {
       if (field === 'ownerName' && !storeData.ownerName.trim()) {
         return 'Owner name is required';
       }
-      if (field === 'phone' && !storeData.phone.trim()) {
-        return 'Phone number is required';
-      }
-      if (field === 'email' && !storeData.email.trim()) {
-        return 'Email address is required';
-      }
       if (field === 'address' && !storeData.address.trim()) {
         return 'Address is required';
       }
@@ -125,15 +117,7 @@ const StoreSetupScreen = ({ navigation }) => {
       }
     }
 
-    // Email validation (required and must be valid)
-    if (storeData.email && !isValidEmail(storeData.email)) {
-      return 'Please enter a valid email address';
-    }
 
-    // Phone validation
-    if (storeData.phone && storeData.phone.length < 10) {
-      return 'Please enter a valid phone number';
-    }
 
     // GST validation
     if (storeData.gstNumber && storeData.gstNumber.trim() && !storeData.gstPercentage) {
@@ -157,10 +141,7 @@ const StoreSetupScreen = ({ navigation }) => {
     return null;
   };
 
-  const isValidEmail = (email) => {
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    return emailRegex.test(email);
-  };
+
 
   const isValidUpiId = (upiId) => {
     const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
@@ -209,8 +190,6 @@ const StoreSetupScreen = ({ navigation }) => {
       await AsyncStorage.setItem('storeInfo', JSON.stringify({
         name: storeData.storeName,
         ownerName: storeData.ownerName,
-        phone: storeData.phone,
-        email: storeData.email,
         address: storeData.address,
         businessType: storeData.businessType === 'Other' ? storeData.customBusinessType : storeData.businessType,
         originalBusinessType: storeData.businessType,
@@ -293,30 +272,6 @@ const StoreSetupScreen = ({ navigation }) => {
                 value={storeData.ownerName}
                 onChangeText={(text) => updateStoreData('ownerName', text)}
                 autoCapitalize="words"
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Phone Number *</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter phone number"
-                value={storeData.phone}
-                onChangeText={(text) => updateStoreData('phone', text)}
-                keyboardType="phone-pad"
-                maxLength={15}
-              />
-            </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>Email Address *</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter email address"
-                value={storeData.email}
-                onChangeText={(text) => updateStoreData('email', text)}
-                keyboardType="email-address"
-                autoCapitalize="none"
               />
             </View>
           </View>

@@ -11,30 +11,34 @@ import {
 import featureService from '../services/FeatureService';
 import ResponsiveText from './ResponsiveText';
 import { getDeviceInfo } from '../utils/deviceUtils';
+import { useSubscription } from '../hooks/useSubscription';
 
 const SubscriptionManager = ({ visible, onClose }) => {
-  const [currentPlan, setCurrentPlan] = useState('free');
+  const { 
+    subscriptionPlan: currentPlan, 
+    isLoading: planLoading, 
+    refreshSubscription 
+  } = useSubscription();
   const [usageStats, setUsageStats] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
+  const [isLoading, setIsLoading] = useState(false);
   const { isTablet } = getDeviceInfo();
 
   useEffect(() => {
     if (visible) {
-      loadSubscriptionData();
+      console.log('📊 [Subscription] Modal opened - loading fresh usage data');
+      loadUsageData();
     }
-  }, [visible]);
+  }, [visible, currentPlan]);
 
-  const loadSubscriptionData = async () => {
+  const loadUsageData = async () => {
     setIsLoading(true);
     try {
+      // Initialize feature service with current plan
       await featureService.initialize();
-      const planInfo = featureService.getPlanInfo();
       const stats = await featureService.getUsageStats();
-      
-      setCurrentPlan(planInfo.currentPlan);
       setUsageStats(stats);
     } catch (error) {
-      console.error('Error loading subscription data:', error);
+      console.error('Error loading usage data:', error);
     } finally {
       setIsLoading(false);
     }
@@ -48,10 +52,11 @@ const SubscriptionManager = ({ visible, onClose }) => {
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Upgrade Now',
-          onPress: () => {
+          onPress: async () => {
             // For demo purposes, simulate upgrade
             featureService.upgradePlan(planType);
-            setCurrentPlan(planType);
+            // Refresh subscription data to update cache
+            await refreshSubscription();
             onClose();
           }
         }

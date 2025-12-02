@@ -1,7 +1,9 @@
 import { useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../context/AuthContext';
 
 export const useQRPayment = () => {
+  const { getStore } = useAuth();
   const [isQRVisible, setIsQRVisible] = useState(false);
   const [paymentData, setPaymentData] = useState({
     amount: 0,
@@ -17,15 +19,21 @@ export const useQRPayment = () => {
         throw new Error('Invalid amount');
       }
 
-      // Check if UPI ID is configured
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
+      // Get store information from backend
+      console.log('🔄 Fetching store info from backend for QR generation...');
+      const storeInfo = await getStore();
+      
       if (!storeInfo) {
-        throw new Error('Store information not found');
+        throw new Error('Store information not found. Please set up your store first.');
       }
 
-      const parsedStore = JSON.parse(storeInfo);
-      if (!parsedStore.upiId) {
-        throw new Error('UPI ID not configured');
+      console.log('📊 Store info retrieved:', storeInfo);
+
+      // Check for any available UPI ID from backend store data
+      const hasUpiId = storeInfo.upi_id || storeInfo.upi_id_2 || storeInfo.upi_id_3;
+      
+      if (!hasUpiId) {
+        throw new Error('UPI ID not configured. Please add your UPI ID in Store Settings.');
       }
 
       // Set payment data and show QR

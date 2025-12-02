@@ -17,6 +17,7 @@ import TagInput from '../../components/TagInput';
 import ProductImagePicker from '../../components/ProductImagePicker';
 import { generateProductTags } from '../../utils/tagGenerator';
 import { colors } from '../../styles/colors';
+import productsService from '../../services/ProductsService';
 
 const ProductOnboardingScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
@@ -64,7 +65,28 @@ const ProductOnboardingScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadBusinessType();
+    loadExistingProducts();
   }, []);
+
+  const loadExistingProducts = async () => {
+    try {
+      console.log('🚨 Loading existing products from Supabase...');
+      const existingProducts = await productsService.getProducts();
+      setProducts(existingProducts);
+      console.log('✅ Loaded products from Supabase:', existingProducts.length);
+    } catch (error) {
+      console.error('❌ Error loading products from Supabase:', error);
+      // Fallback to AsyncStorage if Supabase fails
+      try {
+        const localProducts = await AsyncStorage.getItem('products');
+        if (localProducts) {
+          setProducts(JSON.parse(localProducts));
+        }
+      } catch (localError) {
+        console.error('❌ Error loading local products:', localError);
+      }
+    }
+  };
 
   const loadBusinessType = async () => {
     try {
@@ -83,30 +105,48 @@ const ProductOnboardingScreen = ({ navigation }) => {
   };
 
   const handleAddSampleProducts = async () => {
-    const samples = getSampleProducts();
-    const sampleProductsWithIds = samples.map(product => ({
-      id: Date.now().toString() + Math.random().toString(),
-      name: product.name,
-      price: parseInt(product.price),
-      stock: 50,
-      trackStock: true,
-      tags: [product.category],
-      emoji: product.emoji,
-    }));
+    try {
+      const samples = getSampleProducts();
+      
+      // Create products in Supabase using ProductsService
+      for (const sample of samples) {
+        const productData = {
+          name: sample.name,
+          price: parseInt(sample.price),
+          stock_quantity: 50,
+          category: sample.category,
+          description: `Sample ${sample.category.toLowerCase()} product`,
+        };
+        
+        console.log('🚨 Creating sample product in Supabase:', productData);
+        await productsService.createProduct(productData);
+      }
 
-    const updatedProducts = [...products, ...sampleProductsWithIds];
-    setProducts(updatedProducts);
-    await saveProducts(updatedProducts);
+      // Refresh products list from Supabase
+      const updatedProducts = await productsService.getProducts();
+      setProducts(updatedProducts);
+      
+      // Also save to AsyncStorage for onboarding completion tracking
+      await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+      if (updatedProducts.length >= 4) {
+        await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+        await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+      }
 
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-    
-    setAlertConfig({
-      title: 'Sample Products Added! 🎉',
-      message: `Added ${samples.length} sample products to get you started. You can edit or delete these later.`,
-      type: 'success',
-      buttons: [{ text: 'Great!', style: 'default' }],
-    });
-    setShowAlert(true);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+      setAlertConfig({
+        title: 'Sample Products Added! 🎉',
+        message: `Added ${samples.length} sample products to get you started. You can edit or delete these later.`,
+        type: 'success',
+        buttons: [{ text: 'Great!', style: 'default' }],
+      });
+      setShowAlert(true);
+      
+    } catch (error) {
+      console.error('❌ Error adding sample products:', error);
+      Alert.alert('Error', 'Failed to add sample products. Please try again.');
+    }
   };
 
   const handleAddCustomProduct = () => {
@@ -137,31 +177,47 @@ const ProductOnboardingScreen = ({ navigation }) => {
       return;
     }
 
-    let finalTags = formData.tags;
-    if (finalTags.length === 0) {
-      finalTags = generateProductTags(formData.name.trim(), businessType);
+    try {
+      let finalTags = formData.tags;
+      if (finalTags.length === 0) {
+        finalTags = generateProductTags(formData.name.trim(), businessType);
+      }
+
+      const productData = {
+        name: formData.name.trim(),
+        price: parseInt(formData.price),
+        stock_quantity: formData.trackStock ? parseInt(formData.stock) : 0,
+        category: finalTags[0] || 'General',
+        description: `Custom product created during onboarding`,
+        image_url: formData.image || '',
+      };
+
+      console.log('🚨 Creating custom product in Supabase:', productData);
+      await productsService.createProduct(productData);
+
+      // Refresh products list from Supabase
+      const updatedProducts = await productsService.getProducts();
+      setProducts(updatedProducts);
+      
+      // Also save to AsyncStorage for onboarding completion tracking
+      await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+      if (updatedProducts.length >= 4) {
+        await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+        await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+      }
+
+      setModalVisible(false);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      
+    } catch (error) {
+      console.error('❌ Error creating custom product:', error);
+      Alert.alert('Error', 'Failed to create product. Please try again.');
     }
-
-    const newProduct = {
-      id: Date.now().toString(),
-      name: formData.name.trim(),
-      price: parseInt(formData.price),
-      stock: formData.trackStock ? parseInt(formData.stock) : null,
-      trackStock: formData.trackStock,
-      tags: finalTags,
-      image: formData.image,
-    };
-
-    const updatedProducts = [...products, newProduct];
-    setProducts(updatedProducts);
-    await saveProducts(updatedProducts);
-    setModalVisible(false);
-
-    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
   };
 
   const saveProducts = async (updatedProducts) => {
     try {
+      // Keep AsyncStorage for onboarding completion tracking only
       await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
       
       // Mark onboarding as complete when we have at least 4 products
@@ -170,15 +226,26 @@ const ProductOnboardingScreen = ({ navigation }) => {
         await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
       }
     } catch (error) {
-      console.error('Error saving products:', error);
-      Alert.alert('Error', 'Failed to save products.');
+      console.error('Error saving products to AsyncStorage:', error);
     }
   };
 
   const handleDeleteProduct = async (productId) => {
-    const updatedProducts = products.filter(p => p.id !== productId);
-    setProducts(updatedProducts);
-    await saveProducts(updatedProducts);
+    try {
+      console.log('🚨 Deleting product from Supabase:', productId);
+      await productsService.deleteProduct(productId);
+      
+      // Refresh products list from Supabase
+      const updatedProducts = await productsService.getProducts();
+      setProducts(updatedProducts);
+      
+      // Update AsyncStorage for onboarding tracking
+      await saveProducts(updatedProducts);
+      
+    } catch (error) {
+      console.error('❌ Error deleting product:', error);
+      Alert.alert('Error', 'Failed to delete product. Please try again.');
+    }
   };
 
   const handleContinue = () => {

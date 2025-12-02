@@ -14,8 +14,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { getDeviceInfo } from '../utils/deviceUtils';
 import ResponsiveText from './ResponsiveText';
-import { useUPIListener } from '../hooks/useUPIListener';
+import { useNotificationPaymentReader } from '../hooks/useNotificationPaymentReader';
 import { colors } from '../styles/colors';
+import { useAuth } from '../context/AuthContext';
 
 const DynamicQRGenerator = ({ 
   amount, 
@@ -23,7 +24,8 @@ const DynamicQRGenerator = ({
   onClose, 
   customerName = '', 
   orderNote = '',
-  onPaymentComplete 
+  onPaymentComplete,
+  onNavigateToSettings // New prop to handle navigation to settings
 }) => {
   const [storeInfo, setStoreInfo] = useState(null);
   const [qrValue, setQrValue] = useState('');
@@ -32,15 +34,18 @@ const DynamicQRGenerator = ({
   const [availableUpiIds, setAvailableUpiIds] = useState([]);
   const [paymentId, setPaymentId] = useState('');
   const [isAutoListening, setIsAutoListening] = useState(false);
+  const [showUpiError, setShowUpiError] = useState(false);
   const { isTablet } = getDeviceInfo();
+  const { getStore } = useAuth();
   
-  // UPI listener hook
+  // Enhanced notification payment reader hook
   const { 
     isListening, 
     trackPayment, 
     stopTrackingPayment, 
-    lastConfirmation 
-  } = useUPIListener();
+    lastConfirmation,
+    confirmPaymentManually
+  } = useNotificationPaymentReader();
 
   useEffect(() => {
     if (visible) {
@@ -67,37 +72,99 @@ const DynamicQRGenerator = ({
 
   const loadStoreInfo = async () => {
     try {
-      const storeData = await AsyncStorage.getItem('storeInfo');
-      if (storeData) {
-        const parsedStore = JSON.parse(storeData);
-        setStoreInfo(parsedStore);
-        
-        // Set up available UPI IDs
-        const upiIds = [];
-        if (parsedStore.upiId) upiIds.push(parsedStore.upiId);
-        if (parsedStore.upiId2) upiIds.push(parsedStore.upiId2);
-        if (parsedStore.upiId3) upiIds.push(parsedStore.upiId3);
-        
-        setAvailableUpiIds(upiIds);
-        setSelectedUpiId(upiIds[0] || ''); // Default to first UPI ID
+      console.log('🔄 Loading store info from backend for QR generation...');
+      
+      // Get store information from backend
+      const storeData = await getStore();
+      
+      if (!storeData) {
+        setShowUpiError(true);
+        Alert.alert(
+          'Store Setup Required',
+          'Please set up your store information first to generate QR codes.',
+          [
+            { text: 'Cancel', onPress: onClose },
+            { 
+              text: 'Go to Settings', 
+              onPress: () => {
+                onClose();
+                if (onNavigateToSettings) {
+                  onNavigateToSettings();
+                }
+              }
+            }
+          ]
+        );
+        return;
       }
+
+      console.log('📊 Store data loaded for QR:', storeData);
+      setStoreInfo(storeData);
+      
+      // Set up available UPI IDs from backend store data
+      const upiIds = [];
+      if (storeData.upi_id) {
+        upiIds.push(storeData.upi_id);
+      }
+      if (storeData.upi_id_2) {
+        upiIds.push(storeData.upi_id_2);
+      }
+      if (storeData.upi_id_3) {
+        upiIds.push(storeData.upi_id_3);
+      }
+      
+      console.log('📱 Available UPI IDs:', upiIds);
+      
+      if (upiIds.length === 0) {
+        setShowUpiError(true);
+        Alert.alert(
+          'UPI ID Required',
+          'Please add your UPI ID in Store Settings to generate QR codes for UPI payments.',
+          [
+            { text: 'Cancel', onPress: onClose },
+            { 
+              text: 'Add UPI ID', 
+              onPress: () => {
+                onClose();
+                if (onNavigateToSettings) {
+                  onNavigateToSettings();
+                }
+              }
+            }
+          ]
+        );
+        return;
+      }
+      
+      setAvailableUpiIds(upiIds);
+      setSelectedUpiId(upiIds[0] || ''); // Default to first UPI ID
+      setShowUpiError(false);
     } catch (error) {
-      console.error('Error loading store info:', error);
+      console.error('Error loading store info from backend:', error);
+      setShowUpiError(true);
+      Alert.alert(
+        'Error',
+        'Failed to load store information from server. Please check your connection and try again.',
+        [{ text: 'OK', onPress: onClose }]
+      );
     }
   };
 
   const generateQRCode = () => {
     if (!selectedUpiId) {
+      setShowUpiError(true);
       Alert.alert(
         'UPI ID Required',
-        'Please set up your UPI ID in Store Settings first.',
+        'Please set up your UPI ID in Store Settings first to generate QR codes.',
         [
           { text: 'Cancel', onPress: onClose },
           { 
-            text: 'Go to Settings', 
+            text: 'Add UPI ID', 
             onPress: () => {
               onClose();
-              // Navigate to settings would be handled by parent
+              if (onNavigateToSettings) {
+                onNavigateToSettings();
+              }
             }
           }
         ]
@@ -114,14 +181,15 @@ const DynamicQRGenerator = ({
 
     try {
       // Create UPI payment URL with all parameters
+      const storeName = storeInfo.store_name || storeInfo.name || 'FlowPOS Store';
       const upiParams = {
         pa: selectedUpiId, // Payee address (UPI ID)
-        pn: encodeURIComponent(storeInfo.name || 'Store'), // Payee name
+        pn: encodeURIComponent(storeName), // Payee name
         am: amount.toString(), // Amount
         cu: 'INR', // Currency
         tn: encodeURIComponent(
           orderNote || 
-          `Payment to ${storeInfo.name || 'Store'}${customerName ? ` for ${customerName}` : ''}`
+          `Payment to ${storeName}${customerName ? ` for ${customerName}` : ''}`
         ), // Transaction note
       };
 
@@ -131,6 +199,7 @@ const DynamicQRGenerator = ({
         .join('&')}`;
 
       setQrValue(upiUrl);
+      setShowUpiError(false);
       
       // Start tracking this payment for automatic confirmation
       if (paymentId && isListening && !isAutoListening) {
@@ -141,6 +210,7 @@ const DynamicQRGenerator = ({
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
     } catch (error) {
       console.error('Error generating QR code:', error);
+      setShowUpiError(true);
       Alert.alert('Error', 'Failed to generate QR code. Please try again.');
     } finally {
       setIsGenerating(false);
@@ -268,7 +338,7 @@ const DynamicQRGenerator = ({
               {storeInfo && (
                 <View style={styles.storeDetails}>
                   <ResponsiveText variant="body" style={styles.storeName}>
-                    {storeInfo.name}
+                    {storeInfo.store_name || storeInfo.name || 'FlowPOS Store'}
                   </ResponsiveText>
                   <ResponsiveText variant="caption" style={styles.upiId}>
                     UPI ID: {selectedUpiId}
@@ -337,9 +407,9 @@ const DynamicQRGenerator = ({
                   
                   {isListening && isAutoListening && (
                     <View style={styles.autoListenIndicator}>
-                      <Text style={styles.autoListenIcon}>📱</Text>
+                      <Text style={styles.autoListenIcon}>🔔</Text>
                       <ResponsiveText variant="small" style={styles.autoListenText}>
-                        Auto-detecting payment...
+                        Auto-detecting payment from notifications...
                       </ResponsiveText>
                     </View>
                   )}
@@ -374,7 +444,7 @@ const DynamicQRGenerator = ({
             <ResponsiveText variant="small" style={styles.disclaimer}>
               Show this QR code to customer for scanning. 
               {isListening && isAutoListening 
-                ? 'Payment will be auto-detected from SMS.' 
+                ? 'Payment will be auto-detected from notifications and SMS.' 
                 : 'Confirm payment receipt before completing the order.'
               }
             </ResponsiveText>

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
 import CustomAlert from '../components/CustomAlert';
@@ -33,6 +34,9 @@ const POSScreen = ({ navigation, route }) => {
   const [showSearch, setShowSearch] = useState(false);
   const { items, addItem, removeItem, clearCart, getItemCount, getTotal } = useCart();
   
+  // Track if initial load is done
+  const initialLoadDone = useRef(false);
+  
   // Responsive layout - no fixed calculations, use flex instead
   
   // Real-time data hooks
@@ -42,10 +46,26 @@ const POSScreen = ({ navigation, route }) => {
   // Get store name
   const storeName = storeInfo?.name || 'FlowPOS Store';
 
-  // Initialize feature service
+  // Initialize feature service and trigger initial load
   useEffect(() => {
     featureService.initialize();
+    
+    // Trigger initial products fetch
+    console.log('🏪 [POS] Initial mount - fetching products');
+    refreshProducts();
+    initialLoadDone.current = true;
   }, []);
+
+  // Refresh products when screen comes into focus (but skip initial mount)
+  useFocusEffect(
+    useCallback(() => {
+      // Skip the first call (initial mount) to avoid duplicate fetch
+      if (initialLoadDone.current && products.length > 0) {
+        console.log('🏪 [POS] Screen focused - refreshing products from backend');
+        refreshProducts();
+      }
+    }, [refreshProducts, products.length])
+  );
 
   // App tour guide
   const { showTour, completeTour, startTour } = useAppTour('POS');

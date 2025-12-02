@@ -18,8 +18,8 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
 import InventoryScreen from './manage/InventoryScreen';
+import productsService from '../services/ProductsService';
 import StoreSettingsScreen from './manage/StoreSettingsScreen';
-import MaterialsScreen from './manage/MaterialsScreen';
 import { PageLoader, InlineLoader } from '../components/LoadingSpinner';
 import { usePageLoading, useTabLoading } from '../hooks/usePageLoading';
 import featureService from '../services/FeatureService';
@@ -29,15 +29,19 @@ import { generateProductTags } from '../utils/tagGenerator';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import { useAuth } from '../context/AuthContext';
 
 
 const ManageScreen = ({ navigation }) => {
+  const { user, isAuthenticated, getStore } = useAuth();
   const [products, setProducts] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
+
   const [editingProduct, setEditingProduct] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [storeSetupCompleted, setStoreSetupCompleted] = useState(false);
   const [storeInfo, setStoreInfo] = useState(null);
+  const [userInfo, setUserInfo] = useState(null);
   
   // Page and tab loading states
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
@@ -59,7 +63,7 @@ const ManageScreen = ({ navigation }) => {
 
   const [businessType, setBusinessType] = useState('restaurant');
 
-  const tabs = ['Products', 'Inventory', 'Store Settings', 'Materials'];
+  const tabs = ['Products', 'Inventory', 'Store Settings'];
 
   // No animations needed
 
@@ -86,20 +90,45 @@ const ManageScreen = ({ navigation }) => {
     try {
       // No animation delays needed
 
-      // Load products and store setup status
-      const [storedProducts, setupCompleted, storeData] = await Promise.all([
-        AsyncStorage.getItem('products'),
-        AsyncStorage.getItem('storeSetupCompleted'),
-        AsyncStorage.getItem('storeInfo')
-      ]);
-
-      if (storedProducts) {
-        setProducts(JSON.parse(storedProducts));
+      // Load products from Supabase using ProductsService
+      console.log('🚨 MANAGESCREEN: Loading products from Supabase...');
+      try {
+        const supabaseProducts = await productsService.getProducts();
+        setProducts(supabaseProducts);
+        console.log('✅ MANAGESCREEN: Loaded products from Supabase:', supabaseProducts.length);
+        
+        // Also save to AsyncStorage for compatibility
+        await AsyncStorage.setItem('products', JSON.stringify(supabaseProducts));
+      } catch (error) {
+        console.error('❌ MANAGESCREEN: Error loading from Supabase, falling back to AsyncStorage:', error);
+        // Fallback to AsyncStorage if Supabase fails
+        const storedProducts = await AsyncStorage.getItem('products');
+        if (storedProducts) {
+          setProducts(JSON.parse(storedProducts));
+        }
       }
       
-      setStoreSetupCompleted(!!setupCompleted);
+      // Check store setup via backend API
+      const storeData = await getStore();
       if (storeData) {
-        setStoreInfo(JSON.parse(storeData));
+        setStoreSetupCompleted(true);
+        setStoreInfo(storeData);
+        console.log('✅ Store setup completed, store data loaded:', storeData.store_name);
+      } else {
+        setStoreSetupCompleted(false);
+        setStoreInfo(null);
+        console.log('⚠️ Store setup not completed');
+      }
+      
+      // Use real user data from AuthContext (which fetches from database)
+      if (user && isAuthenticated) {
+        setUserInfo(user);
+      } else {
+        // Fallback to AsyncStorage if not authenticated
+        const userData = await AsyncStorage.getItem('userData');
+        if (userData) {
+          setUserInfo(JSON.parse(userData));
+        }
       }
       
       // Finish loading on initial load
@@ -144,12 +173,11 @@ const ManageScreen = ({ navigation }) => {
       return; // Feature service will show upgrade prompt
     }
 
-    // Check if store setup is completed
+    // Check if store setup is completed via backend
     try {
-      const storeSetupCompleted = await AsyncStorage.getItem('storeSetupCompleted');
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
+      const storeData = await getStore();
       
-      if (!storeSetupCompleted || !storeInfo) {
+      if (!storeData) {
         Alert.alert(
           'Store Setup Required',
           'Please complete your store setup with business details before adding products. This helps create professional receipts and manage your business properly.',
@@ -209,16 +237,30 @@ const ManageScreen = ({ navigation }) => {
         {
           text: 'Delete',
           style: 'destructive',
-          onPress: () => {
-            const updatedProducts = products.filter(p => p.id !== productId);
-            saveProducts(updatedProducts);
+          onPress: async () => {
+            try {
+              console.log('🚨 MANAGESCREEN: Deleting product from Supabase:', productId);
+              await productsService.deleteProduct(productId);
+              
+              // Refresh products list from Supabase
+              const updatedProducts = await productsService.getProducts();
+              setProducts(updatedProducts);
+              
+              // Also update AsyncStorage for compatibility
+              await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+              
+              console.log('✅ MANAGESCREEN: Product deleted successfully');
+            } catch (error) {
+              console.error('❌ MANAGESCREEN: Error deleting product:', error);
+              Alert.alert('Error', 'Failed to delete product. Please try again.');
+            }
           },
         },
       ]
     );
   };
 
-  const handleSaveProduct = () => {
+  const handleSaveProduct = async () => {
     // Enhanced validation
     if (!formData.name.trim()) {
       Alert.alert('Validation Error', 'Product name is required.');
@@ -262,49 +304,61 @@ const ManageScreen = ({ navigation }) => {
       finalTags = generateProductTags(formData.name.trim(), businessType);
     }
 
-    let updatedProducts;
+    try {
+      if (editingProduct) {
+        // Update existing product using ProductsService
+        console.log('🚨 MANAGESCREEN: Updating product in Supabase:', editingProduct.id);
+        const updateData = {
+          name: formData.name.trim(),
+          price,
+          stock_quantity: formData.trackStock ? stock : 0,
+          category: finalTags[0] || 'General',
+          description: `Updated product from ManageScreen`,
+          image_url: formData.image || '',
+        };
+        
+        await productsService.updateProduct(editingProduct.id, updateData);
+      } else {
+        // Create new product using ProductsService
+        console.log('🚨 MANAGESCREEN: Creating new product in Supabase');
+        const productData = {
+          name: formData.name.trim(),
+          price,
+          stock_quantity: formData.trackStock ? stock : 0,
+          category: finalTags[0] || 'General',
+          description: `New product created from ManageScreen`,
+          image_url: formData.image || '',
+        };
+        
+        await productsService.createProduct(productData);
+      }
 
-    if (editingProduct) {
-      // Update existing product
-      updatedProducts = products.map(p =>
-        p.id === editingProduct.id
-          ? {
-            ...p,
-            name: formData.name.trim(),
-            price,
-            stock: formData.trackStock ? stock : null,
-            trackStock: formData.trackStock,
-            tags: finalTags,
-            image: formData.image,
-          }
-          : p
-      );
-    } else {
-      // Add new product
-      const newProduct = {
-        id: Date.now().toString(),
-        name: formData.name.trim(),
-        price,
-        stock: formData.trackStock ? stock : null,
-        trackStock: formData.trackStock,
-        tags: finalTags,
-        image: formData.image,
-      };
-      updatedProducts = [...products, newProduct];
+      // Refresh products list from Supabase
+      const updatedProducts = await productsService.getProducts();
+      setProducts(updatedProducts);
+      
+      // Also save to AsyncStorage for compatibility
+      await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+      if (updatedProducts.length > 0) {
+        await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      }
+
+      setModalVisible(false);
+      
+      // Show success message
+      const isFirstProduct = products.length === 0;
+      const message = editingProduct 
+        ? 'Product updated successfully!' 
+        : isFirstProduct 
+          ? 'Welcome! Your first product has been added.' 
+          : 'Product added successfully!';
+      
+      Alert.alert('Success', message);
+      
+    } catch (error) {
+      console.error('❌ MANAGESCREEN: Error saving product:', error);
+      Alert.alert('Error', 'Failed to save product. Please try again.');
     }
-
-    saveProducts(updatedProducts);
-    setModalVisible(false);
-    
-    // Show success message
-    const isFirstProduct = products.length === 0;
-    const message = editingProduct 
-      ? 'Product updated successfully!' 
-      : isFirstProduct 
-        ? 'Welcome! Your first product has been added.' 
-        : 'Product added successfully!';
-    
-    Alert.alert('Success', message);
   };
 
   const renderProduct = ({ item }) => (
@@ -440,7 +494,7 @@ const ManageScreen = ({ navigation }) => {
           >
             <Text style={styles.title}>Manage</Text>
             {storeSetupCompleted && storeInfo && (
-              <Text style={styles.storeSubtitle}>{storeInfo.name}</Text>
+              <Text style={styles.storeSubtitle}>{storeInfo.store_name}</Text>
             )}
           </TouchableOpacity>
         <View style={styles.headerButtons}>
@@ -449,6 +503,12 @@ const ManageScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('Subscription')}
           >
             <Text style={styles.subscriptionIcon}>👑</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.profileButton}
+            onPress={() => navigation.navigate('Profile')}
+          >
+            <Text style={styles.profileIcon}>👨‍💼</Text>
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.settingsButton}
@@ -534,7 +594,7 @@ const ManageScreen = ({ navigation }) => {
                 <>
                   <Text style={styles.emptyProductsIcon}>📦</Text>
                   <Text style={styles.emptyProductsTitle}>
-                    Welcome, {storeInfo?.name || 'Store Owner'}!
+                    Welcome, {storeInfo?.store_name || 'Store Owner'}!
                   </Text>
                   <Text style={styles.emptyProductsText}>
                     Your store setup is complete. Now add your first product to start managing your inventory and making sales.
@@ -574,9 +634,7 @@ const ManageScreen = ({ navigation }) => {
 
       {activeTab === 'Inventory' && <InventoryScreen />}
 
-      {activeTab === 'Store Settings' && <StoreSettingsScreen />}
-
-      {activeTab === 'Materials' && <MaterialsScreen />}
+      {activeTab === 'Store Settings' && <StoreSettingsScreen navigation={navigation} />}
 
       <Modal
         animationType="none"
@@ -670,6 +728,8 @@ const ManageScreen = ({ navigation }) => {
         </View>
       </Modal>
 
+
+
       {/* App Tour Guide */}
       <ImprovedTourGuide
         visible={showTour}
@@ -727,6 +787,15 @@ const styles = StyleSheet.create({
   },
   subscriptionIcon: {
     fontSize: 16,
+  },
+  profileButton: {
+    padding: 8,
+    marginRight: 4,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  profileIcon: {
+    fontSize: 22,
   },
   settingsButton: {
     padding: 8,
@@ -1160,6 +1229,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.background.surface,
   },
+
 });
 
 export default ManageScreen;

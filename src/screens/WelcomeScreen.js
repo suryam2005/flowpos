@@ -18,19 +18,19 @@ const WelcomeScreen = ({ navigation }) => {
       emoji: '🏪',
       title: 'Welcome to FlowPOS',
       subtitle: 'Your complete point-of-sale solution',
-      description: 'Manage your business with ease using our intuitive POS system designed for modern retailers.',
+      description: 'Streamline your business operations with our modern POS system designed for retailers, cafes, and small businesses.',
     },
     {
-      emoji: '📦',
-      title: 'Manage Products',
-      subtitle: 'Add and organize your inventory',
-      description: 'Create your product catalog with categories, pricing, and stock management. Everything you need in one place.',
+      emoji: '📈',
+      title: 'Smart Analytics',
+      subtitle: 'Track sales and inventory in real-time',
+      description: 'Get insights into your best-selling products, peak hours, and inventory levels with comprehensive analytics dashboard.',
     },
     {
-      emoji: '🛒',
-      title: 'Process Orders',
-      subtitle: 'Quick and intuitive checkout',
-      description: 'Fast checkout process with multiple payment options, receipt generation, and real-time inventory updates.',
+      emoji: '🚀',
+      title: 'Lightning Fast',
+      subtitle: 'Quick checkout and payments',
+      description: 'Process transactions in seconds with barcode scanning, multiple payment methods, and instant receipt generation.',
     },
   ];
 
@@ -50,16 +50,32 @@ const WelcomeScreen = ({ navigation }) => {
 
   const handleGetStarted = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    navigation.navigate('StoreSetup');
+    // Navigate to signup for new users
+    navigation.navigate('Signup');
+  };
+
+  const handleSignIn = () => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    navigation.navigate('Login');
   };
 
   const currentStepData = steps[currentStep];
 
   return (
     <SafeAreaView style={styles.container}>
-      {/* Skip Button in Header */}
+      {/* Header with Sign In and Skip */}
       <View style={styles.header}>
-        <View style={styles.headerSpacer} />
+        {currentStep === 0 ? (
+          <TouchableOpacity
+            style={styles.signInHeaderButton}
+            onPress={handleSignIn}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.signInHeaderText}>Sign In</Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.headerSpacer} />
+        )}
         <TouchableOpacity
           style={styles.skipButton}
           onPress={handleSkip}
@@ -101,15 +117,35 @@ const WelcomeScreen = ({ navigation }) => {
 
         {/* Navigation */}
         <View style={styles.navigation}>
-          <TouchableOpacity
-            style={styles.nextButton}
-            onPress={handleNext}
-            activeOpacity={0.8}
-          >
-            <Text style={styles.nextButtonText}>
-              {currentStep === steps.length - 1 ? 'Get Started' : 'Next'}
-            </Text>
-          </TouchableOpacity>
+          {currentStep === steps.length - 1 ? (
+            // Final step - show auth buttons
+            <>
+              <TouchableOpacity
+                style={styles.nextButton}
+                onPress={handleGetStarted}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.nextButtonText}>Create Account</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity
+                style={styles.signInButton}
+                onPress={handleSignIn}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.signInButtonText}>Already have an account? Sign In</Text>
+              </TouchableOpacity>
+            </>
+          ) : (
+            // Regular next button
+            <TouchableOpacity
+              style={styles.nextButton}
+              onPress={handleNext}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.nextButtonText}>Next</Text>
+            </TouchableOpacity>
+          )}
         </View>
       </View>
     </SafeAreaView>
@@ -222,6 +258,27 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: colors.background.surface,
+  },
+  signInButton: {
+    marginTop: 16,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  signInButtonText: {
+    fontSize: 16,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
+  signInHeaderButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.primary.main,
+    borderRadius: 20,
+  },
+  signInHeaderText: {
+    fontSize: 14,
+    color: '#fff',
+    fontWeight: '600',
   },
 });
 

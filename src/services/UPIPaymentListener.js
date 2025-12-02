@@ -242,44 +242,43 @@ class UPIPaymentListener {
     }
   }
 
-  // Android SMS listening implementation
+  // Android SMS listening implementation (simplified)
   startAndroidSMSListening() {
-    // Since we're in Expo managed workflow, we'll implement a polling mechanism
-    // to check for recent SMS messages periodically
-    this.smsPollingInterval = setInterval(async () => {
-      try {
-        await this.checkRecentSMS();
-      } catch (error) {
-        console.error('Error checking SMS:', error);
-      }
-    }, 5000); // Check every 5 seconds
+    // Since direct SMS reading is complex in Expo, we'll use a simplified approach
+    // that focuses on manual confirmation with smart timing
+    console.log('📱 SMS listening started - using manual confirmation with smart detection');
+    
+    // Set up a simple timer to remind about pending payments
+    this.paymentReminderInterval = setInterval(() => {
+      this.checkPendingPayments();
+    }, 10000); // Check every 10 seconds
   }
 
-  // Check recent SMS messages (fallback method)
-  async checkRecentSMS() {
-    // This is a simplified implementation
-    // In a production app, you might want to use a native module
-    // or implement a more sophisticated SMS checking mechanism
-
-    // For now, we'll simulate SMS checking by looking at stored messages
-    try {
-      const recentMessages = await AsyncStorage.getItem('recentSMSMessages');
-      if (recentMessages) {
-        const messages = JSON.parse(recentMessages);
-        const now = Date.now();
-
-        // Check messages from last 2 minutes
-        const recentSMS = messages.filter(msg =>
-          now - msg.timestamp < 2 * 60 * 1000
-        );
-
-        for (const sms of recentSMS) {
-          this.processSMSMessage(sms.body, sms.sender);
+  // Check pending payments and provide smart reminders
+  checkPendingPayments() {
+    const now = Date.now();
+    
+    for (const [paymentId, payment] of this.activePayments.entries()) {
+      const timeSincePayment = now - payment.timestamp;
+      
+      // If payment is pending for more than 30 seconds, it might need manual confirmation
+      if (timeSincePayment > 30000 && payment.status === 'pending') {
+        console.log(`⏰ Payment ${paymentId} pending for ${Math.round(timeSincePayment/1000)}s - may need manual confirmation`);
+        
+        // Auto-suggest manual confirmation after 1 minute
+        if (timeSincePayment > 60000) {
+          this.suggestManualConfirmation(paymentId, payment);
         }
       }
-    } catch (error) {
-      console.error('Error checking recent SMS:', error);
     }
+  }
+
+  // Suggest manual confirmation for long-pending payments
+  suggestManualConfirmation(paymentId, payment) {
+    console.log(`💡 Suggesting manual confirmation for payment ${paymentId}`);
+    
+    // This could trigger a notification or callback to suggest manual confirmation
+    // For now, we'll just log it
   }
 
   // Process incoming SMS message
@@ -354,6 +353,11 @@ class UPIPaymentListener {
     if (this.smsPollingInterval) {
       clearInterval(this.smsPollingInterval);
       this.smsPollingInterval = null;
+    }
+
+    if (this.paymentReminderInterval) {
+      clearInterval(this.paymentReminderInterval);
+      this.paymentReminderInterval = null;
     }
 
     this.isListening = false;

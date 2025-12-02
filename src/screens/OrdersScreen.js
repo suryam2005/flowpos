@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,7 +9,9 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useOrders } from '../hooks/useOrders';
 import * as Haptics from 'expo-haptics';
 import { fadeIn } from '../utils/animations';
 import { PageLoader } from '../components/LoadingSpinner';
@@ -19,7 +21,16 @@ import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
 
 const OrdersScreen = ({ navigation }) => {
-  const [orders, setOrders] = useState([]);
+  const { 
+    orders, 
+    loading, 
+    error,
+    authError,
+    refreshOrders, 
+    pendingCount, 
+    isOnline,
+    syncOrders 
+  } = useOrders();
   const [refreshing, setRefreshing] = useState(false);
 
   // Page loading state
@@ -28,48 +39,31 @@ const OrdersScreen = ({ navigation }) => {
   // App tour guide
   const { showTour, completeTour } = useAppTour('Orders');
 
+  // Track if initial load is done
+  const initialLoadDone = useRef(false);
+
   useEffect(() => {
-    loadOrders();
-    const unsubscribe = navigation.addListener('focus', loadOrders);
+    // Orders are loaded automatically by useOrders hook
+    finishLoading();
+    initialLoadDone.current = true;
+  }, []);
 
-    return unsubscribe;
-  }, [navigation]);
-
-  const loadOrders = async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    }
-
-    try {
-      // Add slight delay for smooth refresh animation
-      if (isRefresh) {
-        await new Promise(resolve => setTimeout(resolve, 800));
+  // Refresh orders when screen comes into focus (but skip initial mount)
+  useFocusEffect(
+    useCallback(() => {
+      // Skip the first call (initial mount) since useOrders already loads data
+      if (initialLoadDone.current) {
+        console.log('📋 [Orders] Screen focused - refreshing orders');
+        refreshOrders();
       }
+    }, [refreshOrders])
+  );
 
-      const storedOrders = await AsyncStorage.getItem('orders');
-      if (storedOrders) {
-        setOrders(JSON.parse(storedOrders));
-      }
-
-      // Finish loading animation on initial load
-      if (!isRefresh) {
-        finishLoading();
-      }
-    } catch (error) {
-      console.error('Error loading orders:', error);
-      if (!isRefresh) {
-        finishLoading();
-      }
-    } finally {
-      if (isRefresh) {
-        setRefreshing(false);
-      }
-    }
-  };
-
-  const onRefresh = () => {
-    loadOrders(true);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    await refreshOrders();
+    setRefreshing(false);
   };
 
   const formatDate = (timestamp) => {
@@ -139,13 +133,10 @@ const OrdersScreen = ({ navigation }) => {
       >
         <View style={styles.orderHeader}>
           <View>
-            <Text style={styles.orderId}>Order ID: {item.id}</Text>
+            <Text style={styles.orderId}>Order #{item.orderNumber || item.id}</Text>
             <Text style={styles.orderDate}>
               {formatDate(item.timestamp)} at {formatTime(item.timestamp)}
             </Text>
-          </View>
-          <View style={styles.statusBadge}>
-            <Text style={styles.statusText}>completed</Text>
           </View>
         </View>
 
@@ -211,7 +202,16 @@ const OrdersScreen = ({ navigation }) => {
       <View style={[styles.content, contentStyle]}>
         <View style={styles.header}>
           <Text style={styles.title}>Orders</Text>
+          <Text style={styles.subtitle}>
+            {orders.length} {orders.length === 1 ? 'order' : 'orders'}
+          </Text>
         </View>
+
+        {error && (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+          </View>
+        )}
 
         <View style={{ flex: 1, opacity: 1 }}>
           {orders.length === 0 ? (
@@ -272,6 +272,26 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text.primary,
   },
+  subtitle: {
+    color: colors.text.secondary,
+    fontSize: 16,
+    fontWeight: '500',
+  },
+  errorContainer: {
+    backgroundColor: colors.error.light,
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    marginHorizontal: 20,
+    marginBottom: 10,
+    borderRadius: 8,
+    borderLeftWidth: 4,
+    borderLeftColor: colors.error.main,
+  },
+  errorText: {
+    color: colors.error.main,
+    fontSize: 14,
+    fontWeight: '500',
+  },
   ordersList: {
     padding: 20,
     paddingBottom: 140, // Reduced spacing
@@ -306,17 +326,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
   },
-  statusBadge: {
-    backgroundColor: colors.success.background,
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusText: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#065f46',
-  },
+
   orderItems: {
     marginBottom: 12,
   },
@@ -358,26 +368,36 @@ const styles = StyleSheet.create({
   invoiceButton: {
     backgroundColor: colors.gray[100],
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 6,
     borderWidth: 1,
     borderColor: colors.border.light,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
   },
   invoiceButtonText: {
     fontSize: 12,
     fontWeight: '500',
     color: colors.text.primary,
+    textAlign: 'center',
+    lineHeight: 16,
   },
   sendButton: {
     backgroundColor: colors.success.main,
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 6,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: 70,
   },
   sendButtonText: {
     fontSize: 12,
     fontWeight: '500',
     color: colors.background.surface,
+    textAlign: 'center',
+    lineHeight: 16,
   },
   emptyState: {
     flex: 1,

@@ -13,6 +13,7 @@ export const colors = {
     primary: '#1C1C1E',       // Charcoal for primary text
     secondary: '#6B7280',     // Cool gray for secondary text
     tertiary: '#9CA3AF',      // Light gray for subtle text
+    disabled: '#9CA3AF',      // Disabled text color
     inverse: '#F3F4F6',       // Off-white for dark backgrounds
   },
 
@@ -51,6 +52,7 @@ export const colors = {
 
   warning: {
     main: '#F59E0B',          // Amber for warnings
+    dark: '#92400E',          // Darker amber for text
     light: '#FBBF24',         // Lighter amber
     background: '#FEF3C7',    // Light amber background
     border: '#FDE68A',        // Light amber border
@@ -106,6 +108,7 @@ export const colors = {
 
   // Shadows
   shadow: {
+    default: '#000000',       // Default shadow color
     sm: 'rgba(0, 0, 0, 0.05)',
     md: 'rgba(0, 0, 0, 0.08)',
     lg: 'rgba(0, 0, 0, 0.12)',
