@@ -123,7 +123,7 @@ export const colors = {
 
   payment: {
     cash: '#10B981',          // Green for cash payments
-    card: '#6366F1',          // Indigo for card payments
+    card: '#2563EB',          // Blue for card payments
     upi: '#2563EB',           // Blue for UPI payments
   },
 

@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     width: 40,
     height: 40,
     borderRadius: 20,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -498,7 +498,7 @@ const styles = StyleSheet.create({
   },
   currentPlanCard: {
     borderColor: colors.primary.main,
-    backgroundColor: '#faf5ff',
+    backgroundColor: colors.primary.background,
   },
   planHeader: {
     marginBottom: 16,
@@ -564,7 +564,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary.main,
   },
   upgradeButtonSecondary: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     borderWidth: 1,
     borderColor: colors.border.medium,
   },
@@ -625,7 +625,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   supportButton: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingVertical: 12,
     paddingHorizontal: 24,
     borderRadius: 12,

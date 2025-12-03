@@ -302,8 +302,8 @@ const MaterialsScreen = () => {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor="#8b5cf6"
-                  colors={['#8b5cf6']}
+                  tintColor={colors.primary.main}
+                  colors={[colors.primary.main]}
                 />
               }
             />
@@ -322,8 +322,8 @@ const MaterialsScreen = () => {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor="#8b5cf6"
-                  colors={['#8b5cf6']}
+                  tintColor={colors.primary.main}
+                  colors={[colors.primary.main]}
                 />
               }
             />
@@ -471,14 +471,14 @@ const styles = StyleSheet.create({
   },
   tabButtonActive: {
     borderBottomWidth: 2,
-    borderBottomColor: '#8b5cf6',
+    borderBottomColor: colors.primary.main,
   },
   tabButtonText: {
     fontSize: 16,
     color: colors.text.secondary,
   },
   tabButtonTextActive: {
-    color: '#8b5cf6',
+    color: colors.primary.main,
     fontWeight: '600',
   },
   content: {
@@ -538,7 +538,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   actionButton: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -574,11 +574,11 @@ const styles = StyleSheet.create({
     position: 'absolute',
     bottom: 20,
     right: 20,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 25,
-    shadowColor: '#8b5cf6',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
@@ -644,7 +644,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
     borderRadius: 8,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
   },
   cancelButtonText: {
     fontSize: 16,
@@ -656,7 +656,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginLeft: 8,
     borderRadius: 8,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
   },
   saveButtonText: {
     fontSize: 16,

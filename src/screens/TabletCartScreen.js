@@ -599,11 +599,11 @@ const styles = StyleSheet.create({
   },
   qrPayButton: {
     flex: 1,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#8b5cf6',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,

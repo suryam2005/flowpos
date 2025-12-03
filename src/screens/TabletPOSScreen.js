@@ -269,8 +269,8 @@ const TabletPOSScreen = ({ navigation }) => {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor="#8b5cf6"
-                  colors={['#8b5cf6']}
+                  tintColor={colors.primary.main}
+                  colors={[colors.primary.main]}
                   progressBackgroundColor="#ffffff"
                   title="Pull to refresh products..."
                   titleColor="#6b7280"

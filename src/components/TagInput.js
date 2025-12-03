@@ -197,7 +197,7 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
     marginRight: 8,
     borderWidth: 1,
-    borderColor: '#93c5fd',
+    borderColor: colors.primary.light,
   },
   tagText: {
     fontSize: 14,

@@ -8,6 +8,10 @@ import {
   Animated,
 } from 'react-native';
 import { colors } from '../styles/colors';
+import AlertQueueManager from '../services/AlertQueueManager';
+
+// Singleton instance of AlertQueueManager shared across all CustomAlert instances
+const alertQueueManager = new AlertQueueManager();
 
 const CustomAlert = ({ 
   visible, 
@@ -17,10 +21,42 @@ const CustomAlert = ({
   onClose,
   type = 'default' // default, success, warning, error
 }) => {
-  const scaleAnim = new Animated.Value(0);
+  const scaleAnim = React.useRef(new Animated.Value(0)).current;
+  const [currentAlert, setCurrentAlert] = React.useState(null);
+  const [isVisible, setIsVisible] = React.useState(false);
 
+  // Update current alert from queue
   React.useEffect(() => {
-    if (visible) {
+    const updateAlert = () => {
+      const alert = alertQueueManager.getCurrentAlert();
+      setCurrentAlert(alert);
+      setIsVisible(!!alert);
+    };
+
+    // Initial update
+    updateAlert();
+
+    // Poll for queue changes (simple approach)
+    const interval = setInterval(updateAlert, 100);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Handle external visible prop by enqueueing alerts
+  React.useEffect(() => {
+    if (visible && title) {
+      alertQueueManager.enqueue({
+        title,
+        message,
+        type,
+        buttons
+      });
+    }
+  }, [visible, title, message, type, buttons]);
+
+  // Animate alert appearance
+  React.useEffect(() => {
+    if (isVisible) {
       Animated.spring(scaleAnim, {
         toValue: 1,
         tension: 150,
@@ -30,10 +66,16 @@ const CustomAlert = ({
     } else {
       scaleAnim.setValue(0);
     }
-  }, [visible]);
+  }, [isVisible, scaleAnim]);
 
-  const getTypeStyles = () => {
-    switch (type) {
+  // Use current alert from queue or fallback to props
+  const displayTitle = currentAlert?.title || title;
+  const displayMessage = currentAlert?.message || message;
+  const displayType = currentAlert?.type || type;
+  const displayButtons = currentAlert?.buttons || buttons;
+
+  const getTypeStylesForType = (alertType) => {
+    switch (alertType) {
       case 'success':
         return {
           icon: '✅',
@@ -61,23 +103,44 @@ const CustomAlert = ({
     }
   };
 
-  const typeStyles = getTypeStyles();
+  const typeStyles = getTypeStylesForType(displayType);
 
   const handleButtonPress = (button) => {
+    // Execute button's onPress handler if provided
     if (button.onPress) {
       button.onPress();
     }
+
+    // Dequeue current alert and show next
+    alertQueueManager.dequeue();
+    
+    // Call external onClose if provided
     if (onClose) {
       onClose();
     }
   };
 
+  const handleClose = () => {
+    // Dequeue current alert and show next
+    alertQueueManager.dequeue();
+    
+    // Call external onClose if provided
+    if (onClose) {
+      onClose();
+    }
+  };
+
+  // Don't render if no alert is visible
+  if (!isVisible && !currentAlert) {
+    return null;
+  }
+
   return (
     <Modal
       transparent={true}
-      visible={visible}
+      visible={isVisible}
       animationType="none"
-      onRequestClose={onClose}
+      onRequestClose={handleClose}
     >
       <View style={styles.overlay}>
         <Animated.View 
@@ -93,22 +156,22 @@ const CustomAlert = ({
 
           {/* Content */}
           <View style={styles.content}>
-            <Text style={styles.title}>{title}</Text>
-            {message && <Text style={styles.message}>{message}</Text>}
+            <Text style={styles.title}>{displayTitle}</Text>
+            {displayMessage && <Text style={styles.message}>{displayMessage}</Text>}
           </View>
 
           {/* Buttons */}
           <View style={styles.buttonContainer}>
-            {buttons.map((button, index) => (
+            {displayButtons.map((button, index) => (
               <TouchableOpacity
                 key={index}
                 style={[
                   styles.button,
                   button.style === 'destructive' && styles.destructiveButton,
                   button.style === 'cancel' && styles.cancelButton,
-                  buttons.length === 1 && styles.singleButton,
-                  index === 0 && buttons.length > 1 && styles.firstButton,
-                  index === buttons.length - 1 && buttons.length > 1 && styles.lastButton,
+                  displayButtons.length === 1 && styles.singleButton,
+                  index === 0 && displayButtons.length > 1 && styles.firstButton,
+                  index === displayButtons.length - 1 && displayButtons.length > 1 && styles.lastButton,
                 ]}
                 onPress={() => handleButtonPress(button)}
                 activeOpacity={0.8}
@@ -198,7 +261,7 @@ const styles = StyleSheet.create({
     marginBottom: 0,
   },
   cancelButton: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
   },
   destructiveButton: {
     backgroundColor: colors.error.main,
@@ -215,5 +278,8 @@ const styles = StyleSheet.create({
     color: colors.background.surface,
   },
 });
+
+// Export the singleton AlertQueueManager instance for use by other components
+export { alertQueueManager };
 
 export default CustomAlert;

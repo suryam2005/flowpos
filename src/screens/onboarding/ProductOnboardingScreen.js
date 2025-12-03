@@ -483,7 +483,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 6,
-    backgroundColor: colors.gray[200],
+    backgroundColor: colors.gray['200'],
     borderRadius: 3,
     overflow: 'hidden',
     marginBottom: 8,
@@ -617,7 +617,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   continueButtonDisabled: {
-    backgroundColor: colors.gray[400],
+    backgroundColor: colors.gray['400'],
   },
   continueButtonText: {
     fontSize: 16,

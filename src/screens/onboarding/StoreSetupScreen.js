@@ -705,7 +705,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 4,
-    backgroundColor: colors.gray[200],
+    backgroundColor: colors.gray['200'],
     borderRadius: 2,
     overflow: 'hidden',
   },
@@ -927,7 +927,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     flex: 1,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',

@@ -360,7 +360,7 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
     borderRadius: 8,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
   },
   headerTitle: {
     flex: 1,
@@ -410,7 +410,7 @@ const styles = StyleSheet.create({
   cancelButton: {
     paddingHorizontal: 16,
     paddingVertical: 8,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     borderRadius: 8,
     alignItems: 'center',
   },

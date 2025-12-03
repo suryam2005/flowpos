@@ -464,7 +464,7 @@ const styles = StyleSheet.create({
     color: colors.background.surface,
   },
   buttonDisabled: {
-    backgroundColor: colors.gray[400],
+    backgroundColor: colors.gray['400'],
   },
   buttonTextDisabled: {
     color: colors.background.surface,

@@ -231,7 +231,7 @@ const styles = StyleSheet.create({
     height: 16,
     borderRadius: 8,
     borderWidth: 2,
-    borderColor: colors.gray[300],
+    borderColor: colors.gray['300'],
     marginHorizontal: 8,
   },
   pinDotFilled: {

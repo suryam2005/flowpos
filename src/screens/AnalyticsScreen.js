@@ -659,7 +659,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: colors.gray[100],
+    borderColor: colors.gray['100'],
   },
   statTitle: {
     fontSize: 14,
@@ -694,11 +694,11 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: colors.gray[100],
+    borderColor: colors.gray['100'],
   },
   revenueCard: {
     borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
+    borderBottomColor: colors.gray['100'],
   },
   revenueCardContent: {
     flexDirection: 'row',
@@ -730,13 +730,13 @@ const styles = StyleSheet.create({
     shadowRadius: 2,
     elevation: 2,
     borderWidth: 1,
-    borderColor: colors.gray[100],
+    borderColor: colors.gray['100'],
   },
   productRank: {
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -764,7 +764,7 @@ const styles = StyleSheet.create({
   productImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
@@ -818,7 +818,7 @@ const styles = StyleSheet.create({
   },
   chartTabs: {
     flexDirection: 'row',
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     borderRadius: 8,
     padding: 2,
   },
@@ -854,7 +854,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: colors.gray[100],
+    borderColor: colors.gray['100'],
   },
   chartContainer: {
     width: '100%',

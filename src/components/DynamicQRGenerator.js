@@ -487,7 +487,7 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 8,
     borderRadius: 20,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
   },
   closeButtonText: {
     fontSize: 16,
@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   customerName: {
-    color: '#8b5cf6',
+    color: colors.primary.main,
     fontWeight: '500',
   },
   qrContainer: {
@@ -611,7 +611,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   upiOption: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 16,
@@ -619,8 +619,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border.light,
   },
   upiOptionSelected: {
-    backgroundColor: '#8b5cf6',
-    borderColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   upiOptionText: {
     color: colors.text.secondary,

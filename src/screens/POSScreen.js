@@ -15,7 +15,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
-import CustomAlert from '../components/CustomAlert';
+import CustomAlert, { alertQueueManager } from '../components/CustomAlert';
 import { webScrollFix, webContainerFix, webScrollableContainer } from '../styles/webStyles';
 import { useRealtimeProducts, useRealtimeStoreInfo } from '../hooks/useRealtimeData';
 import ResponsiveText from '../components/ResponsiveText';
@@ -23,16 +23,15 @@ import featureService from '../services/FeatureService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import stockValidator from '../services/StockValidator';
 
 
 
 const POSScreen = ({ navigation, route }) => {
   const [selectedTag, setSelectedTag] = useState('All Items');
-  const [showAlert, setShowAlert] = useState(false);
-  const [alertConfig, setAlertConfig] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
-  const { items, addItem, removeItem, clearCart, getItemCount, getTotal } = useCart();
+  const { items, addItem, removeItem, clearCart, getItemCount, getTotal, lastError, clearError } = useCart();
   
   // Track if initial load is done
   const initialLoadDone = useRef(false);
@@ -56,6 +55,9 @@ const POSScreen = ({ navigation, route }) => {
     initialLoadDone.current = true;
   }, []);
 
+  // Track previous products state for comparison
+  const previousProductsRef = useRef([]);
+  
   // Refresh products when screen comes into focus (but skip initial mount)
   useFocusEffect(
     useCallback(() => {
@@ -67,8 +69,104 @@ const POSScreen = ({ navigation, route }) => {
     }, [refreshProducts, products.length])
   );
 
+  // Sync stock changes and update cart limits when products change
+  useEffect(() => {
+    // Skip if this is the initial load or no products yet
+    if (!initialLoadDone.current || products.length === 0 || items.length === 0) {
+      previousProductsRef.current = products;
+      return;
+    }
+
+    // Check for stock changes in products that are in the cart
+    const stockChanges = [];
+    
+    items.forEach(cartItem => {
+      const currentProduct = products.find(p => p.id === cartItem.id);
+      const previousProduct = previousProductsRef.current.find(p => p.id === cartItem.id);
+      
+      if (currentProduct && previousProduct && currentProduct.trackStock) {
+        const currentStock = currentProduct.stock_quantity || currentProduct.stock || 0;
+        const previousStock = previousProduct.stock_quantity || previousProduct.stock || 0;
+        
+        // Check if stock decreased
+        if (currentStock < previousStock) {
+          const maxAddable = stockValidator.getMaxAddableQuantity(currentProduct, cartItem.quantity);
+          
+          stockChanges.push({
+            productId: cartItem.id,
+            productName: cartItem.name,
+            previousStock,
+            currentStock,
+            cartQuantity: cartItem.quantity,
+            maxAddable,
+            outOfStock: currentStock === 0,
+            exceedsStock: cartItem.quantity > currentStock
+          });
+        }
+      }
+    });
+
+    // Update previous products reference
+    previousProductsRef.current = products;
+
+    // Display notifications for stock changes
+    if (stockChanges.length > 0) {
+      stockChanges.forEach(change => {
+        if (change.outOfStock) {
+          // Product went out of stock
+          alertQueueManager.enqueue({
+            title: 'Stock Update',
+            message: `${change.productName} is now out of stock. You have ${change.cartQuantity} in your cart.`,
+            type: 'warning',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        } else if (change.exceedsStock) {
+          // Cart quantity exceeds new stock level
+          alertQueueManager.enqueue({
+            title: 'Stock Limit Changed',
+            message: `${change.productName} stock decreased to ${change.currentStock}. You have ${change.cartQuantity} in your cart. You cannot add more items.`,
+            type: 'warning',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        } else if (change.maxAddable === 0) {
+          // Can't add more but current cart quantity is still valid
+          alertQueueManager.enqueue({
+            title: 'Stock Limit Reached',
+            message: `${change.productName} stock decreased to ${change.currentStock}. You have ${change.cartQuantity} in your cart and cannot add more.`,
+            type: 'warning',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        } else {
+          // Stock decreased but can still add some
+          alertQueueManager.enqueue({
+            title: 'Stock Updated',
+            message: `${change.productName} stock decreased to ${change.currentStock}. You can add ${change.maxAddable} more.`,
+            type: 'default',
+            buttons: [{ text: 'OK', style: 'default' }],
+          });
+        }
+      });
+    }
+  }, [products, items]);
+
   // App tour guide
   const { showTour, completeTour, startTour } = useAppTour('POS');
+
+  // Handle cart errors (e.g., stock limit exceeded)
+  useEffect(() => {
+    if (lastError) {
+      alertQueueManager.enqueue({
+        title: lastError.type === 'STOCK_LIMIT_EXCEEDED' ? 'Stock Limit Reached' : 'Notice',
+        message: lastError.message,
+        type: 'warning',
+        buttons: [{ 
+          text: 'OK', 
+          style: 'default',
+          onPress: () => clearError()
+        }],
+      });
+    }
+  }, [lastError, clearError]);
 
   // Handle tour trigger from route params
   useEffect(() => {
@@ -122,15 +220,21 @@ const POSScreen = ({ navigation, route }) => {
   }, [products, selectedTag, searchQuery]);
 
   const handleAddToCart = (product) => {
-    // Only check stock if tracking is enabled
-    if (product.trackStock && product.stock <= 0) {
-      setAlertConfig({
-        title: 'Out of Stock',
-        message: `${product.name} is currently out of stock.`,
+    // Get current cart quantity for this product
+    const cartItem = items.find(item => item.id === product.id);
+    const currentCartQuantity = cartItem ? cartItem.quantity : 0;
+    
+    // Validate using StockValidator
+    const validation = stockValidator.validateAgainstCart(product, items, 1);
+    
+    // If validation fails, show appropriate error message using queue
+    if (!validation.isValid) {
+      alertQueueManager.enqueue({
+        title: 'Stock Limit Reached',
+        message: validation.message,
         type: 'warning',
         buttons: [{ text: 'OK', style: 'default' }],
       });
-      setShowAlert(true);
       return;
     }
     
@@ -148,7 +252,7 @@ const POSScreen = ({ navigation, route }) => {
 
   const handleClearCart = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    setAlertConfig({
+    alertQueueManager.enqueue({
       title: 'Clear Cart',
       message: 'Are you sure you want to remove all items from the cart?',
       type: 'warning',
@@ -161,7 +265,6 @@ const POSScreen = ({ navigation, route }) => {
         }
       ],
     });
-    setShowAlert(true);
   };
 
   const getProductQuantity = (productId) => {
@@ -172,12 +275,25 @@ const POSScreen = ({ navigation, route }) => {
   const renderProduct = ({ item }) => {
     const quantity = getProductQuantity(item.id);
     
+    // Check if increment should be disabled (stock limit reached)
+    const incrementDisabled = stockValidator.shouldDisableIncrement(item, quantity);
+    
+    // Get remaining addable quantity
+    const maxAddable = stockValidator.getMaxAddableQuantity(item, quantity);
+    
+    // Determine if product can be added
+    const canAdd = !incrementDisabled && maxAddable > 0;
+    
     return (
       <TouchableOpacity
-        style={styles.productCard}
+        style={[
+          styles.productCard,
+          incrementDisabled && styles.productCardDisabled
+        ]}
         onPress={() => handleAddToCart(item)}
         onLongPress={() => handleLongPress(item)}
-        activeOpacity={0.8}
+        activeOpacity={incrementDisabled ? 1 : 0.8}
+        disabled={incrementDisabled}
       >
         {/* Image Section - 60% of card */}
         <View style={styles.productImage}>
@@ -205,16 +321,23 @@ const POSScreen = ({ navigation, route }) => {
           {item.trackStock && (
             <View style={styles.stockContainer}>
               <Text style={styles.productStock}>
-                {item.stock} available
+                {quantity > 0 ? `${maxAddable} more available` : `${item.stock} available`}
               </Text>
             </View>
           )}
         </View>
         
         {/* Badges */}
-        {item.trackStock && item.stock <= 5 && (
+        {item.trackStock && item.stock <= 5 && item.stock > 0 && (
           <View style={styles.lowStockBadge}>
             <Text style={styles.lowStockText}>Low Stock</Text>
+          </View>
+        )}
+        
+        {/* Out of stock badge */}
+        {item.trackStock && incrementDisabled && (
+          <View style={styles.outOfStockBadge}>
+            <Text style={styles.outOfStockText}>Stock Limit</Text>
           </View>
         )}
         
@@ -381,15 +504,8 @@ const POSScreen = ({ navigation, route }) => {
         </View>
       )}
 
-      {/* Custom Alert */}
-      <CustomAlert
-        visible={showAlert}
-        title={alertConfig.title}
-        message={alertConfig.message}
-        type={alertConfig.type}
-        buttons={alertConfig.buttons}
-        onClose={() => setShowAlert(false)}
-      />
+      {/* Custom Alert - managed by AlertQueueManager */}
+      <CustomAlert />
 
       {/* App Tour Guide */}
       <ImprovedTourGuide
@@ -449,7 +565,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 12,
@@ -466,7 +582,7 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     height: 36,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     borderRadius: 18,
     paddingHorizontal: 16,
     fontSize: 14,
@@ -476,7 +592,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: 12,
@@ -497,7 +613,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     marginRight: 8,
     borderRadius: 16,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     minWidth: 80,
     alignItems: 'center',
   },
@@ -599,7 +715,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   stockContainer: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -624,6 +740,25 @@ const styles = StyleSheet.create({
     fontSize: 10,
     color: '#d97706',
     fontWeight: '500',
+  },
+  outOfStockBadge: {
+    position: 'absolute',
+    top: 8,
+    left: 8,
+    backgroundColor: colors.error.background,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.error.border,
+  },
+  outOfStockText: {
+    fontSize: 10,
+    color: colors.error.main,
+    fontWeight: '600',
+  },
+  productCardDisabled: {
+    opacity: 0.6,
   },
   quantityBadge: {
     position: 'absolute',
@@ -658,7 +793,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   cartSummaryContent: {
-    backgroundColor: colors.gray[800],
+    backgroundColor: colors.gray['800'],
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -670,7 +805,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   cartItems: {
-    color: colors.gray[400],
+    color: colors.gray['400'],
     marginBottom: 2,
   },
   cartTotal: {

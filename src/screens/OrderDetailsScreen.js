@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.text.primary,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
@@ -203,7 +203,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: colors.gray[100],
+    borderBottomColor: colors.gray['100'],
   },
   itemEmoji: {
     width: 40,
@@ -289,7 +289,7 @@ const styles = StyleSheet.create({
   },
   backButton: {
     flex: 1,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     borderRadius: 12,
     paddingVertical: 16,
     alignItems: 'center',

@@ -431,9 +431,9 @@ const StoreSettingsScreen = ({ navigation }) => {
         value={value}
         onValueChange={isEditing ? onValueChange : undefined}
         disabled={!isEditing}
-        trackColor={{ false: colors.gray[100], true: isEditing ? '#8b5cf6' : colors.gray[200] }}
-        thumbColor={value ? (isEditing ? colors.background.surface : colors.gray[300]) : colors.background.surface}
-        ios_backgroundColor={colors.gray[100]}
+        trackColor={{ false: colors.gray['100'], true: isEditing ? colors.primary.main : colors.gray['200'] }}
+        thumbColor={value ? (isEditing ? colors.background.surface : colors.gray['300']) : colors.background.surface}
+        ios_backgroundColor={colors.gray['100']}
       />
     </View>
   );
@@ -810,7 +810,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   cancelButton: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 8,
@@ -873,7 +873,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   textInputDisabled: {
-    backgroundColor: colors.gray[50],
+    backgroundColor: colors.gray['50'],
     color: colors.text.secondary,
     borderColor: colors.border.light,
   },
@@ -923,8 +923,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   currencyOptionSelected: {
-    borderColor: '#8b5cf6',
-    backgroundColor: colors.gray[100],
+    borderColor: colors.primary.main,
+    backgroundColor: colors.gray['100'],
   },
   currencyOptionText: {
     fontSize: 16,
@@ -933,7 +933,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   currencyOptionTextSelected: {
-    color: '#8b5cf6',
+    color: colors.primary.main,
   },
   currencyName: {
     fontSize: 12,
@@ -970,7 +970,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   upiTestButton: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,

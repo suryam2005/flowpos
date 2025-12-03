@@ -476,7 +476,7 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   numberButtonDisabled: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
   },
   numberButtonText: {
     fontSize: 24,

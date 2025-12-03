@@ -307,7 +307,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: colors.gray[100],
+    borderColor: colors.gray['100'],
     overflow: 'hidden', // Prevent content overflow
   },
   orderHeader: {
@@ -346,7 +346,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 12,
     borderTopWidth: 1,
-    borderTopColor: colors.gray[100],
+    borderTopColor: colors.gray['100'],
   },
   orderInfo: {
     flex: 1,
@@ -366,7 +366,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   invoiceButton: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 6,

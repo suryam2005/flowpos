@@ -392,7 +392,7 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   currentPlanCard: {
-    borderColor: '#8b5cf6',
+    borderColor: colors.primary.main,
     backgroundColor: '#f3f4f6',
   },
   planHeader: {
@@ -417,7 +417,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -456,7 +456,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   upgradeButtonPrimary: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
   },
   upgradeButtonSecondary: {
     backgroundColor: '#f3f4f6',

@@ -3,13 +3,16 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const API_CONFIGS = [
-  // Cloud backend (Railway production)
-  'https://flowposbackend-production.up.railway.app',
+  // Local backend (for development) - Your current IP
+  'http://192.168.1.2:3001',
   
-  // Localhost fallbacks (for local development)
+  // Localhost fallbacks
   'http://localhost:3001',
   'http://127.0.0.1:3001',
   'http://10.0.2.2:3001', // Android emulator
+  
+  // Cloud backend (Railway production) - fallback
+  'https://flowposbackend-production.up.railway.app',
 ];
 
 // Export the primary API base URL

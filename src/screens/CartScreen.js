@@ -938,7 +938,7 @@ const styles = StyleSheet.create({
   itemImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
@@ -968,7 +968,7 @@ const styles = StyleSheet.create({
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
   },

@@ -684,7 +684,7 @@ const ManageScreen = ({ navigation }) => {
                     <Switch
                       value={formData.trackStock}
                       onValueChange={(value) => setFormData({ ...formData, trackStock: value })}
-                      trackColor={{ false: colors.border.medium, true: '#93c5fd' }}
+                      trackColor={{ false: colors.border.medium, true: colors.primary.light }}
                       thumbColor={formData.trackStock ? colors.primary.main : colors.text.tertiary}
                     />
                   </View>
@@ -898,7 +898,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: colors.gray[100],
+    borderColor: colors.gray['100'],
   },
   productImage: {
     width: 48,
@@ -915,7 +915,7 @@ const styles = StyleSheet.create({
   productImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 8,
@@ -1053,7 +1053,7 @@ const styles = StyleSheet.create({
     width: 48,
     height: 48,
     borderRadius: 24,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     justifyContent: 'center',
     alignItems: 'center',
     margin: 4,
@@ -1081,7 +1081,7 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     paddingHorizontal: 12,
     borderRadius: 16,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     alignItems: 'center',
     margin: 4,
     minWidth: 60,
@@ -1163,7 +1163,7 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     borderRadius: 8,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     borderWidth: 1,
     borderColor: colors.border.light,
   },

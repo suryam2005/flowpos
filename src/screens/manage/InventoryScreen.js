@@ -9,10 +9,13 @@ import {
   Alert,
   TextInput,
   Modal,
+  ActivityIndicator,
+  Switch,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
+import databaseSyncService from '../../services/DatabaseSyncService';
 
 const InventoryScreen = () => {
   const [products, setProducts] = useState([]);
@@ -22,6 +25,8 @@ const InventoryScreen = () => {
   const [showStockModal, setShowStockModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [newStock, setNewStock] = useState('');
+  const [syncingProducts, setSyncingProducts] = useState(new Set()); // Track which products are syncing
+  const [retryOperation, setRetryOperation] = useState(null); // Store failed operation for retry
 
   useEffect(() => {
     loadProducts();
@@ -51,22 +56,147 @@ const InventoryScreen = () => {
   };
 
   const updateStock = async (productId, newStockValue) => {
+    // Add product to syncing set
+    setSyncingProducts(prev => new Set(prev).add(productId));
+
     try {
-      const updatedProducts = products.map(product =>
-        product.id === productId
-          ? { ...product, stock: parseInt(newStockValue) }
-          : product
-      );
+      const stockValue = parseInt(newStockValue);
       
-      await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
-      setProducts(updatedProducts);
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Stock updated successfully');
+      // Use DatabaseSyncService to sync stock quantity
+      const result = await databaseSyncService.syncProduct(productId, {
+        stock: stockValue,
+        stock_quantity: stockValue
+      });
+
+      if (result.success) {
+        // Update local state with synced data
+        const updatedProducts = products.map(product =>
+          product.id === productId
+            ? { ...product, stock: stockValue }
+            : product
+        );
+        setProducts(updatedProducts);
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Success', 'Stock updated and synced to database');
+      } else {
+        // Sync failed - show error and offer retry
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        
+        // Store operation for retry
+        setRetryOperation({
+          type: 'updateStock',
+          productId,
+          value: stockValue
+        });
+        
+        Alert.alert(
+          'Sync Failed',
+          result.error || 'Failed to sync stock to database. Would you like to retry?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => setRetryOperation(null)
+            },
+            {
+              text: 'Retry',
+              onPress: () => handleRetry()
+            }
+          ]
+        );
+      }
     } catch (error) {
       console.error('Error updating stock:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert('Error', 'Failed to update stock');
+    } finally {
+      // Remove product from syncing set
+      setSyncingProducts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(productId);
+        return newSet;
+      });
     }
+  };
+
+  const toggleTrackStock = async (productId, currentValue) => {
+    // Add product to syncing set
+    setSyncingProducts(prev => new Set(prev).add(productId));
+
+    try {
+      const newValue = !currentValue;
+      
+      // Use DatabaseSyncService to update track stock
+      const result = await databaseSyncService.updateTrackStock(productId, newValue);
+
+      if (result.success) {
+        // Update local state
+        const updatedProducts = products.map(product =>
+          product.id === productId
+            ? { ...product, trackStock: newValue }
+            : product
+        );
+        setProducts(updatedProducts);
+        
+        // Also update AsyncStorage
+        await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        // Sync failed - show error and offer retry
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+        
+        // Store operation for retry
+        setRetryOperation({
+          type: 'toggleTrackStock',
+          productId,
+          value: newValue
+        });
+        
+        Alert.alert(
+          'Sync Failed',
+          result.error || 'Failed to sync track stock setting. Would you like to retry?',
+          [
+            {
+              text: 'Cancel',
+              style: 'cancel',
+              onPress: () => setRetryOperation(null)
+            },
+            {
+              text: 'Retry',
+              onPress: () => handleRetry()
+            }
+          ]
+        );
+      }
+    } catch (error) {
+      console.error('Error toggling track stock:', error);
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
+      Alert.alert('Error', 'Failed to update track stock setting');
+    } finally {
+      // Remove product from syncing set
+      setSyncingProducts(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(productId);
+        return newSet;
+      });
+    }
+  };
+
+  const handleRetry = async () => {
+    if (!retryOperation) return;
+
+    const { type, productId, value } = retryOperation;
+    
+    if (type === 'updateStock') {
+      await updateStock(productId, value.toString());
+    } else if (type === 'toggleTrackStock') {
+      // For retry, we need to toggle from the opposite value
+      await toggleTrackStock(productId, !value);
+    }
+    
+    setRetryOperation(null);
   };
 
   const handleStockUpdate = () => {
@@ -115,6 +245,7 @@ const InventoryScreen = () => {
 
   const renderProduct = ({ item }) => {
     const status = getStockStatus(item.stock);
+    const isSyncing = syncingProducts.has(item.id);
 
     return (
       <View style={styles.productCard}>
@@ -126,27 +257,53 @@ const InventoryScreen = () => {
           <Text style={styles.productName}>{item.name}</Text>
           <Text style={styles.productCategory}>{item.category}</Text>
           <Text style={styles.productPrice}>₹{item.price}</Text>
+          
+          {/* Track Stock Toggle */}
+          <View style={styles.trackStockContainer}>
+            <Text style={styles.trackStockLabel}>Track Stock</Text>
+            {isSyncing ? (
+              <ActivityIndicator size="small" color={colors.primary.main} />
+            ) : (
+              <Switch
+                value={item.trackStock || false}
+                onValueChange={() => toggleTrackStock(item.id, item.trackStock)}
+                trackColor={{ false: colors.gray['300'], true: colors.primary.light }}
+                thumbColor={item.trackStock ? colors.primary.main : colors.gray['400']}
+                disabled={isSyncing}
+              />
+            )}
+          </View>
         </View>
 
         <View style={styles.stockInfo}>
-          <Text style={styles.stockQuantity}>{item.stock}</Text>
-          <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
-            <Text style={[styles.statusText, { color: status.color }]}>
-              {status.text}
-            </Text>
-          </View>
-          
-          <TouchableOpacity
-            style={styles.updateButton}
-            onPress={() => {
-              setSelectedProduct(item);
-              setNewStock(item.stock.toString());
-              setShowStockModal(true);
-            }}
-            activeOpacity={0.7}
-          >
-            <Text style={styles.updateButtonText}>Update</Text>
-          </TouchableOpacity>
+          {isSyncing ? (
+            <View style={styles.syncingIndicator}>
+              <ActivityIndicator size="small" color={colors.primary.main} />
+              <Text style={styles.syncingText}>Syncing...</Text>
+            </View>
+          ) : (
+            <>
+              <Text style={styles.stockQuantity}>{item.stock}</Text>
+              <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
+                <Text style={[styles.statusText, { color: status.color }]}>
+                  {status.text}
+                </Text>
+              </View>
+              
+              <TouchableOpacity
+                style={[styles.updateButton, isSyncing && styles.updateButtonDisabled]}
+                onPress={() => {
+                  setSelectedProduct(item);
+                  setNewStock(item.stock.toString());
+                  setShowStockModal(true);
+                }}
+                activeOpacity={0.7}
+                disabled={isSyncing}
+              >
+                <Text style={styles.updateButtonText}>Update</Text>
+              </TouchableOpacity>
+            </>
+          )}
         </View>
       </View>
     );
@@ -218,8 +375,8 @@ const InventoryScreen = () => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#8b5cf6"
-              colors={['#8b5cf6']}
+              tintColor={colors.primary.main}
+              colors={[colors.primary.main]}
             />
           }
         />
@@ -295,7 +452,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.light,
   },
   searchInput: {
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     borderRadius: 12,
     paddingHorizontal: 16,
     paddingVertical: 12,
@@ -313,7 +470,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     marginRight: 8,
   },
   filterButtonActive: {
@@ -374,9 +531,30 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.text.secondary,
   },
+  trackStockContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 8,
+    gap: 8,
+  },
+  trackStockLabel: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    fontWeight: '500',
+  },
   stockInfo: {
     alignItems: 'center',
     minWidth: 80,
+  },
+  syncingIndicator: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingVertical: 8,
+  },
+  syncingText: {
+    fontSize: 10,
+    color: colors.text.secondary,
+    marginTop: 4,
   },
   stockQuantity: {
     fontSize: 20,
@@ -395,10 +573,14 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   updateButton: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
+  },
+  updateButtonDisabled: {
+    backgroundColor: colors.gray['300'],
+    opacity: 0.6,
   },
   updateButtonText: {
     fontSize: 12,
@@ -499,7 +681,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginRight: 8,
     borderRadius: 8,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
   },
   cancelButtonText: {
     fontSize: 16,

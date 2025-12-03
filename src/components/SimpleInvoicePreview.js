@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
   },
   shareButton: {
     flex: 1,
-    backgroundColor: colors.gray[100],
+    backgroundColor: colors.gray['100'],
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',

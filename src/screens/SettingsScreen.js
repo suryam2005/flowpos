@@ -911,9 +911,9 @@ Generated: ${new Date().toLocaleString()}`;
       <Switch
         value={value}
         onValueChange={onToggle}
-        trackColor={{ false: colors.gray[100], true: colors.primary.main }}
+        trackColor={{ false: colors.gray['100'], true: colors.primary.main }}
         thumbColor={value ? colors.background.surface : colors.background.surface}
-        ios_backgroundColor={colors.gray[100]}
+        ios_backgroundColor={colors.gray['100']}
       />
     </View>
   );
@@ -932,9 +932,9 @@ Generated: ${new Date().toLocaleString()}`;
         <Switch
           value={value}
           onValueChange={onToggle}
-          trackColor={{ false: colors.gray[100], true: colors.primary.main }}
+          trackColor={{ false: colors.gray['100'], true: colors.primary.main }}
           thumbColor={value ? colors.background.surface : colors.background.surface}
-          ios_backgroundColor={colors.gray[100]}
+          ios_backgroundColor={colors.gray['100']}
         />
         <Text style={styles.settingArrow}>›</Text>
       </View>
