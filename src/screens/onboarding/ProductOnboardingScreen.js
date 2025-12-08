@@ -10,6 +10,7 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import CustomAlert from '../../components/CustomAlert';
@@ -187,6 +188,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
         name: formData.name.trim(),
         price: parseInt(formData.price),
         stock_quantity: formData.trackStock ? parseInt(formData.stock) : 0,
+        track_stock: formData.trackStock,
         category: finalTags[0] || 'General',
         description: `Custom product created during onboarding`,
         image_url: formData.image || '',
@@ -270,7 +272,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
   const renderProduct = ({ item, index }) => (
     <View style={styles.productCard} key={item.id}>
       <View style={styles.productInfo}>
-        <Text style={styles.productEmoji}>{item.emoji || '📦'}</Text>
+        <Ionicons name="cube-outline" size={24} color="#6b7280" />
         <View style={styles.productDetails}>
           <Text style={styles.productName}>{item.name}</Text>
           <Text style={styles.productPrice}>₹{item.price}</Text>
@@ -284,7 +286,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
         onPress={() => handleDeleteProduct(item.id)}
         activeOpacity={0.7}
       >
-        <Text style={styles.deleteButtonText}>🗑️</Text>
+        <Ionicons name="trash-outline" size={18} color="#ef4444" />
       </TouchableOpacity>
     </View>
   );
@@ -315,7 +317,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {products.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyIcon}>📦</Text>
+            <Ionicons name="cube-outline" size={64} color="#6b7280" />
             <Text style={styles.emptyTitle}>No Products Yet</Text>
             <Text style={styles.emptyText}>
               Add products to get started with your POS system

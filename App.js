@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getItemAsync } from './src/utils/secureStorage';
 import { Platform } from 'react-native';
+import * as Notifications from 'expo-notifications';
 
 // Import CSS for web
 if (Platform.OS === 'web') {
@@ -20,6 +21,7 @@ import CartScreen from './src/screens/CartScreen';
 import TabletCartScreen from './src/screens/TabletCartScreen';
 import OrdersScreen from './src/screens/OrdersScreen';
 import AnalyticsScreen from './src/screens/AnalyticsScreen';
+import AdvancedAnalyticsScreen from './src/screens/AdvancedAnalyticsScreen';
 import ManageScreen from './src/screens/ManageScreen';
 import OrderDetailsScreen from './src/screens/OrderDetailsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
@@ -54,6 +56,28 @@ import AccountSettingsScreen from './src/screens/profile/AccountSettingsScreen';
 import PrivacySecurityScreen from './src/screens/profile/PrivacySecurityScreen';
 import HelpSupportScreen from './src/screens/profile/HelpSupportScreen';
 
+// Configure notification handler for payment detection
+Notifications.setNotificationHandler({
+  handleNotification: async () => ({
+    shouldShowAlert: true,
+    shouldPlaySound: true,
+    shouldSetBadge: false,
+  }),
+});
+
+// Set up notification channel for Android
+if (Platform.OS === 'android') {
+  Notifications.setNotificationChannelAsync('payment-notifications', {
+    name: 'Payment Notifications',
+    importance: Notifications.AndroidImportance.MAX,
+    vibrationPattern: [0, 250, 250, 250],
+    lightColor: '#2563EB',
+    sound: 'default',
+    enableVibrate: true,
+    showBadge: true,
+  });
+}
+
 const Tab = createBottomTabNavigator();
 const Stack = createStackNavigator();
 
@@ -78,7 +102,7 @@ function MainTabs() {
           
           return <Ionicons name={iconName} size={isTablet ? size + 4 : size} color={color} />;
         },
-        tabBarActiveTintColor: '#8b5cf6',
+        tabBarActiveTintColor: '#2563EB',
         tabBarInactiveTintColor: '#9ca3af',
         tabBarStyle: {
           backgroundColor: '#ffffff',
@@ -235,6 +259,7 @@ export default function App() {
               />
               <Stack.Screen name="Invoice" component={InvoiceScreen} />
               <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+              <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />
               <Stack.Screen name="Profile" component={ProfileScreen} />
               <Stack.Screen name="EditProfile" component={EditProfileScreen} />

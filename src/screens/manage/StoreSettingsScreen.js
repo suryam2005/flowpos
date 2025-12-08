@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
@@ -431,7 +432,7 @@ const StoreSettingsScreen = ({ navigation }) => {
         value={value}
         onValueChange={isEditing ? onValueChange : undefined}
         disabled={!isEditing}
-        trackColor={{ false: colors.gray[100], true: isEditing ? '#8b5cf6' : colors.gray[200] }}
+        trackColor={{ false: colors.gray[100], true: isEditing ? colors.primary.main : colors.gray[200] }}
         thumbColor={value ? (isEditing ? colors.background.surface : colors.gray[300]) : colors.background.surface}
         ios_backgroundColor={colors.gray[100]}
       />
@@ -738,7 +739,10 @@ const StoreSettingsScreen = ({ navigation }) => {
                     />
                   </View>
                   <View style={styles.qrPreviewActions}>
-                    <Text style={styles.qrPreviewText}>✅ UPI QR Code uploaded</Text>
+                    <View style={styles.qrPreviewTextRow}>
+                      <Ionicons name="checkmark-circle" size={16} color={colors.success.main} />
+                      <Text style={styles.qrPreviewText}>UPI QR Code uploaded</Text>
+                    </View>
                     <TouchableOpacity
                       style={styles.qrRemoveButton}
                       onPress={handleQRRemove}
@@ -923,7 +927,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   currencyOptionSelected: {
-    borderColor: '#8b5cf6',
+    borderColor: colors.primary.main,
     backgroundColor: colors.gray[100],
   },
   currencyOptionText: {
@@ -933,7 +937,7 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   currencyOptionTextSelected: {
-    color: '#8b5cf6',
+    color: colors.primary.main,
   },
   currencyName: {
     fontSize: 12,
@@ -970,7 +974,7 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   upiTestButton: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 8,
@@ -1030,6 +1034,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
+  },
+  qrPreviewTextRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
   },
   qrPreviewText: {
     fontSize: 14,

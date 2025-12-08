@@ -10,6 +10,7 @@ import {
   Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import CustomAlert from '../../components/CustomAlert';
@@ -417,9 +418,9 @@ const StoreSetupScreen = ({ navigation }) => {
               </Text>
               <View style={styles.paymentMethodsGrid}>
                 {[
-                  { id: 'Cash', label: 'Cash', icon: '💵' },
-                  { id: 'Card', label: 'Card', icon: '💳' },
-                  { id: 'QR Pay', label: 'UPI/QR Pay', icon: '📲' },
+                  { id: 'Cash', label: 'Cash', icon: 'cash-outline' },
+                  { id: 'Card', label: 'Card', icon: 'card-outline' },
+                  { id: 'QR Pay', label: 'UPI/QR Pay', icon: 'qr-code-outline' },
                 ].map((method) => (
                   <TouchableOpacity
                     key={method.id}
@@ -446,7 +447,7 @@ const StoreSetupScreen = ({ navigation }) => {
                     }}
                     activeOpacity={0.8}
                   >
-                    <Text style={styles.paymentMethodIcon}>{method.icon}</Text>
+                    <Ionicons name={method.icon} size={24} color={paymentMethods.includes(method.id) ? colors.primary.main : colors.text.secondary} />
                     <Text style={[
                       styles.paymentMethodText,
                       storeData.paymentMethods.includes(method.id) && styles.paymentMethodTextSelected

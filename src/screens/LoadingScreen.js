@@ -5,13 +5,14 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../styles/colors';
 
 const LoadingScreen = () => {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.content}>
-        <Text style={styles.emoji}>🏪</Text>
+        <Ionicons name="storefront" size={80} color="#2563EB" />
         <Text style={styles.title}>FlowPOS</Text>
         <Text style={styles.subtitle}>Loading...</Text>
       </View>

@@ -152,7 +152,7 @@ const PasswordSetupScreen = ({ navigation, route }) => {
             <View style={styles.iconContainer}>
               <Ionicons name="lock-closed" size={60} color={colors.primary} />
             </View>
-            <Text style={styles.welcomeTitle}>Almost Done! 🔐</Text>
+            <Text style={styles.welcomeTitle}>Almost Done!</Text>
             <Text style={styles.welcomeSubtitle}>
               Create a secure password for your FlowPOS account
             </Text>

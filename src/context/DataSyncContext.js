@@ -108,11 +108,11 @@ export const DataSyncProvider = ({ children }) => {
   const lastFetchRef = useRef(0);
 
   // Fetch fresh data from backend with debounce
-  const fetchFreshData = async () => {
+  const fetchFreshData = async (forceRefresh = false) => {
     try {
-      // Debounce: Don't fetch if we fetched less than 2 seconds ago
+      // Debounce: Don't fetch if we fetched less than 1 second ago (unless forced)
       const now = Date.now();
-      if (now - lastFetchRef.current < 2000) {
+      if (!forceRefresh && now - lastFetchRef.current < 1000) {
         console.log('⏭️ [DataSync] Skipping fetch - too soon since last fetch');
         return;
       }
@@ -128,6 +128,7 @@ export const DataSyncProvider = ({ children }) => {
       // Fetch products from backend
       const freshProducts = await productsService.getProducts();
       console.log('✅ [DataSync] Fetched products:', freshProducts.length);
+      console.log('📦 [DataSync] First product track_stock:', freshProducts[0]?.track_stock);
       
       if (freshProducts && freshProducts.length > 0) {
         // Save to AsyncStorage

@@ -100,37 +100,35 @@ const ProfileScreen = ({ navigation }) => {
   const profileOptions = [
     {
       id: 'edit-profile',
-      icon: '✏️',
+      icon: 'pencil-outline',
       title: 'Edit Profile',
       subtitle: 'Update your personal information',
       onPress: () => navigation.navigate('EditProfile'),
     },
-
     {
       id: 'subscription',
-      icon: '👑',
+      icon: 'diamond-outline',
       title: 'Subscription',
       subtitle: 'Manage your plan and billing',
       onPress: () => navigation.navigate('Subscription'),
     },
     {
       id: 'account-settings',
-      icon: '🔐',
+      icon: 'lock-closed-outline',
       title: 'Account Settings',
       subtitle: 'Password, security, and preferences',
       onPress: () => navigation.navigate('AccountSettings'),
     },
     {
       id: 'privacy',
-      icon: '🛡️',
+      icon: 'shield-checkmark-outline',
       title: 'Privacy & Security',
       subtitle: 'Control your data and privacy',
       onPress: () => navigation.navigate('PrivacySecurity'),
     },
-
     {
       id: 'help',
-      icon: '❓',
+      icon: 'help-circle-outline',
       title: 'Help & Support',
       subtitle: 'Get help and contact support',
       onPress: () => navigation.navigate('HelpSupport'),
@@ -189,7 +187,7 @@ const ProfileScreen = ({ navigation }) => {
               activeOpacity={0.7}
             >
               <View style={styles.optionLeft}>
-                <Text style={styles.optionIcon}>{option.icon}</Text>
+                <Ionicons name={option.icon} size={24} color={colors.text.primary} style={styles.optionIconSvg} />
                 <View style={styles.optionTextContainer}>
                   <Text style={styles.optionTitle}>{option.title}</Text>
                   <Text style={styles.optionSubtitle}>{option.subtitle}</Text>
@@ -210,7 +208,7 @@ const ProfileScreen = ({ navigation }) => {
             activeOpacity={0.7}
           >
             <View style={styles.optionLeft}>
-              <Text style={styles.optionIcon}>🚪</Text>
+              <Ionicons name="log-out-outline" size={24} color="#ef4444" />
               <View style={styles.optionTextContainer}>
                 <Text style={[styles.optionTitle, styles.dangerText]}>Sign Out</Text>
                 <Text style={styles.optionSubtitle}>Sign out of your account</Text>
@@ -223,7 +221,7 @@ const ProfileScreen = ({ navigation }) => {
         {/* App Info */}
         <View style={styles.appInfo}>
           <Text style={styles.appInfoText}>FlowPOS v1.0.0</Text>
-          <Text style={styles.appInfoText}>Made with ❤️ for small businesses</Text>
+          <Text style={styles.appInfoText}>Made with love for small businesses</Text>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -352,8 +350,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  optionIcon: {
-    fontSize: 24,
+  optionIconSvg: {
     marginRight: 16,
     width: 30,
     textAlign: 'center',

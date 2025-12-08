@@ -136,7 +136,7 @@ const SignupScreen = ({ navigation }) => {
 
           {/* Welcome Text */}
           <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>Welcome to FlowPOS! 👋</Text>
+            <Text style={styles.welcomeTitle}>Welcome to FlowPOS!</Text>
             <Text style={styles.welcomeSubtitle}>
               Let's get you set up with your new POS system
             </Text>

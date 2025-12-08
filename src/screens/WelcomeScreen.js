@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../styles/colors';
 
@@ -15,19 +16,19 @@ const WelcomeScreen = ({ navigation }) => {
 
   const steps = [
     {
-      emoji: '🏪',
+      icon: 'storefront',
       title: 'Welcome to FlowPOS',
       subtitle: 'Your complete point-of-sale solution',
       description: 'Streamline your business operations with our modern POS system designed for retailers, cafes, and small businesses.',
     },
     {
-      emoji: '📈',
+      icon: 'trending-up',
       title: 'Smart Analytics',
       subtitle: 'Track sales and inventory in real-time',
       description: 'Get insights into your best-selling products, peak hours, and inventory levels with comprehensive analytics dashboard.',
     },
     {
-      emoji: '🚀',
+      icon: 'rocket',
       title: 'Lightning Fast',
       subtitle: 'Quick checkout and payments',
       description: 'Process transactions in seconds with barcode scanning, multiple payment methods, and instant receipt generation.',
@@ -90,7 +91,7 @@ const WelcomeScreen = ({ navigation }) => {
         {/* Step Content */}
         <View style={styles.stepContent}>
           <View style={styles.stepHeader}>
-            <Text style={styles.emoji}>{currentStepData.emoji}</Text>
+            <Ionicons name={currentStepData.icon} size={80} color="#2563EB" style={{ marginBottom: 24 }} />
             <Text style={styles.title}>{currentStepData.title}</Text>
             <Text style={styles.subtitle}>{currentStepData.subtitle}</Text>
           </View>

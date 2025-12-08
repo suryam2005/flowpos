@@ -7,11 +7,13 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
 import { webScrollFix } from '../styles/webStyles';
 import { useQRPayment } from '../hooks/useQRPayment';
 import DynamicQRGenerator from './DynamicQRGenerator';
+import { colors } from '../styles/colors';
 
 const TabletCartSidebar = ({ navigation, onCheckout }) => {
   const { items, addItem, removeItem, clearCart, getTotal, getItemCount } = useCart();
@@ -104,7 +106,7 @@ const TabletCartSidebar = ({ navigation, onCheckout }) => {
           <Text style={styles.title}>Cart</Text>
         </View>
         <View style={styles.emptyCart}>
-          <Text style={styles.emptyIcon}>🛒</Text>
+          <Ionicons name="cart-outline" size={64} color="#9ca3af" />
           <Text style={styles.emptyText}>Your cart is empty</Text>
           <Text style={styles.emptySubtext}>Add items to get started</Text>
         </View>
@@ -146,7 +148,7 @@ const TabletCartSidebar = ({ navigation, onCheckout }) => {
             onPress={handleQRPayment}
             activeOpacity={0.9}
           >
-            <Text style={styles.qrPayButtonText}>📲</Text>
+            <Ionicons name="qr-code-outline" size={24} color="#ffffff" />
           </TouchableOpacity>
           
           <TouchableOpacity
@@ -313,13 +315,13 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   qrPayButton: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     width: 50,
     height: 50,
     borderRadius: 25,
     justifyContent: 'center',
     alignItems: 'center',
-    shadowColor: '#8b5cf6',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,

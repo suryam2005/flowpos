@@ -10,6 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../styles/colors';
@@ -138,7 +139,10 @@ const WhatsAppSetupScreen = ({ navigation }) => {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.infoCard}>
-          <Text style={styles.infoTitle}>📱 WhatsApp Business Integration</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
+            <Ionicons name="logo-whatsapp" size={24} color="#25D366" />
+            <Text style={styles.infoTitle}>WhatsApp Business Integration</Text>
+          </View>
           <Text style={styles.infoText}>
             Send professional invoices directly to your customers via WhatsApp using Twilio's WhatsApp Business API.
           </Text>
@@ -235,7 +239,10 @@ const WhatsAppSetupScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.warningCard}>
-          <Text style={styles.warningTitle}>⚠️ Important Notes</Text>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+            <Ionicons name="warning-outline" size={20} color="#f59e0b" />
+            <Text style={styles.warningTitle}>Important Notes</Text>
+          </View>
           <Text style={styles.warningText}>
             • Twilio WhatsApp sandbox is free for testing but has limitations{'\n'}
             • For production use, you'll need WhatsApp Business API approval{'\n'}
@@ -252,8 +259,9 @@ const WhatsAppSetupScreen = ({ navigation }) => {
           disabled={!WhatsAppService.isReady() || isTesting}
           activeOpacity={0.8}
         >
+          <Ionicons name={isTesting ? "sync-outline" : "flask-outline"} size={18} color="#ffffff" style={{ marginRight: 8 }} />
           <Text style={[styles.testButtonText, !WhatsAppService.isReady() && styles.buttonTextDisabled]}>
-            {isTesting ? '🔄 Testing...' : '🧪 Test Configuration'}
+            {isTesting ? 'Testing...' : 'Test Configuration'}
           </Text>
         </TouchableOpacity>
 
@@ -263,8 +271,9 @@ const WhatsAppSetupScreen = ({ navigation }) => {
           disabled={isLoading}
           activeOpacity={0.8}
         >
+          <Ionicons name={isLoading ? "hourglass-outline" : "save-outline"} size={18} color="#ffffff" style={{ marginRight: 8 }} />
           <Text style={[styles.saveButtonText, isLoading && styles.buttonTextDisabled]}>
-            {isLoading ? '⏳ Saving...' : '💾 Save Configuration'}
+            {isLoading ? 'Saving...' : 'Save Configuration'}
           </Text>
         </TouchableOpacity>
       </View>
@@ -444,7 +453,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.info.main,
     paddingVertical: 16,
     borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   testButtonText: {
     fontSize: 14,
@@ -456,7 +467,9 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success.main,
     paddingVertical: 16,
     borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   saveButtonText: {
     fontSize: 14,

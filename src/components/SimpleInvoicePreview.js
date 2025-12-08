@@ -10,6 +10,7 @@ import {
   Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import * as FileSystem from 'expo-file-system';
 import { captureRef } from 'react-native-view-shot';
@@ -134,7 +135,7 @@ const SimpleInvoicePreview = ({
 
       if (result.success) {
         Alert.alert(
-          'WhatsApp Opened 📱',
+          'WhatsApp Opened',
           result.message,
           [{ text: 'OK', style: 'default' }]
         );
@@ -182,7 +183,7 @@ const SimpleInvoicePreview = ({
           {/* Customer Info */}
           <View style={styles.customerSection}>
             <View style={styles.customerIcon}>
-              <Text style={styles.customerIconText}>👤</Text>
+              <Ionicons name="person-outline" size={20} color="#6b7280" />
             </View>
             <View style={styles.customerDetails}>
               <Text style={styles.customerName}>
@@ -200,7 +201,7 @@ const SimpleInvoicePreview = ({
               invoiceData.items.map((item, index) => (
                 <View key={index} style={styles.itemRow}>
                   <View style={styles.itemIcon}>
-                    <Text style={styles.itemIconText}>📦</Text>
+                    <Ionicons name="cube-outline" size={16} color="#6b7280" />
                   </View>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>
@@ -242,11 +243,15 @@ const SimpleInvoicePreview = ({
           {/* Payment Method */}
           <View style={styles.paymentSection}>
             <View style={styles.paymentIcon}>
-              <Text style={styles.paymentIconText}>
-                {invoiceData.paymentMethod === 'Cash' ? '💵' : 
-                 invoiceData.paymentMethod === 'Card' ? '💳' : 
-                 invoiceData.paymentMethod === 'QR Pay' ? '📱' : '💵'}
-              </Text>
+              <Ionicons 
+                name={
+                  invoiceData.paymentMethod === 'Cash' ? 'cash-outline' : 
+                  invoiceData.paymentMethod === 'Card' ? 'card-outline' : 
+                  invoiceData.paymentMethod === 'QR Pay' ? 'qr-code-outline' : 'cash-outline'
+                } 
+                size={20} 
+                color="#6b7280" 
+              />
             </View>
             <Text style={styles.paymentMethod}>{invoiceData.paymentMethod || 'Cash'}</Text>
           </View>
@@ -267,8 +272,9 @@ const SimpleInvoicePreview = ({
           activeOpacity={0.8}
           disabled={isGenerating}
         >
+          <Ionicons name={isGenerating ? "hourglass-outline" : "share-outline"} size={18} color="#ffffff" style={{ marginRight: 8 }} />
           <Text style={styles.shareButtonText}>
-            {isGenerating ? '⏳ Generating...' : '📤 Share Invoice'}
+            {isGenerating ? 'Generating...' : 'Share Invoice'}
           </Text>
         </TouchableOpacity>
         
@@ -279,8 +285,9 @@ const SimpleInvoicePreview = ({
             activeOpacity={0.8}
             disabled={isGenerating}
           >
+            <Ionicons name="logo-whatsapp" size={18} color="#ffffff" style={{ marginRight: 8 }} />
             <Text style={styles.whatsappButtonText}>
-              📱 Send via WhatsApp
+              Send via WhatsApp
             </Text>
           </TouchableOpacity>
         )}
@@ -545,6 +552,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.gray[100],
     paddingVertical: 16,
     borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     borderWidth: 1,
@@ -563,6 +571,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.success.main,
     paddingVertical: 16,
     borderRadius: 12,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 52,

@@ -16,6 +16,7 @@ import { useCart } from '../context/CartContext';
 import { getDeviceInfo } from '../utils/deviceUtils';
 import DynamicQRGenerator from '../components/DynamicQRGenerator';
 import { useQRPayment } from '../hooks/useQRPayment';
+import { colors } from '../styles/colors';
 
 const TabletCartScreen = ({ navigation }) => {
   const { items, addItem, removeItem, clearCart, getTotal, getItemCount } = useCart();
@@ -148,7 +149,7 @@ const TabletCartScreen = ({ navigation }) => {
         </View>
         
         <View style={styles.emptyCart}>
-          <Text style={styles.emptyIcon}>🛒</Text>
+          <Ionicons name="cart-outline" size={isTablet ? 80 : 64} color="#9ca3af" />
           <Text style={[styles.emptyText, isTablet && styles.tabletEmptyText]}>Your cart is empty</Text>
           <Text style={[styles.emptySubtext, isTablet && styles.tabletEmptySubtext]}>
             Add some items to get started
@@ -261,8 +262,9 @@ const TabletCartScreen = ({ navigation }) => {
               onPress={handleQRPayment}
               activeOpacity={0.9}
             >
+              <Ionicons name="qr-code-outline" size={isTablet ? 24 : 20} color="#ffffff" style={{ marginRight: 8 }} />
               <Text style={[styles.qrPayButtonText, isTablet && styles.tabletQrPayButtonText]}>
-                📲 QR Pay
+                QR Pay
               </Text>
             </TouchableOpacity>
             
@@ -599,11 +601,11 @@ const styles = StyleSheet.create({
   },
   qrPayButton: {
     flex: 1,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
-    shadowColor: '#8b5cf6',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 4,

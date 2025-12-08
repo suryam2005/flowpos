@@ -10,6 +10,7 @@ import {
   Animated,
   Dimensions,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { typography, createTextStyle, spacing } from '../utils/typography';
@@ -147,7 +148,7 @@ const UPIPaymentModal = ({
               </>
             ) : (
               <View style={styles.noQrContainer}>
-                <Text style={styles.noQrIcon}>📱</Text>
+                <Ionicons name="qr-code-outline" size={64} color="#9ca3af" />
                 <Text style={styles.noQrTitle}>No UPI QR Code</Text>
                 <Text style={styles.noQrText}>
                   Please upload your UPI QR code in Store Settings to accept UPI payments.
@@ -203,7 +204,8 @@ const UPIPaymentModal = ({
           {isWaitingForPayment && (
             <View style={styles.statusContainer}>
               <View style={styles.statusIndicator}>
-                <Text style={styles.statusText}>🔄 Listening for payment confirmation...</Text>
+                <Ionicons name="sync-outline" size={16} color="#3b82f6" style={{ marginRight: 8 }} />
+                <Text style={styles.statusText}>Listening for payment confirmation...</Text>
               </View>
             </View>
           )}
@@ -364,7 +366,9 @@ const styles = StyleSheet.create({
     backgroundColor: '#eff6ff',
     padding: spacing.sm,
     borderRadius: 8,
+    flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'center',
   },
   statusText: {
     ...createTextStyle('caption', '#2563eb'),

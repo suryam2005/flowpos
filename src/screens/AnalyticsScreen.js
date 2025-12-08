@@ -10,6 +10,7 @@ import {
   TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -388,7 +389,7 @@ const AnalyticsScreen = ({ navigation }) => {
           <Image source={{ uri: product.image }} style={styles.productImageStyle} />
         ) : (
           <View style={styles.productImagePlaceholder}>
-            <Text style={styles.productImagePlaceholderText}>📦</Text>
+            <Ionicons name="cube-outline" size={24} color="#6b7280" />
           </View>
         )}
       </View>
@@ -414,6 +415,15 @@ const AnalyticsScreen = ({ navigation }) => {
       <View style={[styles.content, contentStyle]}>
         <View style={styles.header}>
           <Text style={styles.title}>Analytics</Text>
+          <TouchableOpacity
+            style={styles.advancedButton}
+            onPress={() => {
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              navigation.navigate('AdvancedAnalytics');
+            }}
+          >
+            <Text style={styles.advancedButtonText}>Advanced</Text>
+          </TouchableOpacity>
         </View>
 
         <View style={{ flex: 1 }}>
@@ -531,7 +541,7 @@ const AnalyticsScreen = ({ navigation }) => {
             )}
             {(chartData.dailyRevenue.length === 0 && chartData.weeklyRevenue.length === 0) && (
               <View style={styles.noDataContainer}>
-                <Text style={styles.noDataText}>📊</Text>
+                <Ionicons name="stats-chart-outline" size={48} color="#9ca3af" />
                 <Text style={styles.noDataTitle}>No Data Available</Text>
                 <Text style={styles.noDataSubtitle}>Start making sales to see revenue trends</Text>
               </View>
@@ -636,6 +646,17 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontWeight: '700',
     color: colors.text.primary,
+  },
+  advancedButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.primary.main,
+    borderRadius: 8,
+  },
+  advancedButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background.surface,
   },
   scrollContent: {
     padding: 20,

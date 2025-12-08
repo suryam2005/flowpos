@@ -22,7 +22,7 @@ const NetworkTestComponent = () => {
       
       try {
         // This should work without authentication
-        const healthResult = await fetch('https://flowposbackend-production.up.railway.app/health');
+        const healthResult = await fetch('http://192.168.1.3:3000/health');
         const healthData = await healthResult.json();
         console.log('✅ Health check passed:', healthData);
         setTestResult(prev => prev + '\n✅ Health check: PASSED');

@@ -10,6 +10,7 @@ import {
   TextInput,
   Modal,
 } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
@@ -172,7 +173,7 @@ const InventoryScreen = () => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>📦</Text>
+      <Ionicons name="cube-outline" size={64} color="#6b7280" />
       <Text style={styles.emptyTitle}>No Products Found</Text>
       <Text style={styles.emptyText}>
         {searchQuery || filterType !== 'all' 
@@ -218,8 +219,8 @@ const InventoryScreen = () => {
             <RefreshControl
               refreshing={refreshing}
               onRefresh={onRefresh}
-              tintColor="#8b5cf6"
-              colors={['#8b5cf6']}
+              tintColor={colors.primary.main}
+              colors={[colors.primary.main]}
             />
           }
         />
@@ -395,7 +396,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   updateButton: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,

@@ -526,7 +526,7 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
   },
   customerName: {
-    color: '#8b5cf6',
+    color: colors.primary.main,
     fontWeight: '500',
   },
   qrContainer: {
@@ -619,8 +619,8 @@ const styles = StyleSheet.create({
     borderColor: colors.border.light,
   },
   upiOptionSelected: {
-    backgroundColor: '#8b5cf6',
-    borderColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   upiOptionText: {
     color: colors.text.secondary,

@@ -20,6 +20,7 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../styles/colors';
 
@@ -138,7 +139,10 @@ const DebugClearCacheScreen = ({ navigation }) => {
       </View>
 
       <View style={styles.warningBox}>
-        <Text style={styles.warningTitle}>⚠️ Debug Tool</Text>
+        <View style={styles.warningTitleRow}>
+          <Ionicons name="warning-outline" size={20} color={colors.warning.main} />
+          <Text style={styles.warningTitle}>Debug Tool</Text>
+        </View>
         <Text style={styles.warningText}>
           This screen helps diagnose cache issues. If you're seeing other users' data, clear all cache below.
         </Text>
@@ -162,7 +166,7 @@ const DebugClearCacheScreen = ({ navigation }) => {
                 <Text style={styles.cacheCount}>({item.itemCount} items)</Text>
               )}
             </View>
-            <Text style={styles.deleteIcon}>🗑️</Text>
+            <Ionicons name="trash-outline" size={20} color={colors.error.main} />
           </TouchableOpacity>
         ))}
       </ScrollView>
@@ -172,14 +176,16 @@ const DebugClearCacheScreen = ({ navigation }) => {
           style={styles.clearAllButton}
           onPress={clearAllCache}
         >
-          <Text style={styles.clearAllButtonText}>🧹 Clear All Cache</Text>
+          <Ionicons name="trash-outline" size={20} color={colors.background.surface} style={{ marginRight: 8 }} />
+          <Text style={styles.clearAllButtonText}>Clear All Cache</Text>
         </TouchableOpacity>
 
         <TouchableOpacity
           style={styles.refreshButton}
           onPress={loadCacheData}
         >
-          <Text style={styles.refreshButtonText}>🔄 Refresh</Text>
+          <Ionicons name="refresh-outline" size={20} color={colors.background.surface} style={{ marginRight: 8 }} />
+          <Text style={styles.refreshButtonText}>Refresh</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -217,6 +223,12 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: '#F59E0B',
+  },
+  warningTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
   },
   warningTitle: {
     fontSize: 16,
@@ -286,6 +298,9 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border.light,
   },
   clearAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: '#DC2626',
     padding: 16,
     borderRadius: 8,
@@ -298,6 +313,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   refreshButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
     backgroundColor: colors.primary.main,
     padding: 16,
     borderRadius: 8,

@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 
@@ -287,7 +288,7 @@ const CartScreen = ({ navigation }) => {
           style: 'cancel' 
         },
         {
-          text: '✅ Payment Received',
+          text: 'Payment Received',
           style: 'default',
           onPress: () => {
             // Complete the order with payment confirmation
@@ -355,7 +356,7 @@ _Powered by FlowPOS_`;
         console.log('Auto WhatsApp invoice sent successfully');
         // Show success notification
         setAlertConfig({
-          title: '📱 Invoice Sent!',
+          title: 'Invoice Sent!',
           message: `Invoice has been automatically sent to ${invoiceData.customerName} via WhatsApp.`,
           type: 'success',
           buttons: [{ text: 'Great!', style: 'default' }],
@@ -403,7 +404,7 @@ _Powered by FlowPOS_`;
     if (paymentMethod === 'QR Pay' && !paymentDetails) {
       // QR should already be visible, show message to wait for payment
       setAlertConfig({
-        title: '📲 QR Payment in Progress',
+        title: 'QR Payment in Progress',
         message: 'Please wait for the customer to scan the QR code and complete the payment. The system will automatically detect the payment.',
         type: 'info',
         buttons: [
@@ -413,7 +414,7 @@ _Powered by FlowPOS_`;
             onPress: () => {
               // Allow manual confirmation if auto-detection fails
               setAlertConfig({
-                title: '✅ Confirm Payment',
+                title: 'Confirm Payment',
                 message: `Have you received ₹${total} UPI payment from the customer?`,
                 type: 'warning',
                 buttons: [
@@ -618,7 +619,7 @@ _Powered by FlowPOS_`;
             <Image source={{ uri: item.image }} style={styles.itemImageStyle} />
           ) : (
             <View style={styles.itemImagePlaceholder}>
-              <Text style={styles.itemImagePlaceholderText}>📦</Text>
+              <Ionicons name="cube-outline" size={24} color="#6b7280" />
             </View>
           )}
         </View>
@@ -650,7 +651,7 @@ _Powered by FlowPOS_`;
             onPress={handleDeleteItem}
             activeOpacity={0.7}
           >
-            <Text style={styles.deleteButtonText}>🗑️</Text>
+            <Ionicons name="trash-outline" size={18} color="#ef4444" />
           </TouchableOpacity>
         </View>
       </View>

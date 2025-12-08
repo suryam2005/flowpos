@@ -100,7 +100,7 @@ const LoginScreen = ({ navigation }) => {
         <View style={styles.content}>
           {/* Welcome */}
           <View style={styles.welcomeSection}>
-            <Text style={styles.welcomeTitle}>Welcome back! 👋</Text>
+            <Text style={styles.welcomeTitle}>Welcome back!</Text>
             <Text style={styles.welcomeSubtitle}>
               Sign in to your FlowPOS account
             </Text>

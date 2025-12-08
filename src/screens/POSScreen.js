@@ -5,14 +5,13 @@ import {
   StyleSheet,
   FlatList,
   TouchableOpacity,
-  Alert,
   RefreshControl,
   Image,
-  Dimensions,
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
+import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
 import CustomAlert from '../components/CustomAlert';
@@ -123,19 +122,54 @@ const POSScreen = ({ navigation, route }) => {
 
   const handleAddToCart = (product) => {
     // Only check stock if tracking is enabled
-    if (product.trackStock && product.stock <= 0) {
+    // track_stock is the source of truth from backend
+    const isTrackingEnabled = product.track_stock !== false;
+    if (isTrackingEnabled && product.stock <= 0) {
       setAlertConfig({
         title: 'Out of Stock',
         message: `${product.name} is currently out of stock.`,
         type: 'warning',
-        buttons: [{ text: 'OK', style: 'default' }],
+        buttons: [{ 
+          text: 'OK', 
+          style: 'default',
+          onPress: () => {} // Close alert only
+        }],
       });
       setShowAlert(true);
       return;
     }
     
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    addItem(product);
+    const success = addItem(product);
+    
+    // If adding failed due to stock limit
+    if (!success) {
+      const isTrackingEnabled = product.track_stock !== false;
+      const maxLimit = isTrackingEnabled ? product.stock : 50;
+      const limitType = isTrackingEnabled ? 'stock' : 'quantity';
+      setAlertConfig({
+        title: 'Limit Reached',
+        message: `Cannot add more ${product.name}. Maximum ${limitType}: ${maxLimit}`,
+        type: 'warning',
+        buttons: [{ 
+          text: 'OK', 
+          style: 'default',
+          onPress: () => {} // Close alert only
+        }],
+      });
+      setShowAlert(true);
+    }
+  };
+
+  const getStockDisplay = (product) => {
+    // Check if track_stock is explicitly false
+    // track_stock is the source of truth from backend
+    const isTrackingEnabled = product.track_stock !== false;
+    
+    if (!isTrackingEnabled) {
+      return 'Available';
+    }
+    return `${product.stock || 0} available`;
   };
 
   const handleLongPress = (product) => {
@@ -153,7 +187,11 @@ const POSScreen = ({ navigation, route }) => {
       message: 'Are you sure you want to remove all items from the cart?',
       type: 'warning',
       buttons: [
-        { text: 'Cancel', style: 'cancel' },
+        { 
+          text: 'Cancel', 
+          style: 'cancel',
+          onPress: () => {} // Close alert only
+        },
         { 
           text: 'Clear All', 
           style: 'destructive',
@@ -185,7 +223,7 @@ const POSScreen = ({ navigation, route }) => {
             <Image source={{ uri: item.image }} style={styles.productImageStyle} />
           ) : (
             <View style={styles.productImagePlaceholder}>
-              <Text style={styles.productImagePlaceholderText}>📦</Text>
+              <Ionicons name="cube-outline" size={32} color="#6b7280" />
             </View>
           )}
         </View>
@@ -202,17 +240,15 @@ const POSScreen = ({ navigation, route }) => {
           <Text style={styles.productPrice}>
             ₹{item.price}
           </Text>
-          {item.trackStock && (
-            <View style={styles.stockContainer}>
-              <Text style={styles.productStock}>
-                {item.stock} available
-              </Text>
-            </View>
-          )}
+          <View style={styles.stockContainer}>
+            <Text style={styles.productStock}>
+              {getStockDisplay(item)}
+            </Text>
+          </View>
         </View>
         
         {/* Badges */}
-        {item.trackStock && item.stock <= 5 && (
+        {(item.track_stock !== false) && item.stock <= 5 && (
           <View style={styles.lowStockBadge}>
             <Text style={styles.lowStockText}>Low Stock</Text>
           </View>
@@ -250,7 +286,7 @@ const POSScreen = ({ navigation, route }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>📦</Text>
+      <Ionicons name="cube-outline" size={64} color="#6b7280" />
       <ResponsiveText variant="title" style={styles.emptyTitle}>
         No Products Yet
       </ResponsiveText>
@@ -305,7 +341,7 @@ const POSScreen = ({ navigation, route }) => {
               style={styles.searchButton}
               onPress={() => setShowSearch(true)}
             >
-              <Text style={styles.searchButtonText}>🔍</Text>
+              <Ionicons name="search-outline" size={20} color="#6b7280" />
             </TouchableOpacity>
             <FlatList
               data={availableTags}
@@ -369,7 +405,7 @@ const POSScreen = ({ navigation, route }) => {
                 onPress={handleClearCart}
                 activeOpacity={0.7}
               >
-                <Text style={styles.clearCartText}>🗑️</Text>
+                <Ionicons name="trash-outline" size={20} color={colors.error.main} />
               </TouchableOpacity>
               <View style={styles.cartButton}>
                 <ResponsiveText variant="button" style={styles.cartButtonText}>

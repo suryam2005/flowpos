@@ -35,7 +35,7 @@ const HelpSupportScreen = ({ navigation }) => {
     {
       id: 'getting-started',
       title: 'Getting Started',
-      icon: '🚀',
+      icon: 'rocket-outline',
       items: [
         'Setting up your store',
         'Adding your first products',
@@ -47,7 +47,7 @@ const HelpSupportScreen = ({ navigation }) => {
     {
       id: 'orders-payments',
       title: 'Orders & Payments',
-      icon: '💳',
+      icon: 'card-outline',
       items: [
         'Processing orders',
         'Payment methods setup',
@@ -59,7 +59,7 @@ const HelpSupportScreen = ({ navigation }) => {
     {
       id: 'inventory',
       title: 'Inventory Management',
-      icon: '📦',
+      icon: 'cube-outline',
       items: [
         'Adding and editing products',
         'Stock management',
@@ -71,7 +71,7 @@ const HelpSupportScreen = ({ navigation }) => {
     {
       id: 'reports',
       title: 'Reports & Analytics',
-      icon: '📊',
+      icon: 'stats-chart-outline',
       items: [
         'Understanding sales reports',
         'Viewing analytics dashboard',
@@ -83,7 +83,7 @@ const HelpSupportScreen = ({ navigation }) => {
     {
       id: 'account',
       title: 'Account & Settings',
-      icon: '⚙️',
+      icon: 'settings-outline',
       items: [
         'Managing your profile',
         'Subscription and billing',
@@ -95,7 +95,7 @@ const HelpSupportScreen = ({ navigation }) => {
     {
       id: 'troubleshooting',
       title: 'Troubleshooting',
-      icon: '🔧',
+      icon: 'construct-outline',
       items: [
         'App crashes or freezes',
         'Payment issues',
@@ -240,7 +240,7 @@ const HelpSupportScreen = ({ navigation }) => {
                 onPress={() => Alert.alert(category.title, 'Help articles feature coming soon!')}
               >
                 <View style={styles.categoryLeft}>
-                  <Text style={styles.categoryIcon}>{category.icon}</Text>
+                  <Ionicons name={category.icon} size={24} color={colors.text.primary} style={styles.categoryIconSvg} />
                   <Text style={styles.categoryTitle}>{category.title}</Text>
                 </View>
                 <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
@@ -634,8 +634,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     flex: 1,
   },
-  categoryIcon: {
-    fontSize: 24,
+  categoryIconSvg: {
     marginRight: 12,
   },
   categoryTitle: {

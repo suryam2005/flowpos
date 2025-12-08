@@ -14,6 +14,7 @@ import {
   Switch,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
@@ -30,10 +31,12 @@ import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
 import { useAuth } from '../context/AuthContext';
+import { useDataSync } from '../context/DataSyncContext';
 
 
 const ManageScreen = ({ navigation }) => {
   const { user, isAuthenticated, getStore } = useAuth();
+  const { fetchFreshData } = useDataSync();
   const [products, setProducts] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -81,6 +84,50 @@ const ManageScreen = ({ navigation }) => {
     return unsubscribe;
   }, [navigation]);
 
+  // Trigger DataSync refresh when modal closes (product updated)
+  useEffect(() => {
+    if (!modalVisible) {
+      // Delay slightly to ensure state is updated
+      setTimeout(() => {
+        console.log('🔄 Modal closed - triggering DataSync refresh');
+        fetchFreshData(true); // Force refresh
+      }, 200);
+    }
+  }, [modalVisible, fetchFreshData]);
+
+  const normalizeProducts = (products) => {
+    return products.map(product => {
+      // track_stock is the source of truth from backend
+      // Preserve the actual value from backend, don't convert it
+      const trackStockValue = product.track_stock;
+      const isTrackingEnabled = trackStockValue !== false;
+      
+      console.log('\n� A[MANAGE] Normalizing product:');
+      console.log('  name:', product.name);
+      console.log('  raw_track_stock:', trackStockValue);
+      console.log('  raw_track_stock_type:', typeof trackStockValue);
+      console.log('  raw_track_stock === false:', trackStockValue === false);
+      console.log('  raw_track_stock === true:', trackStockValue === true);
+      console.log('  isTrackingEnabled:', isTrackingEnabled);
+      
+      const normalized = {
+        ...product,
+        // Keep the actual track_stock value from backend
+        track_stock: trackStockValue,
+        // Also set trackStock for compatibility
+        trackStock: isTrackingEnabled,
+        // Ensure stock field is set
+        stock: product.stock || product.stock_quantity || 0,
+      };
+      
+      console.log('  After normalization:');
+      console.log('    track_stock:', normalized.track_stock);
+      console.log('    trackStock:', normalized.trackStock);
+      
+      return normalized;
+    });
+  };
+
   const loadProducts = async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
@@ -91,20 +138,41 @@ const ManageScreen = ({ navigation }) => {
       // No animation delays needed
 
       // Load products from Supabase using ProductsService
-      console.log('🚨 MANAGESCREEN: Loading products from Supabase...');
+      console.log('\n� MANAGERSCREEN: Loading products from Supabase...');
       try {
         const supabaseProducts = await productsService.getProducts();
-        setProducts(supabaseProducts);
-        console.log('✅ MANAGESCREEN: Loaded products from Supabase:', supabaseProducts.length);
+        console.log('🟠 Raw products from Supabase:', supabaseProducts.length);
+        if (supabaseProducts.length > 0) {
+          console.log('🟠 First raw product:', {
+            name: supabaseProducts[0].name,
+            track_stock: supabaseProducts[0].track_stock,
+            track_stock_type: typeof supabaseProducts[0].track_stock,
+            track_stock_strict_false: supabaseProducts[0].track_stock === false
+          });
+        }
+        
+        const normalizedProducts = normalizeProducts(supabaseProducts);
+        
+        console.log('✅ MANAGESCREEN: Normalized products:', normalizedProducts.length);
+        if (normalizedProducts.length > 0) {
+          console.log('✅ First normalized product:', {
+            name: normalizedProducts[0].name,
+            track_stock: normalizedProducts[0].track_stock,
+            trackStock: normalizedProducts[0].trackStock
+          });
+        }
+        
+        setProducts(normalizedProducts);
         
         // Also save to AsyncStorage for compatibility
-        await AsyncStorage.setItem('products', JSON.stringify(supabaseProducts));
+        await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
       } catch (error) {
         console.error('❌ MANAGESCREEN: Error loading from Supabase, falling back to AsyncStorage:', error);
         // Fallback to AsyncStorage if Supabase fails
         const storedProducts = await AsyncStorage.getItem('products');
         if (storedProducts) {
-          setProducts(JSON.parse(storedProducts));
+          const normalizedProducts = normalizeProducts(JSON.parse(storedProducts));
+          setProducts(normalizedProducts);
         }
       }
       
@@ -216,12 +284,29 @@ const ManageScreen = ({ navigation }) => {
   };
 
   const handleEditProduct = (product) => {
+    // Get trackStock from track_stock field (primary source of truth from backend)
+    // If track_stock is explicitly false, then tracking is OFF
+    // Otherwise (true, null, undefined), tracking is ON
+    const isTrackingEnabled = product.track_stock !== false;
+    
+    console.log('📝 [MANAGE] Editing product:', {
+      name: product.name,
+      track_stock: product.track_stock,
+      track_stock_type: typeof product.track_stock,
+      track_stock_strict_false: product.track_stock === false,
+      trackStock: product.trackStock,
+      isTrackingEnabled,
+      stock: product.stock,
+      stock_quantity: product.stock_quantity,
+      all_product_keys: Object.keys(product)
+    });
+    
     setEditingProduct(product);
     setFormData({
       name: product.name,
       price: product.price.toString(),
-      stock: product.trackStock ? product.stock.toString() : '',
-      trackStock: product.trackStock !== false, // Default to true if not specified
+      stock: isTrackingEnabled ? (product.stock || product.stock_quantity || '').toString() : '',
+      trackStock: isTrackingEnabled,
       tags: product.tags || [],
       image: product.image || null,
     });
@@ -261,6 +346,10 @@ const ManageScreen = ({ navigation }) => {
   };
 
   const handleSaveProduct = async () => {
+    console.log('=== handleSaveProduct CALLED ===');
+    console.log('editingProduct:', editingProduct?.id);
+    console.log('formData:', formData);
+    
     // Enhanced validation
     if (!formData.name.trim()) {
       Alert.alert('Validation Error', 'Product name is required.');
@@ -305,40 +394,86 @@ const ManageScreen = ({ navigation }) => {
     }
 
     try {
+      console.log('INSIDE TRY BLOCK - editingProduct:', editingProduct?.id);
       if (editingProduct) {
         // Update existing product using ProductsService
         console.log('🚨 MANAGESCREEN: Updating product in Supabase:', editingProduct.id);
+        
+        // Determine stock_quantity based on track_stock setting
+        let stockQuantity;
+        if (formData.trackStock) {
+          // If tracking is ON, use the entered stock value
+          stockQuantity = parseInt(stock) || 0;
+        } else {
+          // If tracking is OFF, keep the existing stock_quantity (don't set to 0)
+          stockQuantity = editingProduct.stock_quantity || editingProduct.stock || 0;
+        }
+        
         const updateData = {
           name: formData.name.trim(),
           price,
-          stock_quantity: formData.trackStock ? stock : 0,
+          stock_quantity: stockQuantity,
+          track_stock: formData.trackStock,
           category: finalTags[0] || 'General',
-          description: `Updated product from ManageScreen`,
-          image_url: formData.image || '',
+          // Only update image_url if a new image was selected
+          ...(formData.image && { image_url: formData.image }),
         };
         
+        console.log('\n🟡🟡🟡 === MANAGESCREEN SENDING UPDATE === 🟡🟡🟡');
+        console.log('Product ID:', editingProduct.id);
+        console.log('formData.trackStock:', formData.trackStock, 'Type:', typeof formData.trackStock);
+        console.log('updateData.track_stock:', updateData.track_stock, 'Type:', typeof updateData.track_stock);
+        console.log('Full updateData:', JSON.stringify(updateData, null, 2));
+        
+        console.log('🟡 CALLING productsService.updateProduct...');
         await productsService.updateProduct(editingProduct.id, updateData);
+        console.log('🟡 RETURNED FROM productsService.updateProduct');
       } else {
         // Create new product using ProductsService
         console.log('🚨 MANAGESCREEN: Creating new product in Supabase');
         const productData = {
           name: formData.name.trim(),
           price,
-          stock_quantity: formData.trackStock ? stock : 0,
+          stock_quantity: formData.trackStock ? parseInt(stock) : 0,
+          track_stock: formData.trackStock,
           category: finalTags[0] || 'General',
           description: `New product created from ManageScreen`,
           image_url: formData.image || '',
         };
         
+        console.log('📦 Product data:', {
+          trackStock: formData.trackStock,
+          stock_quantity: productData.stock_quantity,
+          track_stock: productData.track_stock
+        });
+        
         await productsService.createProduct(productData);
       }
 
-      // Refresh products list from Supabase
+      // Force refresh products list from Supabase (bypass any cache)
+      console.log('🔄 Forcing product refresh after update...');
+      // Small delay to ensure database commit completes
+      await new Promise(resolve => setTimeout(resolve, 100));
       const updatedProducts = await productsService.getProducts();
-      setProducts(updatedProducts);
+      const normalizedProducts = normalizeProducts(updatedProducts);
+      
+      console.log('✅ Products refreshed:', normalizedProducts.length);
+      
+      // Find the product we just updated
+      const updatedProduct = normalizedProducts.find(p => p.id === editingProduct.id);
+      console.log('📦 Updated product from backend:', {
+        name: updatedProduct?.name,
+        track_stock: updatedProduct?.track_stock,
+        track_stock_type: typeof updatedProduct?.track_stock,
+        track_stock_strict_false: updatedProduct?.track_stock === false,
+        trackStock: updatedProduct?.trackStock,
+        stock_quantity: updatedProduct?.stock_quantity
+      });
+      
+      setProducts(normalizedProducts);
       
       // Also save to AsyncStorage for compatibility
-      await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+      await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
       if (updatedProducts.length > 0) {
         await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       }
@@ -368,14 +503,14 @@ const ManageScreen = ({ navigation }) => {
           <Image source={{ uri: item.image }} style={styles.productImageStyle} />
         ) : (
           <View style={styles.productImagePlaceholder}>
-            <Text style={styles.productImagePlaceholderText}>📦</Text>
+            <Ionicons name="cube-outline" size={32} color="#6b7280" />
           </View>
         )}
       </View>
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
         <Text style={styles.productDetails}>
-          ₹{item.price}{item.trackStock ? ` • Stock: ${item.stock}` : ' • No stock tracking'}
+          ₹{item.price}{(item.track_stock !== false) ? ` • Stock: ${item.stock || item.stock_quantity}` : ' • No stock tracking'}
         </Text>
         {item.tags && item.tags.length > 0 && (
           <View style={styles.productTags}>
@@ -395,13 +530,13 @@ const ManageScreen = ({ navigation }) => {
           style={styles.actionButton}
           onPress={() => handleEditProduct(item)}
         >
-          <Text style={styles.actionIcon}>✏️</Text>
+          <Ionicons name="pencil-outline" size={20} color="#3b82f6" />
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.actionButton}
           onPress={() => handleDeleteProduct(item.id)}
         >
-          <Text style={styles.actionIcon}>🗑️</Text>
+          <Ionicons name="trash-outline" size={20} color="#ef4444" />
         </TouchableOpacity>
       </View>
     </View>
@@ -462,9 +597,9 @@ const ManageScreen = ({ navigation }) => {
     const testOrderData = {
       orderNumber: 'TEST-001',
       items: [
-        { name: 'Test Burger', quantity: 2, price: 150, emoji: '🍔' },
-        { name: 'Test Coffee', quantity: 1, price: 80, emoji: '☕' },
-        { name: 'Test Fries', quantity: 1, price: 60, emoji: '🍟' },
+        { name: 'Test Burger', quantity: 2, price: 150 },
+        { name: 'Test Coffee', quantity: 1, price: 80 },
+        { name: 'Test Fries', quantity: 1, price: 60 },
       ],
       customerName: 'Test Customer',
       phoneNumber: '9876543210',
@@ -502,19 +637,19 @@ const ManageScreen = ({ navigation }) => {
             style={styles.subscriptionButton}
             onPress={() => navigation.navigate('Subscription')}
           >
-            <Text style={styles.subscriptionIcon}>👑</Text>
+            <Ionicons name="diamond-outline" size={20} color="#f59e0b" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.profileButton}
             onPress={() => navigation.navigate('Profile')}
           >
-            <Text style={styles.profileIcon}>👨‍💼</Text>
+            <Ionicons name="person-outline" size={20} color="#4b5563" />
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.settingsButton}
             onPress={() => navigation.navigate('Settings')}
           >
-            <Text style={styles.settingsIcon}>⚙️</Text>
+            <Ionicons name="settings-outline" size={20} color="#4b5563" />
           </TouchableOpacity>
         </View>
       </View>
@@ -553,7 +688,8 @@ const ManageScreen = ({ navigation }) => {
               <Text style={styles.productsTitle}>Products</Text>
               {!storeSetupCompleted && (
                 <View style={styles.setupWarning}>
-                  <Text style={styles.setupWarningText}>⚠️ Setup Required</Text>
+                  <Ionicons name="warning-outline" size={16} color="#f59e0b" />
+                  <Text style={styles.setupWarningText}>Setup Required</Text>
                 </View>
               )}
             </View>
@@ -577,7 +713,7 @@ const ManageScreen = ({ navigation }) => {
             <View style={styles.emptyProductsState}>
               {!storeSetupCompleted ? (
                 <>
-                  <Text style={styles.emptyProductsIcon}>🏪</Text>
+                  <Ionicons name="storefront-outline" size={64} color="#6b7280" style={{ marginBottom: 16 }} />
                   <Text style={styles.emptyProductsTitle}>Complete Store Setup</Text>
                   <Text style={styles.emptyProductsText}>
                     Before adding products, please complete your store setup with business details. This helps create professional receipts and manage your business properly.
@@ -592,7 +728,7 @@ const ManageScreen = ({ navigation }) => {
                 </>
               ) : (
                 <>
-                  <Text style={styles.emptyProductsIcon}>📦</Text>
+                  <Ionicons name="cube-outline" size={64} color="#6b7280" style={{ marginBottom: 16 }} />
                   <Text style={styles.emptyProductsTitle}>
                     Welcome, {storeInfo?.store_name || 'Store Owner'}!
                   </Text>
@@ -683,20 +819,33 @@ const ManageScreen = ({ navigation }) => {
                     <Text style={styles.inputLabel}>Track Stock Quantity</Text>
                     <Switch
                       value={formData.trackStock}
-                      onValueChange={(value) => setFormData({ ...formData, trackStock: value })}
+                      onValueChange={(value) => {
+                        console.log('🔄 [MANAGE] Track Stock toggle changed:', {
+                          newValue: value,
+                          newValue_type: typeof value,
+                          oldValue: formData.trackStock
+                        });
+                        
+                        // When enabling track_stock, populate stock field with existing value
+                        if (value && !formData.stock && editingProduct) {
+                          const existingStock = editingProduct.stock_quantity || editingProduct.stock || 0;
+                          setFormData({ ...formData, trackStock: value, stock: existingStock.toString() });
+                        } else {
+                          setFormData({ ...formData, trackStock: value });
+                        }
+                      }}
                       trackColor={{ false: colors.border.medium, true: '#93c5fd' }}
                       thumbColor={formData.trackStock ? colors.primary.main : colors.text.tertiary}
                     />
                   </View>
-                  {formData.trackStock && (
-                    <TextInput
-                      style={styles.textInput}
-                      placeholder="Stock Quantity"
-                      value={formData.stock}
-                      onChangeText={(text) => setFormData({ ...formData, stock: text })}
-                      keyboardType="numeric"
-                    />
-                  )}
+                  <TextInput
+                    style={[styles.textInput, !formData.trackStock && styles.textInputDisabled]}
+                    placeholder="Stock Quantity"
+                    value={formData.stock}
+                    onChangeText={(text) => formData.trackStock && setFormData({ ...formData, stock: text })}
+                    keyboardType="numeric"
+                    editable={formData.trackStock}
+                  />
                 </View>
 
                 {/* Product Image */}
@@ -858,6 +1007,9 @@ const styles = StyleSheet.create({
   },
   setupWarning: {
     marginTop: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
   setupWarningText: {
     fontSize: 12,
@@ -948,12 +1100,14 @@ const styles = StyleSheet.create({
   },
   stockTrackingContainer: {
     marginBottom: 16,
+    height: 108,
   },
   stockTrackingHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 8,
+    height: 40,
   },
   productInfo: {
     flex: 1,
@@ -1035,6 +1189,11 @@ const styles = StyleSheet.create({
     fontSize: 16,
     marginBottom: 16,
     backgroundColor: colors.background.surface,
+    height: 44,
+  },
+  textInputDisabled: {
+    backgroundColor: colors.gray[100],
+    color: colors.text.tertiary,
   },
   inputLabel: {
     fontSize: 14,

@@ -65,6 +65,7 @@ class ProductsService {
         category: productData.category || 'General',
         sku: productData.sku || this.generateProductSKU(productData.name),
         stock_quantity: parseInt(productData.stock_quantity) || 0,
+        track_stock: productData.track_stock !== false,
         low_stock_threshold: parseInt(productData.low_stock_threshold) || 5,
         image_url: productData.image_url || '',
         barcode: productData.barcode || '',
@@ -188,11 +189,16 @@ class ProductsService {
   // Update product (DIRECT TO SUPABASE - NO LOCAL STORAGE)
   async updateProduct(productId, updateData) {
     try {
-      console.log('📝 Updating product DIRECTLY in Supabase (NO LOCAL STORAGE):', productId, updateData);
+      console.log('=== updateProduct CALLED ===');
+      console.log('productId:', productId);
+      console.log('updateData:', JSON.stringify(updateData));
 
       if (!this.isOnline) {
+        console.log('OFFLINE - throwing error');
         throw new Error('Cannot update products while offline. Please check your internet connection.');
       }
+
+      console.log('Online - proceeding with update');
 
       // Prepare update data for Supabase
       const updatePayload = {
@@ -200,13 +206,15 @@ class ProductsService {
         updatedAt: new Date().toISOString()
       };
 
+      console.log('Calling updateProductInCloud...');
       // Update DIRECTLY in Supabase - NO LOCAL STORAGE
       const updatedProduct = await this.updateProductInCloud(productId, updatePayload);
       
-      console.log('✅ Product updated directly in Supabase:', updatedProduct.id);
+      console.log('✅ Product updated:', updatedProduct.id);
       return updatedProduct;
 
     } catch (error) {
+      console.error('❌ updateProduct ERROR:', error);
       console.error('❌ Error updating product in Supabase:', error);
       throw error;
     }
@@ -310,6 +318,7 @@ class ProductsService {
         category: productData.category,
         sku: productData.sku,
         stock_quantity: productData.stock_quantity,
+        track_stock: productData.track_stock,
         image_url: productData.image_url
       };
       
@@ -392,22 +401,45 @@ class ProductsService {
 
   async updateProductInCloud(productId, updateData) {
     try {
+      console.log('\n🔵🔵🔵 updateProductInCloud CALLED 🔵🔵🔵');
+      console.log('📤 Sending to backend:');
+      console.log('  productId:', productId);
+      console.log('  updateData:', JSON.stringify(updateData, null, 2));
+      console.log('  track_stock value:', updateData.track_stock);
+      console.log('  track_stock type:', typeof updateData.track_stock);
+      console.log('  track_stock === false:', updateData.track_stock === false);
+      console.log('  track_stock === true:', updateData.track_stock === true);
+      
+      const requestBody = JSON.stringify(updateData);
+      console.log('📤 Request body string:', requestBody);
+      
       const response = await networkService.apiCall(`/products/${productId}`, {
         method: 'PUT',
-        body: JSON.stringify(updateData)
+        body: requestBody
         // Removed abort signal to prevent cancellation
       });
 
+      console.log('📥 Response status:', response.status, response.ok);
+
       if (!response.ok) {
         const errorData = await response.json();
+        console.error('❌ Backend error:', errorData);
         throw new Error(errorData.message || 'Failed to update product in cloud');
       }
 
       const result = await response.json();
+      console.log('📥 Backend response data:');
+      console.log('  track_stock:', result.data?.track_stock);
+      console.log('  track_stock type:', typeof result.data?.track_stock);
+      console.log('  track_stock === false:', result.data?.track_stock === false);
+      console.log('  Full response:', JSON.stringify(result.data, null, 2));
+      
       return result.data;
 
     } catch (error) {
-      console.error('Error updating product in cloud:', error);
+      console.error('❌ updateProductInCloud ERROR:', error);
+      console.error('Error message:', error.message);
+      console.error('Error stack:', error.stack);
       throw error;
     }
   }

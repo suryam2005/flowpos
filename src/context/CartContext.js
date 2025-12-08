@@ -80,18 +80,42 @@ export const CartProvider = ({ children }) => {
   };
 
   const addItem = (product) => {
+    const cartItem = state.items.find(item => item.id === product.id);
+    const currentQuantity = cartItem ? cartItem.quantity : 0;
+    
+    // Check if tracking is enabled
+    // track_stock is the source of truth from backend
+    const isTrackingEnabled = product.track_stock !== false;
+    
+    if (isTrackingEnabled) {
+      // If tracking is enabled, check against actual stock
+      if (currentQuantity >= product.stock) {
+        return false; // Return false to indicate failure
+      }
+    } else {
+      // If tracking is disabled, limit to 50 items per product
+      if (currentQuantity >= 50) {
+        return false; // Return false to indicate failure
+      }
+    }
+    
     dispatch({ type: 'ADD_ITEM', payload: product });
+    return true; // Return true to indicate success
   };
 
   const removeItem = (productId) => {
     dispatch({ type: 'REMOVE_ITEM', payload: productId });
   };
 
-  const updateQuantity = (productId, quantity) => {
+  const updateQuantity = (productId, quantity, maxStock = null) => {
     if (quantity <= 0) {
       removeItem(productId);
+    } else if (maxStock && quantity > maxStock) {
+      // Don't update if exceeds stock
+      return false;
     } else {
       dispatch({ type: 'UPDATE_QUANTITY', payload: { id: productId, quantity } });
+      return true;
     }
   };
 

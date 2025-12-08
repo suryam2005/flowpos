@@ -64,11 +64,15 @@ const CustomAlert = ({
   const typeStyles = getTypeStyles();
 
   const handleButtonPress = (button) => {
-    if (button.onPress) {
-      button.onPress();
-    }
+    // Close alert first
     if (onClose) {
       onClose();
+    }
+    // Then execute the button action
+    if (button.onPress) {
+      setTimeout(() => {
+        button.onPress();
+      }, 100);
     }
   };
 
@@ -141,8 +145,10 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.surface,
     borderRadius: 20,
     padding: 24,
-    width: '100%',
-    maxWidth: 320,
+    width: '85%',
+    maxWidth: 500,
+    minWidth: 280,
+    minHeight: 240, // Consistent minimum height
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -164,6 +170,8 @@ const styles = StyleSheet.create({
   content: {
     alignItems: 'center',
     marginBottom: 24,
+    width: '100%',
+    minHeight: 60, // Consistent content area
   },
   title: {
     fontSize: 18,
@@ -171,22 +179,29 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     textAlign: 'center',
     marginBottom: 8,
+    width: '100%',
   },
   message: {
-    fontSize: 16,
+    fontSize: 15,
     color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 22,
+    width: '100%',
+    flexShrink: 1, // Allow text to wrap properly
   },
   buttonContainer: {
     width: '100%',
+    height: 'auto',
   },
   button: {
     backgroundColor: colors.primary.main,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
     marginBottom: 8,
+    height: 44,
   },
   singleButton: {
     marginBottom: 0,

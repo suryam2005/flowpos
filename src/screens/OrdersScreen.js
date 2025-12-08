@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOrders } from '../hooks/useOrders';
@@ -167,7 +168,8 @@ const OrdersScreen = ({ navigation }) => {
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.invoiceButtonText}>📄 Invoice</Text>
+              <Ionicons name="document-text-outline" size={16} color={colors.primary.main} style={{ marginRight: 4 }} />
+              <Text style={styles.invoiceButtonText}>Invoice</Text>
             </TouchableOpacity>
             <TouchableOpacity
               style={styles.sendButton}
@@ -177,7 +179,8 @@ const OrdersScreen = ({ navigation }) => {
               }}
               activeOpacity={0.7}
             >
-              <Text style={styles.sendButtonText}>📱 Send</Text>
+              <Ionicons name="send-outline" size={16} color="#ffffff" style={{ marginRight: 4 }} />
+              <Text style={styles.sendButtonText}>Send</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -187,7 +190,7 @@ const OrdersScreen = ({ navigation }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>📋</Text>
+      <Ionicons name="receipt-outline" size={64} color="#6b7280" />
       <Text style={styles.emptyTitle}>No Orders Yet</Text>
       <Text style={styles.emptyText}>
         Orders will appear here once you complete your first sale.
@@ -372,6 +375,7 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: 1,
     borderColor: colors.border.light,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 70,
@@ -388,6 +392,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 8,
     borderRadius: 6,
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     minWidth: 70,

@@ -8,10 +8,12 @@ import {
   Modal,
   Alert,
 } from 'react-native';
+import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import featureService from '../services/FeatureService';
 import ResponsiveText from './ResponsiveText';
 import { getDeviceInfo } from '../utils/deviceUtils';
 import { useSubscription } from '../hooks/useSubscription';
+import { colors } from '../styles/colors';
 
 const SubscriptionManager = ({ visible, onClose }) => {
   const { 
@@ -104,16 +106,25 @@ const SubscriptionManager = ({ visible, onClose }) => {
           
           {/* Limits */}
           <View style={styles.limitsContainer}>
-            <Text style={styles.limitItem}>
-              📦 {planConfig.limits.products === -1 ? 'Unlimited' : planConfig.limits.products} Products
-            </Text>
-            <Text style={styles.limitItem}>
-              📋 {planConfig.limits.orders_per_month === -1 ? 'Unlimited' : planConfig.limits.orders_per_month} Orders/month
-            </Text>
-            {planConfig.limits.storage_gb > 0 && (
+            <View style={styles.limitItemRow}>
+              <Ionicons name="cube-outline" size={16} color={colors.text.secondary} />
               <Text style={styles.limitItem}>
-                ☁️ {planConfig.limits.storage_gb}GB Cloud Storage
+                {planConfig.limits.products === -1 ? 'Unlimited' : planConfig.limits.products} Products
               </Text>
+            </View>
+            <View style={styles.limitItemRow}>
+              <Ionicons name="receipt-outline" size={16} color={colors.text.secondary} />
+              <Text style={styles.limitItem}>
+                {planConfig.limits.orders_per_month === -1 ? 'Unlimited' : planConfig.limits.orders_per_month} Orders/month
+              </Text>
+            </View>
+            {planConfig.limits.storage_gb > 0 && (
+              <View style={styles.limitItemRow}>
+                <Ionicons name="cloud-outline" size={16} color={colors.text.secondary} />
+                <Text style={styles.limitItem}>
+                  {planConfig.limits.storage_gb}GB Cloud Storage
+                </Text>
+              </View>
             )}
           </View>
 
@@ -204,9 +215,12 @@ const SubscriptionManager = ({ visible, onClose }) => {
               </View>
               
               {stat.percentage > 80 && !stat.unlimited && (
-                <ResponsiveText variant="small" style={styles.warningText}>
-                  ⚠️ Approaching limit
-                </ResponsiveText>
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+                  <Ionicons name="warning-outline" size={14} color="#f59e0b" />
+                  <ResponsiveText variant="small" style={styles.warningText}>
+                    Approaching limit
+                  </ResponsiveText>
+                </View>
               )}
             </View>
           );
@@ -268,21 +282,26 @@ const SubscriptionManager = ({ visible, onClose }) => {
               </ResponsiveText>
               
               <View style={styles.benefitsList}>
-                <Text style={styles.benefitItem}>
-                  💰 Increase sales with digital payments
-                </Text>
-                <Text style={styles.benefitItem}>
-                  ⚡ Faster checkout with SMS detection
-                </Text>
-                <Text style={styles.benefitItem}>
-                  ☁️ Never lose data with cloud backup
-                </Text>
-                <Text style={styles.benefitItem}>
-                  📊 Make better decisions with analytics
-                </Text>
-                <Text style={styles.benefitItem}>
-                  🔄 Access from multiple devices
-                </Text>
+                <View style={styles.benefitItemRow}>
+                  <Ionicons name="cash-outline" size={16} color={colors.success.main} />
+                  <Text style={styles.benefitItem}>Increase sales with digital payments</Text>
+                </View>
+                <View style={styles.benefitItemRow}>
+                  <Ionicons name="flash-outline" size={16} color={colors.success.main} />
+                  <Text style={styles.benefitItem}>Faster checkout with SMS detection</Text>
+                </View>
+                <View style={styles.benefitItemRow}>
+                  <Ionicons name="cloud-upload-outline" size={16} color={colors.success.main} />
+                  <Text style={styles.benefitItem}>Never lose data with cloud backup</Text>
+                </View>
+                <View style={styles.benefitItemRow}>
+                  <Ionicons name="stats-chart-outline" size={16} color={colors.success.main} />
+                  <Text style={styles.benefitItem}>Make better decisions with analytics</Text>
+                </View>
+                <View style={styles.benefitItemRow}>
+                  <Ionicons name="sync-outline" size={16} color={colors.success.main} />
+                  <Text style={styles.benefitItem}>Access from multiple devices</Text>
+                </View>
               </View>
             </View>
           </ScrollView>
@@ -392,8 +411,8 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   currentPlanCard: {
-    borderColor: '#8b5cf6',
-    backgroundColor: '#f3f4f6',
+    borderColor: colors.primary.main,
+    backgroundColor: colors.background.surface,
   },
   planHeader: {
     marginBottom: 16,
@@ -417,7 +436,7 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 16,
     right: 16,
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -437,10 +456,15 @@ const styles = StyleSheet.create({
   limitsContainer: {
     marginBottom: 12,
   },
+  limitItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 4,
+  },
   limitItem: {
     fontSize: 14,
     color: '#6b7280',
-    marginBottom: 4,
   },
   keyFeatures: {
     gap: 4,
@@ -456,7 +480,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   upgradeButtonPrimary: {
-    backgroundColor: '#8b5cf6',
+    backgroundColor: colors.primary.main,
   },
   upgradeButtonSecondary: {
     backgroundColor: '#f3f4f6',
@@ -482,10 +506,17 @@ const styles = StyleSheet.create({
   benefitsList: {
     gap: 8,
   },
+  benefitItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
   benefitItem: {
     fontSize: 14,
     color: '#374151',
     lineHeight: 20,
+    flex: 1,
   },
 });
 

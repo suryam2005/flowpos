@@ -107,9 +107,9 @@ class WhatsAppService {
     const invoiceNumber = invoiceData.invoiceNumber || 'INV-001';
     const total = invoiceData.grandTotal || invoiceData.total || 0;
     
-    return `Hi ${customerName}! 👋
+    return `Hi ${customerName}!
 
-Thank you for shopping with ${storeName}! 🛍️
+Thank you for shopping with ${storeName}!
 
 📄 Invoice: ${invoiceNumber}
 💰 Total: ₹${total.toFixed(2)}

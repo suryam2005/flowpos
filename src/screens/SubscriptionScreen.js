@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import featureService from '../services/FeatureService';
 import ResponsiveText from '../components/ResponsiveText';
 import { getDeviceInfo } from '../utils/deviceUtils';
@@ -110,51 +111,93 @@ const SubscriptionScreen = ({ navigation }) => {
           
           {/* Limits */}
           <View style={styles.limitsContainer}>
-            <Text style={styles.limitItem}>
-              📦 {planConfig.limits.products === -1 ? 'Unlimited' : planConfig.limits.products} Products
-            </Text>
-            <Text style={styles.limitItem}>
-              📋 {planConfig.limits.orders_per_month === -1 ? 'Unlimited' : planConfig.limits.orders_per_month} Orders/month
-            </Text>
-            {planConfig.limits.storage_gb > 0 && (
+            <View style={styles.limitItemRow}>
+              <Ionicons name="cube-outline" size={16} color={colors.text.secondary} />
               <Text style={styles.limitItem}>
-                ☁️ {planConfig.limits.storage_gb}GB Cloud Storage
+                {planConfig.limits.products === -1 ? 'Unlimited' : planConfig.limits.products} Products
               </Text>
+            </View>
+            <View style={styles.limitItemRow}>
+              <Ionicons name="receipt-outline" size={16} color={colors.text.secondary} />
+              <Text style={styles.limitItem}>
+                {planConfig.limits.orders_per_month === -1 ? 'Unlimited' : planConfig.limits.orders_per_month} Orders/month
+              </Text>
+            </View>
+            {planConfig.limits.storage_gb > 0 && (
+              <View style={styles.limitItemRow}>
+                <Ionicons name="cloud-outline" size={16} color={colors.text.secondary} />
+                <Text style={styles.limitItem}>
+                  {planConfig.limits.storage_gb}GB Cloud Storage
+                </Text>
+              </View>
             )}
-            <Text style={styles.limitItem}>
-              📱 {planConfig.limits.devices === -1 ? 'Unlimited' : planConfig.limits.devices} Device{planConfig.limits.devices !== 1 ? 's' : ''}
-            </Text>
+            <View style={styles.limitItemRow}>
+              <Ionicons name="phone-portrait-outline" size={16} color={colors.text.secondary} />
+              <Text style={styles.limitItem}>
+                {planConfig.limits.devices === -1 ? 'Unlimited' : planConfig.limits.devices} Device{planConfig.limits.devices !== 1 ? 's' : ''}
+              </Text>
+            </View>
           </View>
 
           {/* Key Features */}
           <View style={styles.keyFeatures}>
-            <Text style={styles.featureItem}>✅ Cash Payments</Text>
+            <View style={styles.featureItemRow}>
+              <Ionicons name="checkmark-circle" size={16} color="#059669" />
+              <Text style={styles.featureItem}>Cash Payments</Text>
+            </View>
             {planConfig.features.card_payments && (
-              <Text style={styles.featureItem}>✅ Card Payments</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>Card Payments</Text>
+              </View>
             )}
             {planConfig.features.upi_payments && (
-              <Text style={styles.featureItem}>✅ UPI/QR Payments</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>UPI/QR Payments</Text>
+              </View>
             )}
             {planConfig.features.sms_detection && (
-              <Text style={styles.featureItem}>✅ SMS Payment Detection</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>SMS Payment Detection</Text>
+              </View>
             )}
             {planConfig.features.cloud_backup && (
-              <Text style={styles.featureItem}>✅ Cloud Backup</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>Cloud Backup</Text>
+              </View>
             )}
             {planConfig.features.multi_device_sync && (
-              <Text style={styles.featureItem}>✅ Multi-Device Sync</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>Multi-Device Sync</Text>
+              </View>
             )}
             {planConfig.features.advanced_analytics && (
-              <Text style={styles.featureItem}>✅ Advanced Analytics</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>Advanced Analytics</Text>
+              </View>
             )}
             {planConfig.features.custom_branding && (
-              <Text style={styles.featureItem}>✅ Custom Branding</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>Custom Branding</Text>
+              </View>
             )}
             {planConfig.features.api_access && (
-              <Text style={styles.featureItem}>✅ API Access</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>API Access</Text>
+              </View>
             )}
             {planConfig.features.priority_support && (
-              <Text style={styles.featureItem}>✅ Priority Support</Text>
+              <View style={styles.featureItemRow}>
+                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Text style={styles.featureItem}>Priority Support</Text>
+              </View>
             )}
           </View>
         </View>
@@ -306,24 +349,30 @@ const SubscriptionScreen = ({ navigation }) => {
           </ResponsiveText>
           
           <View style={styles.benefitsList}>
-            <Text style={styles.benefitItem}>
-              💰 Increase sales with digital payments
-            </Text>
-            <Text style={styles.benefitItem}>
-              ⚡ Faster checkout with SMS detection
-            </Text>
-            <Text style={styles.benefitItem}>
-              ☁️ Never lose data with cloud backup
-            </Text>
-            <Text style={styles.benefitItem}>
-              📊 Make better decisions with analytics
-            </Text>
-            <Text style={styles.benefitItem}>
-              🔄 Access from multiple devices
-            </Text>
-            <Text style={styles.benefitItem}>
-              🎨 Customize with your branding
-            </Text>
+            <View style={styles.benefitItemRow}>
+              <Ionicons name="cash-outline" size={16} color={colors.text.primary} />
+              <Text style={styles.benefitItem}>Increase sales with digital payments</Text>
+            </View>
+            <View style={styles.benefitItemRow}>
+              <Ionicons name="flash-outline" size={16} color={colors.text.primary} />
+              <Text style={styles.benefitItem}>Faster checkout with SMS detection</Text>
+            </View>
+            <View style={styles.benefitItemRow}>
+              <Ionicons name="cloud-upload-outline" size={16} color={colors.text.primary} />
+              <Text style={styles.benefitItem}>Never lose data with cloud backup</Text>
+            </View>
+            <View style={styles.benefitItemRow}>
+              <Ionicons name="stats-chart-outline" size={16} color={colors.text.primary} />
+              <Text style={styles.benefitItem}>Make better decisions with analytics</Text>
+            </View>
+            <View style={styles.benefitItemRow}>
+              <Ionicons name="sync-outline" size={16} color={colors.text.primary} />
+              <Text style={styles.benefitItem}>Access from multiple devices</Text>
+            </View>
+            <View style={styles.benefitItemRow}>
+              <Ionicons name="color-palette-outline" size={16} color={colors.text.primary} />
+              <Text style={styles.benefitItem}>Customize with your branding</Text>
+            </View>
           </View>
         </View>
 
@@ -542,13 +591,23 @@ const styles = StyleSheet.create({
   limitsContainer: {
     marginBottom: 12,
   },
+  limitItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 4,
+    gap: 8,
+  },
   limitItem: {
     fontSize: 14,
     color: colors.text.secondary,
-    marginBottom: 4,
   },
   keyFeatures: {
     gap: 4,
+  },
+  featureItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   featureItem: {
     fontSize: 14,
@@ -595,10 +654,16 @@ const styles = StyleSheet.create({
   benefitsList: {
     gap: 8,
   },
+  benefitItemRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   benefitItem: {
     fontSize: 14,
     color: colors.text.primary,
     lineHeight: 20,
+    flex: 1,
   },
   supportContainer: {
     backgroundColor: colors.background.surface,

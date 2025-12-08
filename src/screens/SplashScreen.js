@@ -7,6 +7,7 @@ import {
   Dimensions,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const { width, height } = Dimensions.get('window');
@@ -103,7 +104,7 @@ const SplashScreen = ({ navigation }) => {
           ]}
         >
           <View style={styles.logo}>
-            <Text style={styles.logoEmoji}>🏪</Text>
+            <Ionicons name="storefront" size={80} color="#2563EB" />
             <Text style={styles.logoText}>FlowPOS</Text>
             <Text style={styles.logoSubtext}>Point of Sale System</Text>
           </View>

@@ -10,6 +10,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
@@ -122,7 +123,11 @@ const TabletPOSScreen = ({ navigation }) => {
         title: 'Out of Stock',
         message: `${product.name} is currently out of stock.`,
         type: 'warning',
-        buttons: [{ text: 'OK', style: 'default' }],
+        buttons: [{ 
+          text: 'OK', 
+          style: 'default',
+          onPress: () => {} // Close alert only
+        }],
       });
       setShowAlert(true);
       return;
@@ -164,7 +169,7 @@ const TabletPOSScreen = ({ navigation }) => {
             <Image source={{ uri: item.image }} style={styles.productImageStyle} />
           ) : (
             <View style={styles.productImagePlaceholder}>
-              <Text style={[styles.productImagePlaceholderText, isTablet && styles.tabletImagePlaceholderText]}>📦</Text>
+              <Ionicons name="cube-outline" size={isTablet ? 40 : 32} color="#6b7280" />
             </View>
           )}
         </View>
@@ -212,7 +217,7 @@ const TabletPOSScreen = ({ navigation }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Text style={styles.emptyIcon}>📦</Text>
+      <Ionicons name="cube-outline" size={isTablet ? 80 : 64} color="#6b7280" />
       <Text style={[styles.emptyTitle, isTablet && styles.tabletEmptyTitle]}>No Products Yet</Text>
       <Text style={[styles.emptyText, isTablet && styles.tabletEmptyText]}>
         Start by adding your first products to begin selling
@@ -269,8 +274,8 @@ const TabletPOSScreen = ({ navigation }) => {
                 <RefreshControl
                   refreshing={refreshing}
                   onRefresh={onRefresh}
-                  tintColor="#8b5cf6"
-                  colors={['#8b5cf6']}
+                  tintColor={colors.primary.main}
+                  colors={[colors.primary.main]}
                   progressBackgroundColor="#ffffff"
                   title="Pull to refresh products..."
                   titleColor="#6b7280"
