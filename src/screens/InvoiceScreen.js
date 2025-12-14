@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,12 +6,14 @@ import {
   Alert,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFocusEffect } from '@react-navigation/native';
 import SimpleInvoicePreview from '../components/SimpleInvoicePreview';
 import { generateInvoiceNumber } from '../utils/invoiceGenerator';
 import { colors } from '../styles/colors';
 
 const InvoiceScreen = ({ route, navigation }) => {
   const [invoiceData, setInvoiceData] = useState(null);
+  const [refreshTrigger, setRefreshTrigger] = useState(0);
   const { orderData, autoRedirect = false, autoRedirectToHome = false } = route.params || {};
 
   useEffect(() => {
@@ -52,6 +54,14 @@ const InvoiceScreen = ({ route, navigation }) => {
     }
   }, [navigation, autoRedirect, autoRedirectToHome]);
 
+  // Refresh WhatsApp status when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      console.log('📄 [InvoiceScreen] Screen focused - triggering WhatsApp status refresh');
+      setRefreshTrigger(prev => prev + 1);
+    }, [])
+  );
+
   const isRecentOrder = (timestamp) => {
     const orderTime = new Date(timestamp);
     const now = new Date();
@@ -61,12 +71,31 @@ const InvoiceScreen = ({ route, navigation }) => {
 
   const generateInvoiceData = async () => {
     try {
-      console.log('Generating invoice data for order:', orderData);
-      
       // Load store information
       const storeInfo = await AsyncStorage.getItem('storeInfo');
       const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
-      console.log('Store info loaded:', parsedStoreInfo);
+      
+
+
+      // Check if store name should be shown on invoice
+      const showStoreNameSetting = await AsyncStorage.getItem('showStoreNameOnInvoice');
+      const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
+      
+      console.log('🏪 Store name setting check:', {
+        showStoreNameSetting,
+        showStoreName,
+        storeInfo: parsedStoreInfo
+      });
+
+      console.log('👤 [InvoiceScreen] Customer data debug:', {
+        originalCustomerName: orderData.customerName,
+        originalPhoneNumber: orderData.phoneNumber,
+        hasCustomerName: !!(orderData.customerName && orderData.customerName.trim() !== ''),
+        hasPhoneNumber: !!(orderData.phoneNumber && orderData.phoneNumber.trim() !== ''),
+        customerNameLength: orderData.customerName?.length,
+        customerNameTrimmed: orderData.customerName?.trim(),
+        willShowWalkIn: !(orderData.customerName && orderData.customerName.trim() !== '')
+      });
 
       // Ensure orderData and items exist
       if (!orderData || !orderData.items || !Array.isArray(orderData.items)) {
@@ -100,12 +129,27 @@ const InvoiceScreen = ({ route, navigation }) => {
         grandTotal
       });
 
+      // Get store name from store info
+      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name;
+      
+      // FIXED: Apply store name setting to invoice display
+      const displayStoreName = showStoreName && actualStoreName ? actualStoreName : 'FlowPOS Store';
+      
+      console.log('🏪 [InvoiceScreen] Store name processing:', {
+        showStoreName,
+        actualStoreName,
+        displayStoreName,
+        willShowCustomName: displayStoreName !== 'FlowPOS Store'
+      });
+
       const invoice = {
-        // Store details with fallbacks
-        storeName: parsedStoreInfo.name || 'FlowPOS Store',
-        storeAddress: parsedStoreInfo.address || 'Store Address Not Set',
-        storeContact: parsedStoreInfo.phone || '+91 XXXXXXXXXX',
-        storeGSTIN: parsedStoreInfo.gstin || '',
+        // Store details with setting applied - use displayStoreName for invoice display
+        storeName: displayStoreName,
+        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
+        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
+        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
+        storeContact: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '+91 XXXXXXXXXX', // Keep for backward compatibility
+        storeGSTIN: parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '',
         
         // Invoice details
         invoiceNumber: orderData.orderNumber || generateInvoiceNumber(),
@@ -119,8 +163,8 @@ const InvoiceScreen = ({ route, navigation }) => {
           minute: '2-digit',
           hour12: true
         }),
-        customerName: orderData.customerName || 'Walk-in Customer',
-        phoneNumber: orderData.phoneNumber || '',
+        customerName: orderData.customerName && orderData.customerName.trim() !== '' ? orderData.customerName : 'Walk-in Customer',
+        phoneNumber: orderData.phoneNumber && orderData.phoneNumber.trim() !== '' ? orderData.phoneNumber : '',
         
         // Items and totals
         items: orderData.items.map(item => ({
@@ -132,7 +176,10 @@ const InvoiceScreen = ({ route, navigation }) => {
         subtotal,
         ...(tax > 0 && { tax, gst: tax, gstPercentage }), // Only include tax fields if tax > 0
         grandTotal,
+        paymentMethod: orderData.paymentMethod || 'Cash', // Add payment method
       };
+
+
 
       setInvoiceData(invoice);
     } catch (error) {
@@ -173,6 +220,7 @@ const InvoiceScreen = ({ route, navigation }) => {
       invoiceData={invoiceData}
       onClose={handleClose}
       onSendWhatsApp={handleSendWhatsApp}
+      refreshTrigger={refreshTrigger}
     />
   );
 };

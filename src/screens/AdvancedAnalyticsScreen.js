@@ -7,8 +7,7 @@ import {
   TouchableOpacity,
   RefreshControl,
   Modal,
-  TextInput,
-  Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
@@ -16,40 +15,51 @@ import * as Haptics from 'expo-haptics';
 import { Ionicons } from '@expo/vector-icons';
 import ordersService from '../services/OrdersService';
 import productsService from '../services/ProductsService';
+
 import { colors } from '../styles/colors';
 import { PageLoader } from '../components/LoadingSpinner';
 import { usePageLoading } from '../hooks/usePageLoading';
 
 const AdvancedAnalyticsScreen = ({ navigation }) => {
-  const [selectedView, setSelectedView] = useState('daily'); // daily, weekly, monthly, yearly, product
+  const [selectedView, setSelectedView] = useState('daily'); // daily, weekly, monthly, yearly
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [products, setProducts] = useState([]);
   const [orders, setOrders] = useState([]);
   const [filteredData, setFilteredData] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [isExportingPDF, setIsExportingPDF] = useState(false);
   
-  // Filter states
+
+
+  
+  // Filter states - Simplified
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [dateRange, setDateRange] = useState({ start: null, end: null });
   const [categoryFilter, setCategoryFilter] = useState('all');
-  const [minAmount, setMinAmount] = useState('');
-  const [maxAmount, setMaxAmount] = useState('');
   
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
 
   useEffect(() => {
+    // TESTING MODE: Skip feature access check
+    // checkFeatureAccess();
     loadData();
   }, []);
 
+
+
+  // OPTIMIZED: Only refresh on manual pull-to-refresh, not on every focus
+  // This prevents unnecessary API calls when navigating between tabs
   useFocusEffect(
     useCallback(() => {
-      loadData();
+      // Skip automatic refresh - user can manually refresh if needed
+      // This is Phase 1 optimization to reduce API calls
+      console.log('📈 [AdvancedAnalytics] Screen focused - using cached data (manual refresh available)');
     }, [])
   );
 
   useEffect(() => {
     applyFilters();
-  }, [selectedView, orders, dateRange, categoryFilter, minAmount, maxAmount, selectedProduct]);
+  }, [selectedView, orders, dateRange, categoryFilter, selectedProduct]);
 
   const loadData = async (isRefresh = false) => {
     if (isRefresh) {
@@ -58,13 +68,79 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     }
     
     try {
+      console.log('📊 [AdvancedAnalytics] Loading data...');
       const [ordersData, productsData] = await Promise.all([
         ordersService.getOrders(),
         productsService.getProducts()
       ]);
       
+      console.log('📊 [AdvancedAnalytics] Loaded:', ordersData.length, 'orders,', productsData.length, 'products');
+      
+      if (ordersData.length > 0) {
+        console.log('📊 [AdvancedAnalytics] Sample order structure:', {
+          id: ordersData[0].id,
+          timestamp: ordersData[0].timestamp,
+          createdAt: ordersData[0].createdAt,
+          created_at: ordersData[0].created_at,
+          total: ordersData[0].total,
+          items: ordersData[0].items ? `${ordersData[0].items.length} items` : 'No items',
+          itemsStructure: ordersData[0].items?.[0] || 'No items'
+        });
+      } else {
+        console.log('📊 [AdvancedAnalytics] No orders found - filters will show empty results');
+      }
+      
       setOrders(ordersData);
       setProducts(productsData);
+      
+
+      
+      // Initialize filteredData with all orders if no filters are active
+      const hasActiveFilters = dateRange.start || dateRange.end || categoryFilter !== 'all' || selectedProduct;
+      if (!hasActiveFilters) {
+        console.log('📊 [AdvancedAnalytics] No active filters, initializing with all orders');
+        setFilteredData(ordersData);
+      }
+      
+      // Explicitly apply filters after data is loaded
+      console.log('📊 [AdvancedAnalytics] Data loaded, applying initial filters...');
+      
+      // Debug: Test filter functionality with real data
+      if (ordersData.length > 0) {
+        console.log('📊 [AdvancedAnalytics] Testing filters with real data...');
+        
+        // Test today filter
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        
+        const todayOrders = ordersData.filter(order => {
+          let orderDate;
+          if (order.timestamp) {
+            orderDate = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+          } else if (order.createdAt) {
+            orderDate = new Date(order.createdAt);
+          } else {
+            return false;
+          }
+          return orderDate >= today && orderDate <= todayEnd;
+        });
+        
+        console.log('📊 [AdvancedAnalytics] Today filter test:', todayOrders.length, 'out of', ordersData.length, 'orders');
+        
+        // Test category filter if categories exist
+        const categories = new Set();
+        ordersData.forEach(order => {
+          if (order.items && Array.isArray(order.items)) {
+            order.items.forEach(item => {
+              if (item.category) categories.add(item.category);
+            });
+          }
+        });
+        
+        console.log('📊 [AdvancedAnalytics] Available categories:', Array.from(categories));
+      }
       
       if (!isRefresh) {
         finishLoading();
@@ -79,7 +155,32 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   };
 
   const applyFilters = () => {
+    // Safety check: ensure orders is populated
+    if (!orders || orders.length === 0) {
+      console.log('📊 [AdvancedAnalytics] No orders data available for filtering');
+      setFilteredData([]);
+      return;
+    }
+    
+    console.log('📊 [AdvancedAnalytics] Applying filters to', orders.length, 'orders');
+    console.log('📊 [AdvancedAnalytics] Active filters:', {
+      dateRange: dateRange.start || dateRange.end ? `${dateRange.start || 'any'} to ${dateRange.end || 'any'}` : 'none',
+      category: categoryFilter !== 'all' ? categoryFilter : 'all categories',
+      product: selectedProduct?.name || 'all products'
+    });
+    
     let filtered = [...orders];
+    
+    // Check if any filters are actually active
+    const hasActiveFilters = dateRange.start || dateRange.end || categoryFilter !== 'all' || selectedProduct;
+    
+    if (!hasActiveFilters) {
+      console.log('📊 [AdvancedAnalytics] No active filters, showing all orders');
+      setFilteredData(filtered);
+      return;
+    }
+    
+    console.log('📊 [AdvancedAnalytics] Active filters detected, applying...');
     
     // Date range filter - Start date (beginning of day)
     if (dateRange.start) {
@@ -87,7 +188,26 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       startDate.setHours(0, 0, 0, 0);
       
       filtered = filtered.filter(order => {
-        const orderDate = new Date(order.timestamp || order.createdAt);
+        // Handle multiple date field formats from backend
+        let orderDate;
+        if (order.timestamp) {
+          // If timestamp is a number (Unix timestamp)
+          orderDate = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+        } else if (order.createdAt) {
+          orderDate = new Date(order.createdAt);
+        } else if (order.created_at) {
+          orderDate = new Date(order.created_at);
+        } else {
+          console.warn('📊 Order missing date field for date filter:', order.id);
+          return false; // Skip orders without date when date filter is active
+        }
+        
+        const isValid = !isNaN(orderDate.getTime());
+        if (!isValid) {
+          console.warn('📊 Invalid date in order:', order.id, order.timestamp, order.createdAt);
+          return false;
+        }
+        
         return orderDate >= startDate;
       });
     }
@@ -98,26 +218,28 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       endDate.setHours(23, 59, 59, 999);
       
       filtered = filtered.filter(order => {
-        const orderDate = new Date(order.timestamp || order.createdAt);
+        // Handle multiple date field formats from backend
+        let orderDate;
+        if (order.timestamp) {
+          orderDate = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+        } else if (order.createdAt) {
+          orderDate = new Date(order.createdAt);
+        } else if (order.created_at) {
+          orderDate = new Date(order.created_at);
+        } else {
+          return false; // Skip orders without date
+        }
+        
+        const isValid = !isNaN(orderDate.getTime());
+        if (!isValid) {
+          return false;
+        }
+        
         return orderDate <= endDate;
       });
     }
     
-    // Amount range filter - Minimum amount
-    if (minAmount && minAmount.trim() !== '') {
-      const minValue = parseFloat(minAmount);
-      if (!isNaN(minValue)) {
-        filtered = filtered.filter(order => (order.total || 0) >= minValue);
-      }
-    }
-    
-    // Amount range filter - Maximum amount
-    if (maxAmount && maxAmount.trim() !== '') {
-      const maxValue = parseFloat(maxAmount);
-      if (!isNaN(maxValue)) {
-        filtered = filtered.filter(order => (order.total || 0) <= maxValue);
-      }
-    }
+    // Amount range filter removed for simplicity
     
     // Category filter
     if (categoryFilter && categoryFilter !== 'all') {
@@ -127,25 +249,68 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       });
     }
     
-    // Product-specific filter
+    // Product-specific filter - Fixed to use product name instead of ID
     if (selectedProduct) {
       filtered = filtered.filter(order => {
         if (!order.items || order.items.length === 0) return false;
-        return order.items.some(item => item.id === selectedProduct.id);
+        return order.items.some(item => 
+          item.name && selectedProduct.name && 
+          item.name.toLowerCase().includes(selectedProduct.name.toLowerCase())
+        );
       });
+    }
+    
+    console.log('📊 [AdvancedAnalytics] Filtered results:', filtered.length, 'orders');
+    
+    // Debug: Show sample filtered order structure
+    if (filtered.length > 0) {
+      console.log('📊 [AdvancedAnalytics] Sample filtered order:', {
+        id: filtered[0].id,
+        total: filtered[0].total,
+        createdAt: filtered[0].createdAt,
+        timestamp: filtered[0].timestamp,
+        itemsCount: filtered[0].items?.length || 0,
+        firstItem: filtered[0].items?.[0] || null
+      });
+    } else {
+      console.log('📊 [AdvancedAnalytics] No orders passed filters - checking why...');
+      if (orders.length > 0) {
+        console.log('📊 [AdvancedAnalytics] Sample original order for comparison:', {
+          id: orders[0].id,
+          total: orders[0].total,
+          createdAt: orders[0].createdAt,
+          timestamp: orders[0].timestamp,
+          itemsCount: orders[0].items?.length || 0
+        });
+      }
     }
     
     setFilteredData(filtered);
   };
 
   const generateDailyData = () => {
+    console.log('📊 [AdvancedAnalytics] generateDailyData called with', filteredData.length, 'filtered orders');
+    
     const dailyMap = {};
     
-    filteredData.forEach(order => {
-      if (!order.timestamp && !order.createdAt) return;
+    filteredData.forEach((order, index) => {
+      // Handle multiple date field formats from backend
+      let date;
+      if (order.timestamp) {
+        date = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+      } else if (order.createdAt) {
+        date = new Date(order.createdAt);
+      } else if (order.created_at) {
+        date = new Date(order.created_at);
+      } else {
+        console.warn('📊 [AdvancedAnalytics] Order', index, 'has no date field:', order.id);
+        return; // Skip orders without date
+      }
       
-      const date = new Date(order.timestamp || order.createdAt);
-      if (isNaN(date.getTime())) return; // Skip invalid dates
+      if (isNaN(date.getTime())) {
+        console.warn('📊 [AdvancedAnalytics] Order', index, 'has invalid date:', order.id, order.timestamp, order.createdAt);
+        return; // Skip invalid dates
+      }
       
       const dateKey = date.toISOString().split('T')[0];
       
@@ -166,16 +331,27 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       }
     });
     
-    return Object.values(dailyMap).sort((a, b) => new Date(b.date) - new Date(a.date));
+    const result = Object.values(dailyMap).sort((a, b) => new Date(b.date) - new Date(a.date));
+    console.log('📊 [AdvancedAnalytics] generateDailyData result:', result.length, 'days');
+    return result;
   };
 
   const generateWeeklyData = () => {
     const weeklyMap = {};
     
     filteredData.forEach(order => {
-      if (!order.timestamp && !order.createdAt) return;
+      // Handle multiple date field formats from backend
+      let date;
+      if (order.timestamp) {
+        date = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+      } else if (order.createdAt) {
+        date = new Date(order.createdAt);
+      } else if (order.created_at) {
+        date = new Date(order.created_at);
+      } else {
+        return; // Skip orders without date
+      }
       
-      const date = new Date(order.timestamp || order.createdAt);
       if (isNaN(date.getTime())) return; // Skip invalid dates
       
       const weekStart = new Date(date);
@@ -207,9 +383,18 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     const monthlyMap = {};
     
     filteredData.forEach(order => {
-      if (!order.timestamp && !order.createdAt) return;
+      // Handle multiple date field formats from backend
+      let date;
+      if (order.timestamp) {
+        date = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+      } else if (order.createdAt) {
+        date = new Date(order.createdAt);
+      } else if (order.created_at) {
+        date = new Date(order.created_at);
+      } else {
+        return; // Skip orders without date
+      }
       
-      const date = new Date(order.timestamp || order.createdAt);
       if (isNaN(date.getTime())) return; // Skip invalid dates
       
       const monthKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
@@ -238,9 +423,18 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     const yearlyMap = {};
     
     filteredData.forEach(order => {
-      if (!order.timestamp && !order.createdAt) return;
+      // Handle multiple date field formats from backend
+      let date;
+      if (order.timestamp) {
+        date = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+      } else if (order.createdAt) {
+        date = new Date(order.createdAt);
+      } else if (order.created_at) {
+        date = new Date(order.created_at);
+      } else {
+        return; // Skip orders without date
+      }
       
-      const date = new Date(order.timestamp || order.createdAt);
       if (isNaN(date.getTime())) return; // Skip invalid dates
       
       const yearKey = date.getFullYear().toString();
@@ -265,39 +459,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     return Object.values(yearlyMap).sort((a, b) => b.year.localeCompare(a.year));
   };
 
-  const generateProductSalesData = () => {
-    const productMap = {};
-    
-    filteredData.forEach(order => {
-      if (!order.items || !Array.isArray(order.items)) return;
-      
-      order.items.forEach(item => {
-        if (!item || !item.id) return;
-        
-        if (!productMap[item.id]) {
-          productMap[item.id] = {
-            id: item.id,
-            name: item.name || 'Unknown Product',
-            price: item.price || 0,
-            category: item.category || 'General',
-            image: item.image || null,
-            totalQuantity: 0,
-            totalRevenue: 0,
-            orderCount: 0,
-          };
-        }
-        
-        const quantity = item.quantity || 0;
-        const price = item.price || 0;
-        
-        productMap[item.id].totalQuantity += quantity;
-        productMap[item.id].totalRevenue += (price * quantity);
-        productMap[item.id].orderCount += 1;
-      });
-    });
-    
-    return Object.values(productMap).sort((a, b) => b.totalRevenue - a.totalRevenue);
-  };
+
 
   const getCategories = () => {
     const categories = new Set();
@@ -312,14 +474,589 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   const clearFilters = () => {
     setDateRange({ start: null, end: null });
     setCategoryFilter('all');
-    setMinAmount('');
-    setMaxAmount('');
     setSelectedProduct(null);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
   };
 
+
+
   const onRefresh = () => {
     loadData(true);
+  };
+
+  const generateComprehensiveAnalytics = () => {
+    console.log('📊 [AdvancedAnalytics] Generating comprehensive analytics data...');
+    
+    // Generate all analytics data based on current view and filters
+    const viewData = {
+      daily: generateDailyData(),
+      weekly: generateWeeklyData(),
+      monthly: generateMonthlyData(),
+      yearly: generateYearlyData()
+    };
+    
+    // Calculate overall metrics
+    const totalRevenue = filteredData.reduce((sum, order) => sum + (order.total || 0), 0);
+    const totalOrders = filteredData.length;
+    const totalItems = filteredData.reduce((sum, order) => {
+      if (!order.items || !Array.isArray(order.items)) return sum;
+      return sum + order.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
+    }, 0);
+    const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    
+    // Product analysis
+    const productSales = {};
+    filteredData.forEach(order => {
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          const key = item.name || 'Unknown Product';
+          if (!productSales[key]) {
+            productSales[key] = { name: key, quantity: 0, revenue: 0 };
+          }
+          productSales[key].quantity += item.quantity || 1;
+          productSales[key].revenue += (item.price || 0) * (item.quantity || 1);
+        });
+      }
+    });
+    
+    const topProducts = Object.values(productSales)
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+    
+    // Category analysis
+    const categoryData = {};
+    filteredData.forEach(order => {
+      if (order.items && Array.isArray(order.items)) {
+        order.items.forEach(item => {
+          const category = item.category || 'Uncategorized';
+          if (!categoryData[category]) {
+            categoryData[category] = { revenue: 0, quantity: 0 };
+          }
+          categoryData[category].revenue += (item.price || 0) * (item.quantity || 1);
+          categoryData[category].quantity += item.quantity || 1;
+        });
+      }
+    });
+    
+    // Payment method analysis
+    const paymentMethods = {
+      cash: filteredData.filter(o => (o.paymentMethod || '').toLowerCase().includes('cash')).length,
+      card: filteredData.filter(o => (o.paymentMethod || '').toLowerCase().includes('card')).length,
+      upi: filteredData.filter(o => (o.paymentMethod || '').toLowerCase().includes('upi')).length
+    };
+    
+    // Time-based analysis
+    const hourlyData = {};
+    const dailyData = {};
+    filteredData.forEach(order => {
+      const orderDate = new Date(order.timestamp || order.createdAt);
+      const hour = orderDate.getHours();
+      const dayName = orderDate.toLocaleDateString('en', { weekday: 'long' });
+      
+      hourlyData[hour] = (hourlyData[hour] || 0) + 1;
+      dailyData[dayName] = (dailyData[dayName] || 0) + 1;
+    });
+    
+    const peakHours = Object.entries(hourlyData)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 5)
+      .map(([hour, count]) => ({ hour: parseInt(hour), count, timeRange: `${hour}:00-${parseInt(hour)+1}:00` }));
+    
+    const peakDays = Object.entries(dailyData)
+      .sort(([,a], [,b]) => b - a)
+      .slice(0, 7)
+      .map(([day, count]) => ({ day, count }));
+    
+    return {
+      period: selectedView,
+      dateRange: dateRange,
+      categoryFilter: categoryFilter,
+      selectedProduct: selectedProduct,
+      viewData: viewData,
+      summary: {
+        totalRevenue,
+        totalOrders,
+        totalItems,
+        avgOrderValue
+      },
+      topProducts,
+      categoryData: Object.entries(categoryData).map(([name, data]) => ({ name, ...data })),
+      paymentMethods,
+      peakHours,
+      peakDays,
+      filteredOrdersCount: filteredData.length,
+      totalOrdersCount: orders.length,
+      generatedAt: new Date().toISOString()
+    };
+  };
+
+  const handlePDFExport = async () => {
+    if (orders.length === 0) {
+      Alert.alert('No Data', 'No orders available to generate analytics report.');
+      return;
+    }
+
+    setIsExportingPDF(true);
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+
+    try {
+      console.log('📄 [AdvancedAnalytics] Generating detailed analytics PDF...');
+      
+      // Generate comprehensive analytics data
+      const analyticsData = generateComprehensiveAnalytics();
+      
+      // Generate detailed PDF
+      const result = await generateDetailedAnalyticsPDF(analyticsData);
+
+      Alert.alert(
+        'Detailed Analytics Report Generated',
+        'Your comprehensive analytics report has been generated successfully. Would you like to share it?',
+        [
+          { text: 'Later', style: 'cancel' },
+          {
+            text: 'Share',
+            onPress: async () => {
+              await shareAnalyticsPDF(result.uri, result.filename);
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('PDF export error:', error);
+      Alert.alert('Export Error', 'Failed to generate detailed analytics report');
+    } finally {
+      setIsExportingPDF(false);
+    }
+  };
+
+  const generateDetailedAnalyticsPDF = async (analyticsData) => {
+    const { printToFileAsync } = await import('expo-print');
+    
+    // Get store information
+    const storeInfo = await getStoreInfo();
+    
+    // Generate comprehensive HTML
+    const htmlContent = generateDetailedAnalyticsHTML(storeInfo, analyticsData);
+    
+    // Generate PDF with custom filename
+    const dateString = new Date().toISOString().split('T')[0].replace(/-/g, '');
+    const filename = `FlowPOS_Detailed_Analytics_${dateString}.pdf`;
+    
+    const { uri } = await printToFileAsync({
+      html: htmlContent,
+      base64: false,
+      margins: {
+        left: 20,
+        top: 20,
+        right: 20,
+        bottom: 20,
+      },
+    });
+
+    return { uri, filename };
+  };
+
+  const shareAnalyticsPDF = async (uri, filename) => {
+    const { isAvailableAsync, shareAsync } = await import('expo-sharing');
+    
+    if (await isAvailableAsync()) {
+      await shareAsync(uri, {
+        mimeType: 'application/pdf',
+        dialogTitle: 'Share Detailed Analytics Report',
+        UTI: 'com.adobe.pdf'
+      });
+    }
+  };
+
+  const getStoreInfo = async () => {
+    try {
+      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
+      const storeData = await AsyncStorage.getItem('storeInfo');
+      if (storeData) {
+        const store = JSON.parse(storeData);
+        return {
+          name: store.store_name || store.name || 'FlowPOS Store',
+          address: store.store_address || store.address || 'Store Address',
+          phone: store.store_phone || store.phone || '+91 XXXXXXXXXX',
+          email: store.store_email || store.email || '',
+          gstNumber: store.gst_number || store.gstin || ''
+        };
+      }
+    } catch (error) {
+      console.error('Error getting store info:', error);
+    }
+    
+    return {
+      name: 'FlowPOS Store',
+      address: 'Store Address',
+      phone: '+91 XXXXXXXXXX',
+      email: '',
+      gstNumber: ''
+    };
+  };
+
+  const generateDetailedAnalyticsHTML = (storeInfo, data) => {
+    const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toFixed(2)}`;
+    const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-IN');
+    
+    // Generate period analysis rows
+    const periodRows = data.viewData[data.period].slice(0, 20).map(item => {
+      let periodLabel = '';
+      if (data.period === 'daily') {
+        periodLabel = formatDate(item.date);
+      } else if (data.period === 'weekly') {
+        periodLabel = `Week of ${formatDate(item.weekStart)}`;
+      } else if (data.period === 'monthly') {
+        const [year, month] = item.month.split('-');
+        periodLabel = new Date(year, parseInt(month) - 1).toLocaleDateString('en', { month: 'long', year: 'numeric' });
+      } else if (data.period === 'yearly') {
+        periodLabel = item.year;
+      }
+      
+      return `
+        <tr>
+          <td>${periodLabel}</td>
+          <td>${formatCurrency(item.revenue || item.totalRevenue || 0)}</td>
+          <td>${item.orders || item.orderCount || 0}</td>
+          <td>${item.items || item.totalQuantity || 0}</td>
+          <td>${formatCurrency((item.orders || item.orderCount) > 0 ? (item.revenue || item.totalRevenue || 0) / (item.orders || item.orderCount) : 0)}</td>
+        </tr>
+      `;
+    }).join('');
+
+    // Generate top products rows
+    const topProductsRows = data.topProducts.map((product, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${product.name}</td>
+        <td>${product.quantity}</td>
+        <td>${formatCurrency(product.revenue)}</td>
+        <td>${((product.revenue / data.summary.totalRevenue) * 100).toFixed(1)}%</td>
+      </tr>
+    `).join('');
+
+    // Generate category rows
+    const categoryRows = data.categoryData.sort((a, b) => b.revenue - a.revenue).map(category => `
+      <tr>
+        <td>${category.name}</td>
+        <td>${category.quantity}</td>
+        <td>${formatCurrency(category.revenue)}</td>
+        <td>${((category.revenue / data.summary.totalRevenue) * 100).toFixed(1)}%</td>
+      </tr>
+    `).join('');
+
+    // Generate peak hours rows
+    const peakHoursRows = data.peakHours.map((hour, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${hour.timeRange}</td>
+        <td>${hour.count}</td>
+        <td>${((hour.count / data.summary.totalOrders) * 100).toFixed(1)}%</td>
+      </tr>
+    `).join('');
+
+    // Generate peak days rows
+    const peakDaysRows = data.peakDays.map((day, index) => `
+      <tr>
+        <td>${index + 1}</td>
+        <td>${day.day}</td>
+        <td>${day.count}</td>
+        <td>${((day.count / data.summary.totalOrders) * 100).toFixed(1)}%</td>
+      </tr>
+    `).join('');
+    
+    return `
+      <!DOCTYPE html>
+      <html>
+      <head>
+        <meta charset="utf-8">
+        <title>FlowPOS Detailed Analytics Report</title>
+        <style>
+          body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+            line-height: 1.6;
+          }
+          .header {
+            text-align: center;
+            border-bottom: 3px solid #2563eb;
+            padding-bottom: 20px;
+            margin-bottom: 30px;
+          }
+          .store-name {
+            font-size: 28px;
+            font-weight: bold;
+            color: #2563eb;
+            margin-bottom: 5px;
+          }
+          .store-details {
+            font-size: 14px;
+            color: #666;
+            margin-bottom: 10px;
+          }
+          .report-title {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1f2937;
+            margin: 20px 0 10px 0;
+          }
+          .section {
+            margin-bottom: 40px;
+            page-break-inside: avoid;
+          }
+          .section-title {
+            font-size: 20px;
+            font-weight: bold;
+            color: #1f2937;
+            border-bottom: 2px solid #e5e7eb;
+            padding-bottom: 10px;
+            margin-bottom: 20px;
+          }
+          .metrics-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+            margin-bottom: 30px;
+          }
+          .metric-card {
+            background: #f8fafc;
+            border: 1px solid #e2e8f0;
+            border-radius: 8px;
+            padding: 20px;
+            text-align: center;
+          }
+          .metric-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #1e293b;
+            margin-bottom: 5px;
+          }
+          .metric-label {
+            font-size: 14px;
+            color: #64748b;
+            font-weight: 500;
+          }
+          .data-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+          }
+          .data-table th,
+          .data-table td {
+            border: 1px solid #e2e8f0;
+            padding: 12px;
+            text-align: left;
+          }
+          .data-table th {
+            background-color: #f1f5f9;
+            font-weight: 600;
+            color: #374151;
+          }
+          .data-table tr:nth-child(even) {
+            background-color: #f8fafc;
+          }
+          .filter-info {
+            background: #fef3c7;
+            border: 1px solid #fbbf24;
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 20px;
+          }
+          .filter-title {
+            font-weight: 600;
+            color: #92400e;
+            margin-bottom: 5px;
+          }
+          .filter-details {
+            color: #b45309;
+            font-size: 14px;
+          }
+          .footer {
+            margin-top: 50px;
+            padding-top: 20px;
+            border-top: 1px solid #e5e7eb;
+            text-align: center;
+            font-size: 12px;
+            color: #6b7280;
+          }
+        </style>
+      </head>
+      <body>
+        <!-- Header -->
+        <div class="header">
+          <div class="store-name">${storeInfo.name}</div>
+          <div class="store-details">
+            ${storeInfo.address}<br>
+            ${storeInfo.phone}${storeInfo.email ? ' • ' + storeInfo.email : ''}
+            ${storeInfo.gstNumber ? '<br>GST: ' + storeInfo.gstNumber : ''}
+          </div>
+          <div class="report-title">Detailed Analytics Report</div>
+          <div style="font-size: 16px; color: #6b7280;">
+            Generated on: ${formatDate(data.generatedAt)}<br>
+            Analysis Period: ${data.period.charAt(0).toUpperCase() + data.period.slice(1)}
+          </div>
+        </div>
+
+        <!-- Filter Information -->
+        <div class="section">
+          <div class="section-title">Report Filters & Scope</div>
+          <div class="filter-info">
+            <div class="filter-title">Applied Filters</div>
+            <div class="filter-details">
+              <strong>Time Period:</strong> ${data.period.charAt(0).toUpperCase() + data.period.slice(1)} view<br>
+              <strong>Date Range:</strong> ${data.dateRange.start ? formatDate(data.dateRange.start) : 'All time'} - ${data.dateRange.end ? formatDate(data.dateRange.end) : 'Present'}<br>
+              <strong>Category:</strong> ${data.categoryFilter === 'all' ? 'All Categories' : data.categoryFilter}<br>
+              <strong>Product:</strong> ${data.selectedProduct ? data.selectedProduct.name : 'All Products'}<br>
+              <strong>Orders Analyzed:</strong> ${data.filteredOrdersCount} out of ${data.totalOrdersCount} total orders
+            </div>
+          </div>
+        </div>
+
+        <!-- Executive Summary -->
+        <div class="section">
+          <div class="section-title">Executive Summary</div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-value">${formatCurrency(data.summary.totalRevenue)}</div>
+              <div class="metric-label">Total Revenue</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${data.summary.totalOrders}</div>
+              <div class="metric-label">Total Orders</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${data.summary.totalItems}</div>
+              <div class="metric-label">Items Sold</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${formatCurrency(data.summary.avgOrderValue)}</div>
+              <div class="metric-label">Avg Order Value</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Period Analysis -->
+        <div class="section">
+          <div class="section-title">${data.period.charAt(0).toUpperCase() + data.period.slice(1)} Analysis</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Period</th>
+                <th>Revenue</th>
+                <th>Orders</th>
+                <th>Items</th>
+                <th>Avg Order</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${periodRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Top Products -->
+        <div class="section">
+          <div class="section-title">Top Performing Products</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Product Name</th>
+                <th>Quantity Sold</th>
+                <th>Revenue</th>
+                <th>% of Total Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${topProductsRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Category Analysis -->
+        <div class="section">
+          <div class="section-title">Category Performance</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Category</th>
+                <th>Items Sold</th>
+                <th>Revenue</th>
+                <th>% of Total Revenue</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${categoryRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Payment Methods -->
+        <div class="section">
+          <div class="section-title">Payment Methods Distribution</div>
+          <div class="metrics-grid">
+            <div class="metric-card">
+              <div class="metric-value">${data.paymentMethods.cash}</div>
+              <div class="metric-label">Cash Payments</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${data.paymentMethods.card}</div>
+              <div class="metric-label">Card Payments</div>
+            </div>
+            <div class="metric-card">
+              <div class="metric-value">${data.paymentMethods.upi}</div>
+              <div class="metric-label">UPI Payments</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Peak Hours -->
+        <div class="section">
+          <div class="section-title">Peak Business Hours</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Time Range</th>
+                <th>Orders</th>
+                <th>% of Total Orders</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${peakHoursRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Peak Days -->
+        <div class="section">
+          <div class="section-title">Peak Business Days</div>
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Rank</th>
+                <th>Day</th>
+                <th>Orders</th>
+                <th>% of Total Orders</th>
+              </tr>
+            </thead>
+            <tbody>
+              ${peakDaysRows}
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Footer -->
+        <div class="footer">
+          <p>This detailed report was generated by FlowPOS Advanced Analytics</p>
+          <p>Report contains comprehensive business analytics and insights</p>
+          <p>Generated on: ${new Date(data.generatedAt).toLocaleString('en-IN')}</p>
+        </div>
+      </body>
+      </html>
+    `;
   };
 
   const getViewIcon = (view) => {
@@ -327,8 +1064,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       daily: 'calendar',
       weekly: 'calendar-outline',
       monthly: 'calendar-number',
-      yearly: 'calendar-sharp',
-      product: 'cube'
+      yearly: 'calendar-sharp'
     };
     return icons[view] || 'analytics';
   };
@@ -338,8 +1074,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       daily: 'Daily',
       weekly: 'Weekly',
       monthly: 'Monthly',
-      yearly: 'Yearly',
-      product: 'By Product'
+      yearly: 'Yearly'
     };
     return labels[view] || view;
   };
@@ -351,7 +1086,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.viewTabsContent}
       >
-        {['daily', 'weekly', 'monthly', 'yearly', 'product'].map(view => (
+        {['daily', 'weekly', 'monthly', 'yearly'].map(view => (
           <TouchableOpacity
             key={view}
             style={[styles.viewTab, selectedView === view && styles.viewTabActive]}
@@ -375,7 +1110,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   );
 
   const renderFilterButton = () => {
-    const hasActiveFilters = dateRange.start || dateRange.end || categoryFilter !== 'all' || minAmount || maxAmount || selectedProduct;
+    const hasActiveFilters = dateRange.start || dateRange.end || categoryFilter !== 'all' || selectedProduct;
     
     return (
       <TouchableOpacity
@@ -544,41 +1279,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
               </ScrollView>
             </View>
 
-            {/* Amount Range Filter */}
-            <View style={styles.filterSection}>
-              <View style={styles.filterLabelContainer}>
-                <Ionicons name="cash" size={20} color={colors.primary.main} />
-                <Text style={styles.filterLabel}>Order Amount Range</Text>
-              </View>
-              <Text style={styles.filterDescription}>Show orders within this price range</Text>
-              <View style={styles.amountRangeContainer}>
-                <View style={styles.amountInputContainer}>
-                  <Text style={styles.amountLabel}>Min</Text>
-                  <TextInput
-                    style={styles.amountInput}
-                    placeholder="0"
-                    keyboardType="numeric"
-                    value={minAmount}
-                    onChangeText={setMinAmount}
-                    placeholderTextColor={colors.text.tertiary}
-                  />
-                </View>
-                
-                <Text style={styles.amountRangeSeparator}>-</Text>
-                
-                <View style={styles.amountInputContainer}>
-                  <Text style={styles.amountLabel}>Max</Text>
-                  <TextInput
-                    style={styles.amountInput}
-                    placeholder="∞"
-                    keyboardType="numeric"
-                    value={maxAmount}
-                    onChangeText={setMaxAmount}
-                    placeholderTextColor={colors.text.tertiary}
-                  />
-                </View>
-              </View>
-            </View>
+            {/* Amount Range Filter removed for simplicity */}
 
             {/* Product Filter */}
             <View style={styles.filterSection}>
@@ -641,18 +1342,19 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
               }}
             >
               <Ionicons name="refresh-circle" size={20} color={colors.text.secondary} />
-              <Text style={styles.clearButtonText}>Reset All</Text>
+              <Text style={styles.clearButtonText}>Reset All Filters</Text>
             </TouchableOpacity>
             
             <TouchableOpacity
               style={styles.applyButton}
               onPress={() => {
+                console.log('📊 [AdvancedAnalytics] Applying filters and closing modal');
                 setShowFilterModal(false);
                 Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
               }}
             >
               <Ionicons name="checkmark-circle" size={20} color={colors.background.surface} />
-              <Text style={styles.applyButtonText}>Show Results</Text>
+              <Text style={styles.applyButtonText}>Apply Filters</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -696,12 +1398,6 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       revenue = item.revenue;
       orders = item.orders;
       items = item.items;
-    } else if (selectedView === 'product') {
-      title = item.name;
-      subtitle = item.category || 'General';
-      revenue = item.totalRevenue;
-      orders = item.orderCount;
-      items = item.totalQuantity;
     }
 
     return (
@@ -742,41 +1438,124 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   };
 
   const renderSummaryCards = () => {
-    const totalRevenue = filteredData.reduce((sum, order) => sum + (order.total || 0), 0);
-    const totalOrders = filteredData.length;
-    const totalItems = filteredData.reduce((sum, order) => 
-      sum + order.items.reduce((itemSum, item) => itemSum + item.quantity, 0), 0
-    );
+    // Get data based on selected view for dynamic summary cards
+    let viewData = [];
+    let periodLabel = '';
+    
+    switch (selectedView) {
+      case 'daily':
+        viewData = generateDailyData();
+        periodLabel = 'Today';
+        break;
+      case 'weekly':
+        viewData = generateWeeklyData();
+        periodLabel = 'This Week';
+        break;
+      case 'monthly':
+        viewData = generateMonthlyData();
+        periodLabel = 'This Month';
+        break;
+      case 'yearly':
+        viewData = generateYearlyData();
+        periodLabel = 'This Year';
+        break;
+      default:
+        // Fallback to total filtered data
+        const totalRevenue = filteredData.reduce((sum, order) => sum + (order.total || 0), 0);
+        const totalOrders = filteredData.length;
+        const totalItems = filteredData.reduce((sum, order) => {
+          if (!order.items || !Array.isArray(order.items)) return sum;
+          return sum + order.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
+        }, 0);
+        const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+        
+        const summaryData = [
+          {
+            icon: 'cash',
+            iconColor: colors.success.main,
+            iconBg: colors.success.background,
+            value: `₹${totalRevenue.toFixed(0)}`,
+            label: 'Total Sales',
+          },
+          {
+            icon: 'receipt',
+            iconColor: colors.primary.main,
+            iconBg: colors.primary.background,
+            value: totalOrders.toString(),
+            label: 'Orders',
+          },
+          {
+            icon: 'cube',
+            iconColor: colors.warning.main,
+            iconBg: colors.warning.background,
+            value: totalItems.toString(),
+            label: 'Items Sold',
+          },
+          {
+            icon: 'trending-up',
+            iconColor: colors.info.main,
+            iconBg: colors.info.background,
+            value: `₹${avgOrderValue.toFixed(0)}`,
+            label: 'Avg Order',
+          },
+        ];
+        
+        return (
+          <View style={styles.summaryContainer}>
+            {summaryData.map((item, index) => (
+              <View key={index} style={styles.summaryCard}>
+                <View style={[styles.summaryIconContainer, { backgroundColor: item.iconBg }]}>
+                  <Ionicons name={item.icon} size={22} color={item.iconColor} />
+                </View>
+                <Text style={styles.summaryValue}>{item.value}</Text>
+                <Text style={styles.summaryLabel}>{item.label}</Text>
+              </View>
+            ))}
+          </View>
+        );
+    }
+    
+    // Calculate totals from view-specific data
+    const totalRevenue = viewData.reduce((sum, item) => sum + (item.revenue || item.totalRevenue || 0), 0);
+    const totalOrders = viewData.reduce((sum, item) => sum + (item.orders || item.orderCount || 0), 0);
+    const totalItems = viewData.reduce((sum, item) => sum + (item.items || item.totalQuantity || 0), 0);
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
+    
+    // Get current period data (most recent entry)
+    const currentPeriodData = viewData.length > 0 ? viewData[0] : null;
+    const currentRevenue = currentPeriodData ? (currentPeriodData.revenue || currentPeriodData.totalRevenue || 0) : 0;
+    const currentOrders = currentPeriodData ? (currentPeriodData.orders || currentPeriodData.orderCount || 0) : 0;
+    const currentItems = currentPeriodData ? (currentPeriodData.items || currentPeriodData.totalQuantity || 0) : 0;
+    const currentAvg = currentOrders > 0 ? currentRevenue / currentOrders : 0;
 
     const summaryData = [
       {
         icon: 'cash',
         iconColor: colors.success.main,
         iconBg: colors.success.background,
-        value: `₹${totalRevenue.toFixed(0)}`,
-        label: 'Total Sales',
+        value: `₹${currentRevenue.toFixed(0)}`,
+        label: `${periodLabel} Sales`,
       },
       {
         icon: 'receipt',
         iconColor: colors.primary.main,
         iconBg: colors.primary.background,
-        value: totalOrders.toString(),
-        label: 'Orders',
+        value: currentOrders.toString(),
+        label: `${periodLabel} Orders`,
       },
       {
         icon: 'cube',
         iconColor: colors.warning.main,
         iconBg: colors.warning.background,
-        value: totalItems.toString(),
-        label: 'Items Sold',
+        value: currentItems.toString(),
+        label: `${periodLabel} Items`,
       },
       {
         icon: 'trending-up',
         iconColor: colors.info.main,
         iconBg: colors.info.background,
-        value: `₹${avgOrderValue.toFixed(0)}`,
-        label: 'Avg Order',
+        value: `₹${currentAvg.toFixed(0)}`,
+        label: `${periodLabel} Avg`,
       },
     ];
 
@@ -796,6 +1575,8 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   };
 
   const renderContent = () => {
+    console.log('📊 [AdvancedAnalytics] renderContent called, selectedView:', selectedView, 'filteredData:', filteredData.length);
+    
     let data = [];
     
     switch (selectedView) {
@@ -811,10 +1592,9 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       case 'yearly':
         data = generateYearlyData();
         break;
-      case 'product':
-        data = generateProductSalesData();
-        break;
     }
+    
+    console.log('📊 [AdvancedAnalytics] Generated data for', selectedView, ':', data.length, 'items');
 
     if (data.length === 0) {
       return (
@@ -863,6 +1643,14 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     );
   };
 
+
+
+
+
+
+
+
+
   return (
     <SafeAreaView style={styles.container}>
       <PageLoader visible={isLoading} text="Loading analytics..." />
@@ -877,7 +1665,23 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
             <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Advanced Analytics</Text>
-          {renderFilterButton()}
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              style={[styles.pdfButton, isExportingPDF && styles.pdfButtonDisabled]}
+              onPress={handlePDFExport}
+              disabled={isExportingPDF}
+            >
+              <Ionicons 
+                name={isExportingPDF ? "hourglass-outline" : "document-text-outline"} 
+                size={16} 
+                color={colors.background.surface} 
+              />
+              <Text style={styles.pdfButtonText}>
+                {isExportingPDF ? 'Generating...' : 'PDF'}
+              </Text>
+            </TouchableOpacity>
+            {renderFilterButton()}
+          </View>
         </View>
 
         {/* View Tabs */}
@@ -923,6 +1727,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.text.primary,
     marginLeft: 12,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  pdfButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: colors.success.main,
+    borderRadius: 6,
+    marginRight: 8,
+  },
+  pdfButtonDisabled: {
+    backgroundColor: colors.text.secondary,
+    opacity: 0.7,
+  },
+  pdfButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: colors.background.surface,
+    marginLeft: 4,
   },
   filterButton: {
     flexDirection: 'row',
@@ -1272,34 +2100,7 @@ const styles = StyleSheet.create({
     color: colors.background.surface,
     fontWeight: '600',
   },
-  amountRangeContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-  },
-  amountInputContainer: {
-    flex: 1,
-  },
-  amountLabel: {
-    fontSize: 12,
-    color: colors.text.secondary,
-    marginBottom: 6,
-  },
-  amountInput: {
-    backgroundColor: colors.background.primary,
-    borderRadius: 8,
-    padding: 12,
-    fontSize: 14,
-    color: colors.text.primary,
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  amountRangeSeparator: {
-    fontSize: 18,
-    color: colors.text.secondary,
-    marginHorizontal: 12,
-    marginTop: 18,
-  },
+  // Amount range styles removed for simplicity
   productContainer: {
     flexDirection: 'row',
     paddingVertical: 4,
@@ -1314,8 +2115,8 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   productChipActive: {
-    backgroundColor: colors.success.main,
-    borderColor: colors.success.main,
+    backgroundColor: colors.primary.main,
+    borderColor: colors.primary.main,
   },
   productChipText: {
     fontSize: 14,
@@ -1330,8 +2131,8 @@ const styles = StyleSheet.create({
     padding: 20,
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
-    gap: 12,
     backgroundColor: colors.background.surface,
+    gap: 12,
   },
   clearButton: {
     flex: 1,
@@ -1370,6 +2171,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.background.surface,
   },
+
 });
 
 export default AdvancedAnalyticsScreen;

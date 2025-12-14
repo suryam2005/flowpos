@@ -9,7 +9,9 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+
+import Icon from '../components/SVGIcons';
+
 import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOrders } from '../hooks/useOrders';
@@ -20,6 +22,8 @@ import { usePageLoading } from '../hooks/usePageLoading';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import WhatsAppService from '../services/WhatsAppService';
+import PDFReportsService from '../services/PDFReportsService';
 
 const OrdersScreen = ({ navigation }) => {
   const { 
@@ -33,6 +37,7 @@ const OrdersScreen = ({ navigation }) => {
     syncOrders 
   } = useOrders();
   const [refreshing, setRefreshing] = useState(false);
+  const [whatsappStatus, setWhatsappStatus] = useState(null);
 
   // Page loading state
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 800);
@@ -47,17 +52,32 @@ const OrdersScreen = ({ navigation }) => {
     // Orders are loaded automatically by useOrders hook
     finishLoading();
     initialLoadDone.current = true;
+    
+    // Check WhatsApp status
+    checkWhatsAppStatus();
   }, []);
 
-  // Refresh orders when screen comes into focus (but skip initial mount)
+  const checkWhatsAppStatus = async () => {
+    try {
+      const status = await WhatsAppService.getStatus();
+      setWhatsappStatus(status);
+    } catch (error) {
+      console.error('Error checking WhatsApp status:', error);
+    }
+  };
+
+  // OPTIMIZED: Only refresh on manual pull-to-refresh, not on every focus
+  // This prevents unnecessary API calls when navigating between tabs
   useFocusEffect(
     useCallback(() => {
-      // Skip the first call (initial mount) since useOrders already loads data
-      if (initialLoadDone.current) {
-        console.log('📋 [Orders] Screen focused - refreshing orders');
-        refreshOrders();
-      }
-    }, [refreshOrders])
+      // Skip automatic refresh - user can manually refresh if needed
+      // This is Phase 1 optimization to reduce API calls
+      console.log('📋 [Orders] Screen focused - using cached data (manual refresh available)');
+      
+      // Always refresh WhatsApp status when screen comes into focus
+      // This ensures send buttons are properly synced with settings
+      checkWhatsAppStatus();
+    }, [])
   );
 
   const onRefresh = async () => {
@@ -88,42 +108,239 @@ const OrdersScreen = ({ navigation }) => {
   const handleViewInvoice = (order) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
-    // Convert order data to invoice format
+    console.log('📄 [OrdersScreen] Original order data received:', {
+      id: order.id,
+      orderNumber: order.orderNumber,
+      customerName: order.customerName,
+      phoneNumber: order.phoneNumber,
+      hasCustomerName: !!order.customerName,
+      hasPhoneNumber: !!order.phoneNumber
+    });
+    
+    // Convert order data to invoice format with proper customer details
     const invoiceOrderData = {
       ...order,
-      orderNumber: `ORD-${order.id}`,
+      // Use existing orderNumber or create one from id
+      orderNumber: order.orderNumber || `ORD-${order.id}`,
       items: order.items || [],
       subtotal: order.subtotal || 0,
       gst: order.gst || order.tax || 0,
       total: order.total || 0,
+      // Ensure customer details are properly passed
       customerName: order.customerName || 'Walk-in Customer',
       phoneNumber: order.phoneNumber || '',
+      // Add timestamp for invoice date
+      timestamp: order.timestamp || order.createdAt || Date.now(),
     };
+    
+    console.log('📄 [OrdersScreen] Processed invoice data:', {
+      customerName: invoiceOrderData.customerName,
+      phoneNumber: invoiceOrderData.phoneNumber,
+      orderNumber: invoiceOrderData.orderNumber
+    });
     
     navigation.navigate('Invoice', { orderData: invoiceOrderData });
   };
 
-  const handleSendInvoice = (order) => {
+  const handleSendInvoice = async (order) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    // For now, show coming soon message
-    Alert.alert(
-      'Send Invoice',
-      'WhatsApp integration coming soon! You can view the invoice and share it manually.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'View Invoice', 
-          onPress: () => handleViewInvoice(order)
-        }
-      ]
-    );
+    // Check if WhatsApp is configured
+    if (!WhatsAppService.isReady()) {
+      Alert.alert(
+        'WhatsApp Not Configured',
+        'WhatsApp integration is not set up yet. Would you like to configure it now?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'View Invoice', 
+            onPress: () => handleViewInvoice(order)
+          },
+          { 
+            text: 'Setup WhatsApp', 
+            onPress: () => navigation.navigate('WhatsAppSetup')
+          }
+        ]
+      );
+      return;
+    }
+
+    // Check if customer has phone number
+    if (!order.phoneNumber || order.phoneNumber.trim() === '') {
+      Alert.alert(
+        'No Phone Number',
+        'This order does not have a customer phone number. WhatsApp requires a phone number to send messages.',
+        [
+          { text: 'OK', style: 'cancel' },
+          { 
+            text: 'View Invoice', 
+            onPress: () => handleViewInvoice(order)
+          }
+        ]
+      );
+      return;
+    }
+
+    try {
+      // Show loading state
+      Alert.alert('Sending Invoice', 'Generating invoice and sending via WhatsApp...');
+
+      // Load store information for WhatsApp message
+      const storeInfo = await AsyncStorage.getItem('storeInfo');
+      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
+      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      const storeAddress = parsedStoreInfo.store_address || parsedStoreInfo.address || '';
+      const storePhone = parsedStoreInfo.store_phone || parsedStoreInfo.phone || '';
+      const storeEmail = parsedStoreInfo.store_email || parsedStoreInfo.email || '';
+      
+      console.log('🏪 [OrdersScreen] Store info loaded for WhatsApp:', {
+        storeInfoExists: !!storeInfo,
+        parsedStoreInfo,
+        actualStoreName,
+        storeAddress,
+        storePhone,
+        storeEmail,
+        store_name: parsedStoreInfo.store_name,
+        name: parsedStoreInfo.name
+      });
+
+      // Generate invoice PDF/image
+      // FIXED: Always pass the actual store info - let WhatsAppService handle the settings
+      const invoiceData = {
+        ...order,
+        orderNumber: order.orderNumber || `ORD-${order.id}`,
+        items: order.items || [],
+        subtotal: order.subtotal || 0,
+        tax: order.gst || order.tax || 0,
+        grandTotal: order.total || order.grandTotal || 0, // Use grandTotal for WhatsApp service
+        customerName: order.customerName || 'Walk-in Customer',
+        phoneNumber: order.phoneNumber || '',
+        date: new Date(order.timestamp).toLocaleDateString('en-IN'),
+        storeName: actualStoreName, // Always pass actual store name - WhatsAppService will handle the setting
+        storeAddress: storeAddress, // Pass store address - WhatsAppService will handle the setting
+        storePhone: storePhone, // Pass store phone - WhatsAppService will handle the setting
+        storeEmail: storeEmail, // Pass store email - WhatsAppService will handle the setting
+        paymentMethod: order.paymentMethod || 'Cash'
+      };
+
+      // REMOVED: Hardcoded message template that bypassed WhatsAppService setting logic
+      // The WhatsAppService.sendInvoiceMessage() will handle message creation with proper setting respect
+
+      // Send WhatsApp message with proper invoice data - WhatsAppService will create the message and respect settings
+      const result = await WhatsAppService.sendInvoiceMessage(order.phoneNumber, invoiceData);
+
+      if (result.success) {
+        Alert.alert(
+          'Invoice Sent! ✅',
+          `Invoice has been successfully sent to ${order.customerName} via WhatsApp.`,
+          [{ text: 'Great!', style: 'default' }]
+        );
+      } else {
+        throw new Error(result.error || 'Failed to send WhatsApp message');
+      }
+
+    } catch (error) {
+      console.error('Error sending WhatsApp invoice:', error);
+      
+      Alert.alert(
+        'Send Failed ❌',
+        `Failed to send invoice via WhatsApp: ${error.message}\n\nWould you like to try an alternative method?`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'View Invoice', 
+            onPress: () => handleViewInvoice(order)
+          },
+          { 
+            text: 'Try Device WhatsApp', 
+            onPress: () => sendViaDeviceWhatsApp(order)
+          }
+        ]
+      );
+    }
+  };
+
+  const sendViaDeviceWhatsApp = async (order) => {
+    try {
+      // Load store information
+      const storeInfo = await AsyncStorage.getItem('storeInfo');
+      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
+      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      
+      console.log('🏪 [OrdersScreen] Store info loaded for device WhatsApp:', {
+        storeInfoExists: !!storeInfo,
+        actualStoreName
+      });
+
+      // FIXED: Always pass the actual store name - let WhatsAppService handle the setting
+      const invoiceData = {
+        ...order,
+        orderNumber: order.orderNumber || `ORD-${order.id}`,
+        items: order.items || [],
+        subtotal: order.subtotal || 0,
+        tax: order.gst || order.tax || 0,
+        grandTotal: order.total || order.grandTotal || 0,
+        customerName: order.customerName || 'Walk-in Customer',
+        phoneNumber: order.phoneNumber || '',
+        date: new Date(order.timestamp).toLocaleDateString('en-IN'),
+        storeName: actualStoreName, // Always pass actual store name - WhatsAppService will handle the setting
+        paymentMethod: order.paymentMethod || 'Cash'
+      };
+
+      const result = await WhatsAppService.sendViaDeviceWhatsApp(
+        order.phoneNumber,
+        null, // No image for now
+        invoiceData
+      );
+
+      if (result.success) {
+        Alert.alert(
+          'WhatsApp Opened',
+          result.message,
+          [{ text: 'OK', style: 'default' }]
+        );
+      }
+    } catch (error) {
+      Alert.alert(
+        'Error',
+        `Could not open WhatsApp: ${error.message}`,
+        [{ text: 'OK', style: 'default' }]
+      );
+    }
+  };
+
+  // Determine if send button should be shown based on WhatsApp settings
+  const shouldShowSendButton = (order) => {
+    // Don't show if no phone number
+    if (!order.phoneNumber) return false;
+    
+    // Don't show if send invoice feature is disabled
+    if (whatsappStatus && !whatsappStatus.sendInvoiceEnabled) return false;
+    
+    // FIXED: Don't show if FlowPOS WhatsApp is selected and ready (auto-sends)
+    if (whatsappStatus && whatsappStatus.currentMethod === 'flowpos' && whatsappStatus.flowposReady) {
+      return false;
+    }
+    
+    // Show only for device WhatsApp when send invoice is enabled
+    return whatsappStatus && whatsappStatus.currentMethod === 'device' && whatsappStatus.sendInvoiceEnabled;
   };
 
   const renderOrder = ({ item, index }) => {
+    // Debug: Log order data to see what customer details are available
+    if (index === 0) {
+      console.log('📋 [OrdersScreen] Sample order data:', {
+        id: item.id,
+        orderNumber: item.orderNumber,
+        customerName: item.customerName,
+        phoneNumber: item.phoneNumber,
+        hasCustomerData: !!(item.customerName && item.customerName !== 'Walk-in Customer')
+      });
+    }
+    
     const handlePress = () => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-      navigation.navigate('OrderDetails', { order: item });
+      handleViewInvoice(item);
     };
 
     return (
@@ -138,6 +355,13 @@ const OrdersScreen = ({ navigation }) => {
             <Text style={styles.orderDate}>
               {formatDate(item.timestamp)} at {formatTime(item.timestamp)}
             </Text>
+            {/* Customer Details */}
+            {(item.customerName && item.customerName !== 'Walk-in Customer') && (
+              <Text style={styles.customerName}>👤 {item.customerName}</Text>
+            )}
+            {item.phoneNumber && (
+              <Text style={styles.customerPhone}>📱 {item.phoneNumber}</Text>
+            )}
           </View>
         </View>
 
@@ -168,20 +392,22 @@ const OrdersScreen = ({ navigation }) => {
               }}
               activeOpacity={0.7}
             >
-              <Ionicons name="document-text-outline" size={16} color={colors.primary.main} style={{ marginRight: 4 }} />
+              <Icon name="document-text-outline" size={16} color={colors.primary.main} style={{ marginRight: 4 }} />
               <Text style={styles.invoiceButtonText}>Invoice</Text>
             </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.sendButton}
-              onPress={(e) => {
-                e.stopPropagation();
-                handleSendInvoice(item);
-              }}
-              activeOpacity={0.7}
-            >
-              <Ionicons name="send-outline" size={16} color="#ffffff" style={{ marginRight: 4 }} />
-              <Text style={styles.sendButtonText}>Send</Text>
-            </TouchableOpacity>
+            {shouldShowSendButton(item) && (
+              <TouchableOpacity
+                style={styles.sendButton}
+                onPress={(e) => {
+                  e.stopPropagation();
+                  handleSendInvoice(item);
+                }}
+                activeOpacity={0.7}
+              >
+                <Icon name="send-outline" size={16} color="#ffffff" style={{ marginRight: 4 }} />
+                <Text style={styles.sendButtonText}>Send</Text>
+              </TouchableOpacity>
+            )}
           </View>
         </View>
       </TouchableOpacity>
@@ -190,7 +416,7 @@ const OrdersScreen = ({ navigation }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="receipt-outline" size={64} color="#6b7280" />
+      <Icon name="receipt-outline" size={64} color="#6b7280" />
       <Text style={styles.emptyTitle}>No Orders Yet</Text>
       <Text style={styles.emptyText}>
         Orders will appear here once you complete your first sale.
@@ -328,6 +554,17 @@ const styles = StyleSheet.create({
   orderDate: {
     fontSize: 14,
     color: colors.text.secondary,
+  },
+  customerName: {
+    fontSize: 13,
+    color: colors.primary.main,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  customerPhone: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    marginTop: 1,
   },
 
   orderItems: {

@@ -247,4 +247,83 @@ export const componentColors = {
   },
 };
 
+// Theme-aware color function
+export const getThemeColors = (isDarkMode = false) => {
+  if (isDarkMode) {
+    return {
+      background: {
+        primary: colors.dark.background.primary,
+        surface: colors.dark.background.surface,
+        overlay: colors.dark.background.overlay,
+      },
+      text: {
+        primary: colors.dark.text.primary,
+        secondary: colors.dark.text.secondary,
+        tertiary: colors.dark.text.tertiary,
+        disabled: colors.dark.text.tertiary,
+        inverse: colors.text.primary,
+      },
+      primary: {
+        main: colors.dark.primary.main,
+        hover: colors.dark.primary.hover,
+        light: colors.dark.primary.light,
+        background: 'rgba(59, 130, 246, 0.1)',
+        border: 'rgba(59, 130, 246, 0.3)',
+      },
+      success: {
+        main: colors.dark.success.main,
+        light: colors.dark.success.light,
+        background: 'rgba(34, 197, 94, 0.1)',
+        border: 'rgba(34, 197, 94, 0.3)',
+      },
+      error: {
+        main: colors.error.main,
+        light: colors.error.light,
+        background: 'rgba(239, 68, 68, 0.1)',
+        border: 'rgba(239, 68, 68, 0.3)',
+      },
+      warning: {
+        main: colors.warning.main,
+        dark: colors.warning.dark,
+        light: colors.warning.light,
+        background: 'rgba(245, 158, 11, 0.1)',
+        border: 'rgba(245, 158, 11, 0.3)',
+      },
+      info: {
+        main: colors.info.main,
+        light: colors.info.light,
+        background: 'rgba(14, 165, 233, 0.1)',
+        border: 'rgba(14, 165, 233, 0.3)',
+      },
+      border: {
+        light: colors.dark.border.light,
+        medium: colors.dark.border.medium,
+        dark: colors.border.dark,
+      },
+      gray: {
+        50: colors.gray[800],
+        100: colors.gray[700],
+        200: colors.gray[600],
+        300: colors.gray[500],
+        400: colors.gray[400],
+        500: colors.gray[300],
+        600: colors.gray[200],
+        700: colors.gray[100],
+        800: colors.gray[50],
+        900: '#FFFFFF',
+      },
+      shadow: {
+        default: '#000000',
+        sm: 'rgba(0, 0, 0, 0.3)',
+        md: 'rgba(0, 0, 0, 0.4)',
+        lg: 'rgba(0, 0, 0, 0.5)',
+        xl: 'rgba(0, 0, 0, 0.6)',
+      },
+    };
+  }
+  
+  // Light theme (default)
+  return colors;
+};
+
 export default colors;

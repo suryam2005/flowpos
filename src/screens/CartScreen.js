@@ -12,7 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Ionicons } from '@expo/vector-icons';
+import Icon from '../components/SVGIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 
@@ -369,6 +369,8 @@ _Powered by FlowPOS_`;
     }
   };
 
+  const [completingOrder, setCompletingOrder] = useState(false);
+
   const handleCompleteOrder = async (paymentDetails = null) => {
     // Check order limits
     const canProcess = await featureService.canProcessOrder();
@@ -446,16 +448,35 @@ _Powered by FlowPOS_`;
       return;
     }
 
+    // Set loading state
+    setCompletingOrder(true);
+    
     // Haptic feedback only
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
 
     try {
       const orderId = await generateOrderNumber();
       
+      console.log('🛒 [CartScreen] Customer details before order creation:', {
+        customerName,
+        phoneNumber,
+        requireCustomerDetails,
+        customerNameTrimmed: customerName?.trim(),
+        hasCustomerName: !!(customerName && customerName.trim() !== '')
+      });
+      
       // Create order object for the new orders system
+      const finalCustomerName = (customerName && customerName.trim() !== '') ? customerName.trim() : 'Walk-in Customer';
+      const finalPhoneNumber = (phoneNumber && phoneNumber.trim() !== '') ? phoneNumber.trim() : '';
+      
+      console.log('🛒 [CartScreen] Final customer data for order:', {
+        finalCustomerName,
+        finalPhoneNumber
+      });
+      
       const orderData = {
-        customerName: customerName || 'Walk-in Customer',
-        phoneNumber: phoneNumber || '',
+        customerName: finalCustomerName,
+        phoneNumber: finalPhoneNumber,
         email: '', // Not collected in cart
         items: items.map(item => ({
           name: item.name,
@@ -528,8 +549,8 @@ _Powered by FlowPOS_`;
       const invoiceOrderData = {
         id: savedOrder.id,
         orderNumber: savedOrder.orderNumber,
-        customerName: savedOrder.customerName,
-        phoneNumber: savedOrder.phoneNumber,
+        customerName: finalCustomerName, // Use the final processed customer name
+        phoneNumber: finalPhoneNumber, // Use the final processed phone number
         items: items,
         subtotal,
         gst,
@@ -569,11 +590,14 @@ _Powered by FlowPOS_`;
       
       // Even if there's an error, still navigate to invoice with local data
       const orderId = await generateOrderNumber();
+      const finalCustomerName = (customerName && customerName.trim() !== '') ? customerName.trim() : 'Walk-in Customer';
+      const finalPhoneNumber = (phoneNumber && phoneNumber.trim() !== '') ? phoneNumber.trim() : '';
+      
       const invoiceOrderData = {
         id: orderId,
         orderNumber: `ORD-${orderId}`,
-        customerName: customerName || 'Walk-in Customer',
-        phoneNumber,
+        customerName: finalCustomerName,
+        phoneNumber: finalPhoneNumber,
         items: items,
         subtotal,
         gst,
@@ -585,6 +609,8 @@ _Powered by FlowPOS_`;
       
       clearCart();
       navigation.navigate('Invoice', { orderData: invoiceOrderData, autoRedirect: true });
+    } finally {
+      setCompletingOrder(false);
     }
   };
 
@@ -619,7 +645,7 @@ _Powered by FlowPOS_`;
             <Image source={{ uri: item.image }} style={styles.itemImageStyle} />
           ) : (
             <View style={styles.itemImagePlaceholder}>
-              <Ionicons name="cube-outline" size={24} color="#6b7280" />
+              <Icon name="cube-outline" size={24} color="#6b7280" />
             </View>
           )}
         </View>
@@ -651,7 +677,7 @@ _Powered by FlowPOS_`;
             onPress={handleDeleteItem}
             activeOpacity={0.7}
           >
-            <Ionicons name="trash-outline" size={18} color="#ef4444" />
+            <Icon name="trash-outline" size={18} color="#ef4444" />
           </TouchableOpacity>
         </View>
       </View>
@@ -700,7 +726,7 @@ _Powered by FlowPOS_`;
           style={styles.backButton}
           onPress={() => safeGoBack(navigation, 'Main', { screen: 'POS' })}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <Icon name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.title}>Order Details</Text>
       </View>
@@ -803,12 +829,12 @@ _Powered by FlowPOS_`;
           </View>
 
           <TouchableOpacity
-            style={[styles.completeButton, (orderLoading) && { opacity: 0.6 }]}
+            style={[styles.completeButton, (orderLoading || completingOrder) && { opacity: 0.6 }]}
             onPress={handleCompleteOrder}
-            disabled={orderLoading}
+            disabled={orderLoading || completingOrder}
           >
             <Text style={styles.completeButtonText}>
-              {orderLoading 
+              {(orderLoading || completingOrder)
                 ? 'Processing...'
                 : paymentMethod === 'QR Pay' 
                   ? (isQRVisible ? 'Waiting for Payment...' : 'Generate QR Code')
@@ -875,10 +901,7 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-  backIcon: {
-    fontSize: 20,
-    color: colors.text.primary,
-  },
+
   title: {
     fontSize: 20,
     fontWeight: '600',

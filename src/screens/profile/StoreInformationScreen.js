@@ -34,8 +34,7 @@ const StoreInformationScreen = ({ navigation }) => {
     store_email: '',
     store_website: '',
     business_type: '',
-    gst_number: '',
-    pan_number: ''
+    gst_number: ''
   });
   const [originalData, setOriginalData] = useState({});
 
@@ -60,8 +59,7 @@ const StoreInformationScreen = ({ navigation }) => {
           store_email: storeInfo.store_email || '',
           store_website: storeInfo.store_website || '',
           business_type: storeInfo.business_type || '',
-          gst_number: storeInfo.gst_number || '',
-          pan_number: storeInfo.pan_number || ''
+          gst_number: storeInfo.gst_number || ''
         };
         setStoreData(loadedData);
         setOriginalData(loadedData); // Save original data for cancel functionality
@@ -330,7 +328,6 @@ Powered by FlowPOS`;
             </ResponsiveText>
             
             {renderField('GST Number', 'gst_number', 'Enter GST number (optional)')}
-            {renderField('PAN Number', 'pan_number', 'Enter PAN number (optional)')}
           </View>
 
 

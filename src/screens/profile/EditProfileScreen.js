@@ -160,7 +160,8 @@ const EditProfileScreen = ({ navigation }) => {
       autoCapitalize = 'none',
       multiline = false,
       maxLength = null,
-      required = false
+      required = false,
+      editable = true
     } = options;
 
     return (
@@ -169,7 +170,7 @@ const EditProfileScreen = ({ navigation }) => {
           {label} {required && '*'}
         </Text>
         
-        {isEditing ? (
+        {isEditing && editable ? (
           <>
             <TextInput
               style={[
@@ -199,6 +200,9 @@ const EditProfileScreen = ({ navigation }) => {
             <Text style={[styles.displayText, !value && styles.placeholderText]}>
               {value || 'Not provided'}
             </Text>
+            {!editable && (
+              <Text style={styles.nonEditableHint}>Cannot be changed</Text>
+            )}
           </View>
         )}
         
@@ -278,13 +282,15 @@ const EditProfileScreen = ({ navigation }) => {
             {renderField('Email Address', formData.email, 'email', {
               placeholder: 'Enter your email',
               keyboardType: 'email-address',
-              required: true
+              required: true,
+              editable: false
             })}
 
             {renderField('Phone Number', formData.phone, 'phone', {
               placeholder: 'Enter your phone number',
               keyboardType: 'phone-pad',
-              maxLength: 15
+              maxLength: 15,
+              editable: false
             })}
           </View>
 
@@ -470,6 +476,12 @@ const styles = StyleSheet.create({
   placeholderText: {
     color: colors.text.secondary,
     fontStyle: 'italic',
+  },
+  nonEditableHint: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    fontStyle: 'italic',
+    marginTop: 4,
   },
 });
 

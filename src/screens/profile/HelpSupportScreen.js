@@ -115,14 +115,7 @@ const HelpSupportScreen = ({ navigation }) => {
       color: colors.primary.main,
       onPress: () => setContactModal(true),
     },
-    {
-      id: 'live-chat',
-      title: 'Live Chat',
-      subtitle: 'Chat with support (9 AM - 6 PM)',
-      icon: 'chatbubble-outline',
-      color: colors.success.main,
-      onPress: () => Alert.alert('Live Chat', 'Live chat feature coming soon!'),
-    },
+
     {
       id: 'video-call',
       title: 'Video Support',

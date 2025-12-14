@@ -108,7 +108,7 @@ const OrderDetailsScreen = ({ navigation, route }) => {
               style={styles.backButton}
               onPress={() => safeGoBack(navigation, 'Main', { screen: 'Orders' })}
             >
-              <Text style={styles.backButtonText}>← Back to Orders</Text>
+              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
             </TouchableOpacity>
             
             <TouchableOpacity

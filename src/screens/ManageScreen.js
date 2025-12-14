@@ -71,8 +71,14 @@ const ManageScreen = ({ navigation }) => {
   // No animations needed
 
   useEffect(() => {
-    loadProducts();
-    const unsubscribe = navigation.addListener('focus', loadProducts);
+    // Initial load with page loader
+    loadProducts(false, true);
+    
+    // Focus listener for silent refresh (no loader)
+    const unsubscribe = navigation.addListener('focus', () => {
+      console.log('📦 [ManageScreen] Focus - silent refresh');
+      loadProducts(false, false); // Silent refresh
+    });
 
     // Initialize active tab
     if (!activeTab) {
@@ -128,7 +134,7 @@ const ManageScreen = ({ navigation }) => {
     });
   };
 
-  const loadProducts = async (isRefresh = false) => {
+  const loadProducts = async (isRefresh = false, isInitialLoad = false) => {
     if (isRefresh) {
       setRefreshing(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -138,43 +144,35 @@ const ManageScreen = ({ navigation }) => {
       // No animation delays needed
 
       // Load products from Supabase using ProductsService
-      console.log('\n� MANAGERSCREEN: Loading products from Supabase...');
-      try {
-        const supabaseProducts = await productsService.getProducts();
-        console.log('🟠 Raw products from Supabase:', supabaseProducts.length);
-        if (supabaseProducts.length > 0) {
-          console.log('🟠 First raw product:', {
-            name: supabaseProducts[0].name,
-            track_stock: supabaseProducts[0].track_stock,
-            track_stock_type: typeof supabaseProducts[0].track_stock,
-            track_stock_strict_false: supabaseProducts[0].track_stock === false
-          });
-        }
-        
-        const normalizedProducts = normalizeProducts(supabaseProducts);
-        
-        console.log('✅ MANAGESCREEN: Normalized products:', normalizedProducts.length);
-        if (normalizedProducts.length > 0) {
-          console.log('✅ First normalized product:', {
-            name: normalizedProducts[0].name,
-            track_stock: normalizedProducts[0].track_stock,
-            trackStock: normalizedProducts[0].trackStock
-          });
-        }
-        
-        setProducts(normalizedProducts);
-        
-        // Also save to AsyncStorage for compatibility
-        await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
-      } catch (error) {
-        console.error('❌ MANAGESCREEN: Error loading from Supabase, falling back to AsyncStorage:', error);
-        // Fallback to AsyncStorage if Supabase fails
-        const storedProducts = await AsyncStorage.getItem('products');
-        if (storedProducts) {
-          const normalizedProducts = normalizeProducts(JSON.parse(storedProducts));
-          setProducts(normalizedProducts);
-        }
+      console.log('\n📦 MANAGESCREEN: Loading products from Supabase...');
+      
+      const supabaseProducts = await productsService.getProducts();
+      console.log('✅ Raw products from Supabase:', supabaseProducts.length);
+      
+      if (supabaseProducts.length > 0) {
+        console.log('📦 First raw product:', {
+          name: supabaseProducts[0].name,
+          track_stock: supabaseProducts[0].track_stock,
+          track_stock_type: typeof supabaseProducts[0].track_stock,
+          track_stock_strict_false: supabaseProducts[0].track_stock === false
+        });
       }
+      
+      const normalizedProducts = normalizeProducts(supabaseProducts);
+      
+      console.log('✅ MANAGESCREEN: Normalized products:', normalizedProducts.length);
+      if (normalizedProducts.length > 0) {
+        console.log('📦 First normalized product:', {
+          name: normalizedProducts[0].name,
+          track_stock: normalizedProducts[0].track_stock,
+          trackStock: normalizedProducts[0].trackStock
+        });
+      }
+      
+      setProducts(normalizedProducts);
+      
+      // Also save to AsyncStorage for compatibility
+      await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
       
       // Check store setup via backend API
       const storeData = await getStore();
@@ -199,13 +197,13 @@ const ManageScreen = ({ navigation }) => {
         }
       }
       
-      // Finish loading on initial load
-      if (!isRefresh) {
+      // Only finish loading on initial load (not on focus refresh)
+      if (isInitialLoad) {
         finishLoading();
       }
     } catch (error) {
       console.error('Error loading products:', error);
-      if (!isRefresh) {
+      if (isInitialLoad) {
         finishLoading();
       }
     } finally {
@@ -415,6 +413,7 @@ const ManageScreen = ({ navigation }) => {
           stock_quantity: stockQuantity,
           track_stock: formData.trackStock,
           category: finalTags[0] || 'General',
+          tags: finalTags,
           // Only update image_url if a new image was selected
           ...(formData.image && { image_url: formData.image }),
         };
@@ -437,6 +436,7 @@ const ManageScreen = ({ navigation }) => {
           stock_quantity: formData.trackStock ? parseInt(stock) : 0,
           track_stock: formData.trackStock,
           category: finalTags[0] || 'General',
+          tags: finalTags,
           description: `New product created from ManageScreen`,
           image_url: formData.image || '',
         };
@@ -450,49 +450,72 @@ const ManageScreen = ({ navigation }) => {
         await productsService.createProduct(productData);
       }
 
-      // Force refresh products list from Supabase (bypass any cache)
-      console.log('🔄 Forcing product refresh after update...');
-      // Small delay to ensure database commit completes
-      await new Promise(resolve => setTimeout(resolve, 100));
-      const updatedProducts = await productsService.getProducts();
-      const normalizedProducts = normalizeProducts(updatedProducts);
-      
-      console.log('✅ Products refreshed:', normalizedProducts.length);
-      
-      // Find the product we just updated
-      const updatedProduct = normalizedProducts.find(p => p.id === editingProduct.id);
-      console.log('📦 Updated product from backend:', {
-        name: updatedProduct?.name,
-        track_stock: updatedProduct?.track_stock,
-        track_stock_type: typeof updatedProduct?.track_stock,
-        track_stock_strict_false: updatedProduct?.track_stock === false,
-        trackStock: updatedProduct?.trackStock,
-        stock_quantity: updatedProduct?.stock_quantity
-      });
-      
-      setProducts(normalizedProducts);
-      
-      // Also save to AsyncStorage for compatibility
-      await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
-      if (updatedProducts.length > 0) {
-        await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
-      }
-
+      // Close modal first to give immediate feedback
       setModalVisible(false);
       
-      // Show success message
-      const isFirstProduct = products.length === 0;
-      const message = editingProduct 
-        ? 'Product updated successfully!' 
-        : isFirstProduct 
-          ? 'Welcome! Your first product has been added.' 
-          : 'Product added successfully!';
+      // Force refresh products list from Supabase (bypass any cache)
+      console.log('🔄 Forcing product refresh after update...');
       
-      Alert.alert('Success', message);
+      try {
+        // Small delay to ensure database commit completes
+        await new Promise(resolve => setTimeout(resolve, 100));
+        const updatedProducts = await productsService.getProducts();
+        const normalizedProducts = normalizeProducts(updatedProducts);
+        
+        console.log('✅ Products refreshed:', normalizedProducts.length);
+        
+        // Find the product we just updated/created (only if editing)
+        if (editingProduct) {
+          const updatedProduct = normalizedProducts.find(p => p.id === editingProduct.id);
+          console.log('📦 Updated product from backend:', {
+            name: updatedProduct?.name,
+            track_stock: updatedProduct?.track_stock,
+            track_stock_type: typeof updatedProduct?.track_stock,
+            track_stock_strict_false: updatedProduct?.track_stock === false,
+            trackStock: updatedProduct?.trackStock,
+            stock_quantity: updatedProduct?.stock_quantity
+          });
+        } else {
+          console.log('📦 New product created successfully');
+        }
+        
+        setProducts(normalizedProducts);
+        
+        // Also save to AsyncStorage for compatibility
+        await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
+        if (updatedProducts.length > 0) {
+          await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+        }
+        
+        // Show success message
+        const isFirstProduct = products.length === 0;
+        const message = editingProduct 
+          ? 'Product updated successfully!' 
+          : isFirstProduct 
+            ? 'Welcome! Your first product has been added.' 
+            : 'Product added successfully!';
+        
+        Alert.alert('Success', message);
+        
+      } catch (refreshError) {
+        console.error('⚠️ Error refreshing products after save:', refreshError);
+        // Product was saved successfully, just refresh failed
+        // Show success anyway and let user manually refresh
+        Alert.alert(
+          'Product Saved', 
+          'Product was saved successfully. Pull down to refresh the list.',
+          [{ text: 'OK' }]
+        );
+      }
       
     } catch (error) {
       console.error('❌ MANAGESCREEN: Error saving product:', error);
-      Alert.alert('Error', 'Failed to save product. Please try again.');
+      console.error('❌ Error details:', error.message);
+      console.error('❌ Error stack:', error.stack);
+      
+      // More specific error message
+      const errorMessage = error.message || 'Failed to save product. Please try again.';
+      Alert.alert('Error', errorMessage);
     }
   };
 
@@ -768,7 +791,7 @@ const ManageScreen = ({ navigation }) => {
         </>
       )}
 
-      {activeTab === 'Inventory' && <InventoryScreen />}
+      {activeTab === 'Inventory' && <InventoryScreen isActive={activeTab === 'Inventory'} />}
 
       {activeTab === 'Store Settings' && <StoreSettingsScreen navigation={navigation} />}
 

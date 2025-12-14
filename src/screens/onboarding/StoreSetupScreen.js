@@ -189,13 +189,16 @@ const StoreSetupScreen = ({ navigation }) => {
     try {
       // Save store information
       await AsyncStorage.setItem('storeInfo', JSON.stringify({
-        name: storeData.storeName,
+        store_name: storeData.storeName,
+        name: storeData.storeName, // Keep for backward compatibility
         ownerName: storeData.ownerName,
-        address: storeData.address,
+        store_address: storeData.address,
+        address: storeData.address, // Keep for backward compatibility
         businessType: storeData.businessType === 'Other' ? storeData.customBusinessType : storeData.businessType,
         originalBusinessType: storeData.businessType,
         customBusinessType: storeData.customBusinessType,
-        gstNumber: storeData.gstNumber,
+        gst_number: storeData.gstNumber,
+        gstNumber: storeData.gstNumber, // Keep for backward compatibility
         gstPercentage: storeData.gstPercentage,
         hasGst: !!(storeData.gstNumber && storeData.gstNumber.trim()),
         upiId: storeData.upiId,

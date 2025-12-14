@@ -421,6 +421,16 @@ export const AuthProvider = ({ children }) => {
       return null;
     } catch (error) {
       console.error('Error fetching user profile:', error);
+      
+      // Handle token expiration
+      if (error.message.includes('Invalid or expired token') || 
+          error.message.includes('Unauthorized') ||
+          error.message.includes('401')) {
+        console.log('🔄 Token expired, clearing auth data');
+        await logout();
+        throw new Error('Session expired. Please login again.');
+      }
+      
       return null;
     }
   };
@@ -467,13 +477,13 @@ export const AuthProvider = ({ children }) => {
       // Only fetch fresh data if forced or no cached data available
       if (forceRefresh || !user?.subscription_plan) {
         const freshUser = await fetchUserProfile();
-        return freshUser?.subscription_plan || 'free';
+        return freshUser?.subscription_plan || 'trial';
       }
       
-      return user.subscription_plan || 'free';
+      return user.subscription_plan || 'trial';
     } catch (error) {
       console.error('Error getting subscription plan:', error);
-      return user?.subscription_plan || 'free';
+      return user?.subscription_plan || 'trial';
     }
   };
 

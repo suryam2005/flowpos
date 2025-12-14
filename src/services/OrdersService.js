@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import networkService from './NetworkService';
 import tokenManager from './TokenManager';
+import { RequestDeduplicator } from '../utils/debounce';
 
 class OrdersService {
   constructor() {
@@ -10,6 +11,9 @@ class OrdersService {
     this.LAST_SYNC_KEY = 'lastOrdersSync';
     this.isOnline = true;
     this.syncInProgress = false;
+    
+    // Phase 1 Optimization: Request deduplication
+    this.deduplicator = new RequestDeduplicator();
     
     // Initialize network monitoring
     this.initNetworkMonitoring();
@@ -129,7 +133,7 @@ class OrdersService {
     }
   }
 
-  // Get all orders (CLOUD ONLY - NO CACHE)
+  // Get all orders (CLOUD ONLY - NO CACHE) with request deduplication
   async getOrders(options = {}) {
     try {
       console.log('📋 [OrdersService] getOrders() called with options:', options);
@@ -142,8 +146,13 @@ class OrdersService {
 
       console.log('📋 [OrdersService] Calling getOrdersFromCloud()...');
       
-      // Always fetch fresh data from Supabase - NO LOCAL CACHE
-      const orders = await this.getOrdersFromCloud(options);
+      // Phase 1 Optimization: Deduplicate concurrent requests
+      const dedupeKey = `getOrders_${JSON.stringify(options)}`;
+      const orders = await this.deduplicator.deduplicate(dedupeKey, async () => {
+        // Always fetch fresh data from Supabase - NO LOCAL CACHE
+        return await this.getOrdersFromCloud(options);
+      });
+      
       console.log('✅ [OrdersService] Fresh orders fetched directly from Supabase:', orders.length);
       
       // Apply client-side filtering if needed

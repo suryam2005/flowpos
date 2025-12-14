@@ -26,6 +26,10 @@ import ManageScreen from './src/screens/ManageScreen';
 import OrderDetailsScreen from './src/screens/OrderDetailsScreen';
 import SettingsScreen from './src/screens/SettingsScreen';
 import SubscriptionScreen from './src/screens/SubscriptionScreen';
+import DataExportScreen from './src/screens/DataExportScreen';
+import PDFReportsScreen from './src/screens/PDFReportsScreen';
+import StorageManagementScreen from './src/screens/StorageManagementScreen';
+import PerformanceInsightsScreen from './src/screens/PerformanceInsightsScreen';
 import WelcomeScreen from './src/screens/WelcomeScreen';
 import LoadingScreen from './src/screens/LoadingScreen';
 import ProductOnboardingScreen from './src/screens/onboarding/ProductOnboardingScreen';
@@ -272,6 +276,10 @@ export default function App() {
               <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
               <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
               <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+              <Stack.Screen name="DataExport" component={DataExportScreen} />
+              <Stack.Screen name="PDFReports" component={PDFReportsScreen} />
+              <Stack.Screen name="StorageManagement" component={StorageManagementScreen} />
+              <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
               
               {/* Auth Screens */}
               <Stack.Screen name="Signup" component={SignupScreen} />

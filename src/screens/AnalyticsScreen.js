@@ -16,6 +16,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import ordersService from '../services/OrdersService';
 import productsService from '../services/ProductsService';
+import featureService from '../services/FeatureService';
 
 import { typography, createTextStyle, spacing, screenDimensions } from '../utils/typography';
 import { PageLoader } from '../components/LoadingSpinner';
@@ -244,10 +245,79 @@ const DonutChart = ({ data, size = 150 }) => {
   );
 };
 
+// Calculate analytics for different time periods
+const calculatePeriodAnalytics = (orders, period) => {
+  let startDate, endDate;
+  
+  switch (period) {
+    case 'today':
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+      break;
+    case 'week':
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - 7);
+      break;
+    case 'month':
+      endDate = new Date();
+      startDate = new Date();
+      startDate.setDate(startDate.getDate() - 30);
+      break;
+    default:
+      startDate = new Date();
+      startDate.setHours(0, 0, 0, 0);
+      endDate = new Date();
+      endDate.setHours(23, 59, 59, 999);
+  }
+  
+  console.log('📊 [Analytics] Period filter:', period, 'from', startDate.toISOString(), 'to', endDate.toISOString());
+  
+  const periodOrders = orders.filter(order => {
+    // Handle multiple date field formats from backend
+    let orderDate;
+    if (order.timestamp) {
+      // If timestamp is a number (Unix timestamp), convert to Date
+      orderDate = typeof order.timestamp === 'number' ? new Date(order.timestamp) : new Date(order.timestamp);
+    } else if (order.createdAt) {
+      orderDate = new Date(order.createdAt);
+    } else if (order.created_at) {
+      orderDate = new Date(order.created_at);
+    } else {
+      return false; // Skip orders without date
+    }
+    
+    // Validate date
+    if (isNaN(orderDate.getTime())) {
+      console.warn('📊 Invalid date in order:', order.id, order.timestamp, order.createdAt);
+      return false;
+    }
+    
+    const isInRange = orderDate >= startDate && orderDate <= endDate;
+    return isInRange;
+  });
+  
+  console.log('📊 [Analytics] Filtered', periodOrders.length, 'orders out of', orders.length, 'for period:', period);
+  
+  const revenue = periodOrders.reduce((sum, order) => sum + (order.total || 0), 0);
+  const orderCount = periodOrders.length;
+  const avgOrderValue = orderCount > 0 ? Math.round(revenue / orderCount) : 0;
+  
+  return {
+    revenue,
+    orderCount,
+    avgOrderValue,
+    orders: periodOrders
+  };
+};
+
 const AnalyticsScreen = ({ navigation }) => {
   const [analytics, setAnalytics] = useState({
-    todayRevenue: 0,
-    weekRevenue: 0,
+    periodRevenue: 0,
+    periodOrders: 0,
+    periodAvgOrderValue: 0,
     totalRevenue: 0,
     totalOrders: 0,
     avgOrderValue: 0,
@@ -261,7 +331,9 @@ const AnalyticsScreen = ({ navigation }) => {
     orderTrends: [],
   });
   const [selectedChart, setSelectedChart] = useState('daily');
+  const [selectedPeriod, setSelectedPeriod] = useState('today'); // today, week, month
   const [refreshing, setRefreshing] = useState(false);
+  const [availablePeriods, setAvailablePeriods] = useState(['today']);
   
   // Page loading state
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1200);
@@ -272,14 +344,52 @@ const AnalyticsScreen = ({ navigation }) => {
   // No animations needed
 
   useEffect(() => {
+    initializeFeatures();
     loadAnalytics();
-  }, []);
+  }, [selectedPeriod]);
 
-  // Refresh analytics when screen comes into focus
+  const initializeFeatures = async () => {
+    try {
+      await featureService.initialize();
+      
+      // TESTING MODE: All periods available during development
+      // TODO: Enable plan restrictions in production
+      const periods = ['today', 'week', 'month']; // All available for testing
+      
+      // PRODUCTION CODE (commented out for testing):
+      // const periods = ['today']; // Always available
+      // 
+      // // Daily & weekly analytics for Starter+ plans
+      // if (featureService.canUseFeature('daily_weekly_analytics')) {
+      //   periods.push('week');
+      // }
+      // 
+      // // Monthly analytics for Growth+ plans (advanced analytics)
+      // if (featureService.canUseFeature('advanced_analytics')) {
+      //   periods.push('month');
+      // }
+      
+      setAvailablePeriods(periods);
+      
+      // Reset to 'today' if current selection is not available
+      if (!periods.includes(selectedPeriod)) {
+        setSelectedPeriod('today');
+      }
+    } catch (error) {
+      console.error('Error initializing features:', error);
+      // Fallback to all analytics for testing
+      setAvailablePeriods(['today', 'week', 'month']);
+      setSelectedPeriod('today');
+    }
+  };
+
+  // OPTIMIZED: Only refresh on manual pull-to-refresh, not on every focus
+  // This prevents unnecessary API calls when navigating between tabs
   useFocusEffect(
     useCallback(() => {
-      console.log('📊 [Analytics] Screen focused - loading fresh data');
-      loadAnalytics();
+      // Skip automatic refresh - user can manually refresh if needed
+      // This is Phase 1 optimization to reduce API calls
+      console.log('📊 [Analytics] Screen focused - using cached data (manual refresh available)');
     }, [])
   );
 
@@ -300,9 +410,12 @@ const AnalyticsScreen = ({ navigation }) => {
 
       console.log('📊 [Analytics] Fetched:', orders.length, 'orders,', products.length, 'products');
 
-      // Calculate popular products
+      // Calculate revenue for different periods first
+      const periodAnalytics = calculatePeriodAnalytics(orders, selectedPeriod);
+      
+      // Calculate popular products for the selected period
       const productSales = {};
-      orders.forEach(order => {
+      periodAnalytics.orders.forEach(order => {
         order.items.forEach(item => {
           if (productSales[item.id]) {
             productSales[item.id].quantity += item.quantity;
@@ -319,27 +432,25 @@ const AnalyticsScreen = ({ navigation }) => {
         .sort((a, b) => b.quantity - a.quantity)
         .slice(0, 5);
 
-      // Generate chart data
-      const dailyRevenue = generateDailyRevenueData(orders);
-      const weeklyRevenue = generateWeeklyRevenueData(orders);
+      // Generate chart data based on selected period - use filtered orders for all periods
+      const chartOrders = periodAnalytics.orders;
+      const dailyRevenue = generateDailyRevenueData(chartOrders);
+      const weeklyRevenue = generateWeeklyRevenueData(chartOrders);
       const topProducts = popularProducts.slice(0, 5);
-      const orderTrends = generateOrderTrendsData(orders);
+      const orderTrends = generateOrderTrendsData(chartOrders);
 
-      // Calculate revenue from real orders
-      const today = new Date();
-      const todayStart = new Date(today.setHours(0, 0, 0, 0));
-      const weekStart = new Date(today.setDate(today.getDate() - 7));
-      
-      const todayOrders = orders.filter(o => new Date(o.timestamp || o.createdAt) >= todayStart);
-      const weekOrders = orders.filter(o => new Date(o.timestamp || o.createdAt) >= weekStart);
-      
-      const todayRevenue = todayOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-      const weekRevenue = weekOrders.reduce((sum, o) => sum + (o.total || 0), 0);
       const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
 
+      console.log('📊 [Analytics] Period analytics for', selectedPeriod, ':', {
+        revenue: periodAnalytics.revenue,
+        orders: periodAnalytics.orderCount,
+        avgOrderValue: periodAnalytics.avgOrderValue
+      });
+
       setAnalytics({
-        todayRevenue,
-        weekRevenue,
+        periodRevenue: periodAnalytics.revenue,
+        periodOrders: periodAnalytics.orderCount,
+        periodAvgOrderValue: periodAnalytics.avgOrderValue,
         totalRevenue,
         totalOrders: orders.length,
         avgOrderValue: orders.length > 0 ? Math.round(totalRevenue / orders.length) : 0,
@@ -415,15 +526,91 @@ const AnalyticsScreen = ({ navigation }) => {
       <View style={[styles.content, contentStyle]}>
         <View style={styles.header}>
           <Text style={styles.title}>Analytics</Text>
-          <TouchableOpacity
-            style={styles.advancedButton}
-            onPress={() => {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              navigation.navigate('AdvancedAnalytics');
-            }}
-          >
-            <Text style={styles.advancedButtonText}>Advanced</Text>
-          </TouchableOpacity>
+          <View style={styles.headerButtons}>
+            <TouchableOpacity
+              style={styles.advancedButton}
+              onPress={() => {
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                navigation.navigate('AdvancedAnalytics');
+                
+                // TESTING MODE: Always allow access
+                // TODO: Enable plan restrictions in production
+                // if (featureService.canUseFeature('advanced_analytics')) {
+                //   navigation.navigate('AdvancedAnalytics');
+                // } else {
+                //   featureService.showUpgradePrompt('advanced_analytics');
+                // }
+              }}
+            >
+              <Text style={styles.advancedButtonText}>
+                Advanced
+              </Text>
+              {/* TESTING MODE: Lock icon disabled */}
+              {/* TODO: Enable in production
+              {!featureService.canUseFeature('advanced_analytics') && (
+                <Ionicons name="lock-closed" size={14} color={colors.text.tertiary} style={{ marginLeft: 4 }} />
+              )}
+              */}
+            </TouchableOpacity>
+          </View>
+        </View>
+
+        {/* Period Selector */}
+        <View style={styles.periodSelector}>
+          {availablePeriods.map((period) => (
+            <TouchableOpacity
+              key={period}
+              style={[
+                styles.periodButton,
+                selectedPeriod === period && styles.periodButtonActive
+              ]}
+              onPress={() => {
+                setSelectedPeriod(period);
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                loadAnalytics(); // Reload analytics with new period
+              }}
+            >
+              <Text style={[
+                styles.periodButtonText,
+                selectedPeriod === period && styles.periodButtonTextActive
+              ]}>
+                {period === 'today' ? 'Today' : period === 'week' ? 'This Week' : 'This Month'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+          
+          {/* TESTING MODE: Upgrade prompts disabled */}
+          {/* TODO: Enable in production
+          {!availablePeriods.includes('week') && (
+            <TouchableOpacity
+              style={[styles.periodButton, styles.periodButtonLocked]}
+              onPress={() => {
+                featureService.showUpgradePrompt('daily_weekly_analytics');
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <View style={styles.lockedPeriodContent}>
+                <Ionicons name="lock-closed" size={12} color={colors.text.tertiary} />
+                <Text style={styles.periodButtonTextLocked}>This Week</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          
+          {!availablePeriods.includes('month') && availablePeriods.includes('week') && (
+            <TouchableOpacity
+              style={[styles.periodButton, styles.periodButtonLocked]}
+              onPress={() => {
+                featureService.showUpgradePrompt('advanced_analytics');
+                Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+              }}
+            >
+              <View style={styles.lockedPeriodContent}>
+                <Ionicons name="lock-closed" size={12} color={colors.text.tertiary} />
+                <Text style={styles.periodButtonTextLocked}>This Month</Text>
+              </View>
+            </TouchableOpacity>
+          )}
+          */}
         </View>
 
         <View style={{ flex: 1 }}>
@@ -442,27 +629,53 @@ const AnalyticsScreen = ({ navigation }) => {
             />
           }
         >
+        {/* TESTING MODE: Upgrade prompt disabled */}
+        {/* TODO: Enable in production
+        {!featureService.canUseFeature('daily_weekly_analytics') && (
+          <View style={styles.upgradePrompt}>
+            <View style={styles.upgradePromptContent}>
+              <Ionicons name="trending-up" size={24} color={colors.primary.main} />
+              <View style={styles.upgradePromptText}>
+                <Text style={styles.upgradePromptTitle}>Get More Insights</Text>
+                <Text style={styles.upgradePromptSubtitle}>
+                  Upgrade to Starter plan for weekly analytics and better business insights
+                </Text>
+              </View>
+              <TouchableOpacity
+                style={styles.upgradePromptButton}
+                onPress={() => {
+                  featureService.showUpgradePrompt('daily_weekly_analytics');
+                  Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+                }}
+              >
+                <Text style={styles.upgradePromptButtonText}>Upgrade</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        )}
+        */}
+
         <View style={styles.statsGrid}>
           <StatCard
-            title="Total Revenue"
-            value={`₹${analytics.totalRevenue || 0}`}
-            subtitle="All time"
+            title={`${selectedPeriod === 'today' ? 'Today' : selectedPeriod === 'week' ? 'This Week' : 'This Month'} Revenue`}
+            value={`₹${analytics.periodRevenue || 0}`}
+            subtitle={selectedPeriod === 'today' ? 'Today' : selectedPeriod === 'week' ? 'Last 7 days' : 'Last 30 days'}
             color={colors.primary.main}
             index={0}
           />
 
           <StatCard
-            title="Total Orders"
-            value={analytics.totalOrders || 0}
+            title={`${selectedPeriod === 'today' ? 'Today' : selectedPeriod === 'week' ? 'This Week' : 'This Month'} Orders`}
+            value={analytics.periodOrders || 0}
             subtitle="Completed"
             color={colors.success.main}
             index={1}
           />
 
           <StatCard
-            title="Products"
-            value={analytics.totalProducts || 0}
-            subtitle="In inventory"
+            title="Avg Order Value"
+            value={`₹${analytics.periodAvgOrderValue || 0}`}
+            subtitle={selectedPeriod === 'today' ? 'Today' : selectedPeriod === 'week' ? 'This week' : 'This month'}
             color={colors.warning.main}
             index={2}
           />
@@ -503,7 +716,11 @@ const AnalyticsScreen = ({ navigation }) => {
         {/* Charts Section */}
         <View style={styles.chartsSection}>
           <View style={styles.chartHeader}>
-            <Text style={styles.sectionTitle}>Revenue Trends</Text>
+            <Text style={styles.sectionTitle}>
+              {selectedPeriod === 'today' ? 'Today Revenue' : 
+               selectedPeriod === 'week' ? 'Week Revenue' : 
+               'Month Revenue'}
+            </Text>
             <View style={styles.chartTabs}>
               <TouchableOpacity
                 style={[styles.chartTab, selectedChart === 'daily' && styles.chartTabActive]}
@@ -658,6 +875,102 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.background.surface,
   },
+  advancedButtonLocked: {
+    backgroundColor: colors.gray[300],
+    borderWidth: 1,
+    borderColor: colors.gray[400],
+  },
+  advancedButtonTextLocked: {
+    color: colors.text.tertiary,
+  },
+  headerButtons: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  periodSelector: {
+    flexDirection: 'row',
+    paddingHorizontal: 20,
+    paddingVertical: 12,
+    backgroundColor: colors.background.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  periodButton: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginHorizontal: 4,
+    borderRadius: 8,
+    backgroundColor: colors.background.primary,
+    alignItems: 'center',
+  },
+  periodButtonActive: {
+    backgroundColor: colors.primary.main,
+  },
+  periodButtonText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text.secondary,
+  },
+  periodButtonTextActive: {
+    color: colors.background.surface,
+    fontWeight: '600',
+  },
+  periodButtonLocked: {
+    backgroundColor: colors.gray[50],
+    borderWidth: 1,
+    borderColor: colors.gray[200],
+    borderStyle: 'dashed',
+  },
+  lockedPeriodContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  periodButtonTextLocked: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text.tertiary,
+  },
+  upgradePrompt: {
+    marginHorizontal: 20,
+    marginBottom: 16,
+    backgroundColor: colors.primary.background,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: colors.primary.light,
+  },
+  upgradePromptContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    padding: 16,
+    gap: 12,
+  },
+  upgradePromptText: {
+    flex: 1,
+  },
+  upgradePromptTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  upgradePromptSubtitle: {
+    fontSize: 13,
+    color: colors.text.secondary,
+    lineHeight: 18,
+  },
+  upgradePromptButton: {
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    backgroundColor: colors.primary.main,
+    borderRadius: 8,
+  },
+  upgradePromptButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.background.surface,
+  },
   scrollContent: {
     padding: 20,
     paddingBottom: 140,
@@ -704,6 +1017,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
     marginBottom: 16,
+    flex: 1,
+    marginRight: 12,
   },
   revenueCards: {
     backgroundColor: colors.background.surface,

@@ -42,8 +42,8 @@ const POSScreen = ({ navigation, route }) => {
   const { data: products, refresh: refreshProducts } = useRealtimeProducts();
   const { data: storeInfo } = useRealtimeStoreInfo();
   
-  // Get store name
-  const storeName = storeInfo?.name || 'FlowPOS Store';
+  // Get store name - check both name and store_name fields
+  const storeName = storeInfo?.name || storeInfo?.store_name || 'FlowPOS Store';
 
   // Initialize feature service and trigger initial load
   useEffect(() => {
@@ -55,15 +55,15 @@ const POSScreen = ({ navigation, route }) => {
     initialLoadDone.current = true;
   }, []);
 
-  // Refresh products when screen comes into focus (but skip initial mount)
+  // Auto-refresh on focus to sync data from other screens (Inventory, ManageScreen)
   useFocusEffect(
     useCallback(() => {
-      // Skip the first call (initial mount) to avoid duplicate fetch
-      if (initialLoadDone.current && products.length > 0) {
-        console.log('🏪 [POS] Screen focused - refreshing products from backend');
-        refreshProducts();
+      // Only refresh if not initial load
+      if (initialLoadDone.current) {
+        console.log('🏪 [POS] Screen focused - refreshing products silently');
+        refreshProducts(); // Silent refresh without loader
       }
-    }, [refreshProducts, products.length])
+    }, [refreshProducts])
   );
 
   // App tour guide
@@ -405,7 +405,7 @@ const POSScreen = ({ navigation, route }) => {
                 onPress={handleClearCart}
                 activeOpacity={0.7}
               >
-                <Ionicons name="trash-outline" size={20} color={colors.error.main} />
+                <Ionicons name="trash-outline" size={24} color={colors.error.main} />
               </TouchableOpacity>
               <View style={styles.cartButton}>
                 <ResponsiveText variant="button" style={styles.cartButtonText}>
@@ -719,9 +719,9 @@ const styles = StyleSheet.create({
   },
   clearCartButton: {
     backgroundColor: colors.error.background,
-    width: 36,
-    height: 36,
-    borderRadius: 18,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
     borderWidth: 1,

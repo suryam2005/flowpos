@@ -1,297 +1,390 @@
-// WhatsApp Service for sending invoices via Twilio
-import * as FileSystem from 'expo-file-system';
-import { Alert } from 'react-native';
+import { Linking } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { API_BASE_URL } from '../config/apiConfig';
 
 class WhatsAppService {
   constructor() {
-    // These should be stored securely in environment variables or secure storage
-    this.twilioAccountSid = null;
-    this.twilioAuthToken = null;
-    this.twilioWhatsAppNumber = null; // Format: whatsapp:+14155238886
-    this.isConfigured = false;
+    this.whatsappMethod = 'flowpos'; // 'flowpos' or 'device' - FlowPOS is default
+    this.sendInvoiceEnabled = true; // New setting for send invoice feature
+    this.loadSettings();
   }
 
-  // Initialize Twilio credentials
-  async initialize(accountSid, authToken, whatsAppNumber) {
-    this.twilioAccountSid = accountSid;
-    this.twilioAuthToken = authToken;
-    this.twilioWhatsAppNumber = whatsAppNumber;
-    this.isConfigured = true;
+  async loadSettings() {
+    try {
+      const [method, sendEnabled] = await Promise.all([
+        AsyncStorage.getItem('whatsappMethod'),
+        AsyncStorage.getItem('sendInvoiceEnabled')
+      ]);
+      
+      this.whatsappMethod = method || 'flowpos'; // Default to FlowPOS
+      this.sendInvoiceEnabled = sendEnabled !== null ? JSON.parse(sendEnabled) : true; // Default enabled
+    } catch (error) {
+      console.error('Error loading WhatsApp settings:', error);
+    }
   }
 
-  // Check if WhatsApp service is properly configured
-  isReady() {
-    return this.isConfigured && 
-           this.twilioAccountSid && 
-           this.twilioAuthToken && 
-           this.twilioWhatsAppNumber;
+  async setWhatsAppMethod(method) {
+    this.whatsappMethod = method;
+    await AsyncStorage.setItem('whatsappMethod', method);
   }
 
-  // Send invoice image via WhatsApp
-  async sendInvoiceImage(customerPhone, invoiceImageUri, invoiceData) {
-    if (!this.isReady()) {
-      throw new Error('WhatsApp service not configured. Please set up Twilio credentials.');
+  async setSendInvoiceEnabled(enabled) {
+    this.sendInvoiceEnabled = enabled;
+    await AsyncStorage.setItem('sendInvoiceEnabled', JSON.stringify(enabled));
+  }
+
+  getSendInvoiceEnabled() {
+    return this.sendInvoiceEnabled;
+  }
+
+  getWhatsAppMethod() {
+    return this.whatsappMethod;
+  }
+
+  // Check if FlowPOS backend service is ready
+  async isFlowPOSReady() {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) return false;
+
+      const response = await fetch(`${API_BASE_URL}/whatsapp/status`, {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+      return result.success && result.data.ready;
+    } catch (error) {
+      console.error('Error checking FlowPOS WhatsApp status:', error);
+      return false;
+    }
+  }
+
+  // Check if service is ready based on selected method
+  async isReady() {
+    if (this.whatsappMethod === 'flowpos') {
+      return await this.isFlowPOSReady();
+    }
+    return true; // Device WhatsApp is always available
+  }
+
+  // Send invoice via FlowPOS backend (Twilio)
+  async sendViaFlowPOS(phoneNumber, invoiceData) {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        throw new Error('User not authenticated');
+      }
+
+      // Get user settings for backend to apply same logic as device WhatsApp
+      const [showStoreNameSetting, receiptSettings] = await Promise.all([
+        AsyncStorage.getItem('showStoreNameOnInvoice'),
+        AsyncStorage.getItem('receiptSettings')
+      ]);
+      
+      const parsedReceiptSettings = receiptSettings ? JSON.parse(receiptSettings) : {};
+      
+      const userSettings = {
+        showStoreNameOnInvoice: showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true,
+        receiptSettings: {
+          showAddress: parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true,
+          showPhone: parsedReceiptSettings.showPhone !== undefined ? parsedReceiptSettings.showPhone : true,
+          showEmail: parsedReceiptSettings.showEmail !== undefined ? parsedReceiptSettings.showEmail : false,
+          showGST: parsedReceiptSettings.showGST !== undefined ? parsedReceiptSettings.showGST : true
+        }
+      };
+
+      console.log('📱 [WhatsAppService] Sending to FlowPOS backend with settings:', {
+        phoneNumber,
+        invoiceNumber: invoiceData.orderNumber || invoiceData.invoiceNumber,
+        storeName: invoiceData.storeName,
+        userSettings
+      });
+
+      const response = await fetch(`${API_BASE_URL}/whatsapp/send-invoice`, {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          phoneNumber,
+          invoiceData,
+          userSettings // Send user settings to backend
+        }),
+      });
+
+      const result = await response.json();
+      
+      if (!result.success) {
+        throw new Error(result.error || 'Failed to send WhatsApp message');
+      }
+
+      return {
+        success: true,
+        messageId: result.data.messageId,
+        method: 'flowpos'
+      };
+    } catch (error) {
+      console.error('Error sending via FlowPOS WhatsApp:', error);
+      throw error;
+    }
+  }
+
+  // Send invoice via device WhatsApp
+  async sendViaDeviceWhatsApp(phoneNumber, imageUri, invoiceData) {
+    try {
+      // TESTING PHASE: Removed one-time sending restriction
+      // TODO: Re-enable this restriction after testing phase
+      // const invoiceKey = `whatsapp_sent_${invoiceData.invoiceNumber || invoiceData.orderNumber}`;
+      // const alreadySent = await AsyncStorage.getItem(invoiceKey);
+      // if (alreadySent) {
+      //   throw new Error('Invoice has already been sent via WhatsApp. Use share option to send again.');
+      // }
+
+      console.log('📱 [WhatsAppService] Opening device WhatsApp for invoice:', {
+        invoiceNumber: invoiceData.invoiceNumber || invoiceData.orderNumber,
+        phoneNumber: phoneNumber,
+        testingPhase: true
+      });
+
+      const message = await this.createInvoiceMessage(invoiceData);
+      const formattedPhone = this.formatPhoneNumber(phoneNumber);
+      
+      // Create WhatsApp URL
+      const whatsappUrl = `whatsapp://send?phone=${formattedPhone}&text=${encodeURIComponent(message)}`;
+      
+      // Try to open WhatsApp
+      const canOpen = await Linking.canOpenURL(whatsappUrl);
+      
+      if (canOpen) {
+        await Linking.openURL(whatsappUrl);
+        
+        // TESTING PHASE: Commented out marking as sent
+        // TODO: Re-enable this after testing phase
+        // await AsyncStorage.setItem(invoiceKey, 'true');
+        
+        return {
+          success: true,
+          message: 'WhatsApp opened successfully. Please send the message.',
+          method: 'device'
+        };
+      } else {
+        throw new Error('WhatsApp is not installed on this device');
+      }
+    } catch (error) {
+      console.error('Error opening device WhatsApp:', error);
+      throw error;
+    }
+  }
+
+  // Main send method - uses selected method with fallback
+  async sendInvoiceMessage(phoneNumber, invoiceData) {
+    // Check if send invoice feature is enabled
+    if (!this.sendInvoiceEnabled) {
+      throw new Error('Invoice sending is disabled in settings');
     }
 
     try {
-      // Format phone number for WhatsApp (must include country code)
-      const formattedPhone = this.formatPhoneNumber(customerPhone);
-      
-      // Upload image to a temporary hosting service or convert to base64
-      const imageData = await this.prepareImageForSending(invoiceImageUri);
-      
-      // Create message content
-      const messageBody = this.createInvoiceMessage(invoiceData);
-      
-      // Send WhatsApp message with image via Twilio
-      const response = await this.sendTwilioWhatsAppMessage(
-        formattedPhone,
-        messageBody,
-        imageData
-      );
-      
-      return {
-        success: true,
-        messageId: response.sid,
-        status: response.status
-      };
+      if (this.whatsappMethod === 'flowpos') {
+        // Try FlowPOS first
+        try {
+          return await this.sendViaFlowPOS(phoneNumber, invoiceData);
+        } catch (error) {
+          console.log('FlowPOS WhatsApp failed, falling back to device:', error.message);
+          // Fallback to device WhatsApp
+          return await this.sendViaDeviceWhatsApp(phoneNumber, null, invoiceData);
+        }
+      } else {
+        // Use device WhatsApp directly
+        return await this.sendViaDeviceWhatsApp(phoneNumber, null, invoiceData);
+      }
     } catch (error) {
       console.error('Error sending WhatsApp invoice:', error);
       throw error;
     }
   }
 
-  // Format phone number for WhatsApp (must include country code)
-  formatPhoneNumber(phone) {
+  // Legacy method for backward compatibility
+  async sendInvoiceImage(phoneNumber, imageUri, invoiceData) {
+    return await this.sendInvoiceMessage(phoneNumber, invoiceData);
+  }
+
+  // Legacy method for backward compatibility
+  async sendTextMessage(phoneNumber, message) {
+    const invoiceData = {
+      storeName: 'FlowPOS Store',
+      orderNumber: 'N/A',
+      customerName: 'Customer',
+      date: new Date().toLocaleDateString(),
+      items: [],
+      subtotal: 0,
+      grandTotal: 0,
+      paymentMethod: 'Cash'
+    };
+    
+    return await this.sendInvoiceMessage(phoneNumber, invoiceData);
+  }
+
+  // Format phone number for WhatsApp
+  formatPhoneNumber(phoneNumber) {
     // Remove any non-digit characters
-    const cleanPhone = phone.replace(/\D/g, '');
+    let cleaned = phoneNumber.replace(/\D/g, '');
     
-    // Add India country code if not present
-    if (cleanPhone.length === 10) {
-      return `whatsapp:+91${cleanPhone}`;
-    } else if (cleanPhone.length === 12 && cleanPhone.startsWith('91')) {
-      return `whatsapp:+${cleanPhone}`;
-    } else if (cleanPhone.length === 13 && cleanPhone.startsWith('91')) {
-      return `whatsapp:+${cleanPhone}`;
+    // Add country code if not present
+    if (cleaned.length === 10) {
+      cleaned = '91' + cleaned; // India country code
     }
     
-    // If already formatted or different country code, use as is
-    return `whatsapp:+${cleanPhone}`;
+    return cleaned;
   }
 
-  // Prepare image for sending (convert to base64 or upload to temporary storage)
-  async prepareImageForSending(imageUri) {
-    try {
-      // Read the image file as base64
-      const base64Image = await FileSystem.readAsStringAsync(imageUri, {
-        encoding: FileSystem.EncodingType.Base64,
-      });
-      
-      // For Twilio, we need to upload the image to a publicly accessible URL
-      // This is a simplified version - in production, you'd upload to AWS S3, Cloudinary, etc.
-      return {
-        type: 'base64',
-        data: base64Image,
-        mimeType: 'image/png'
-      };
-    } catch (error) {
-      console.error('Error preparing image:', error);
-      throw new Error('Failed to prepare invoice image for sending');
-    }
-  }
-
-  // Create personalized invoice message
-  createInvoiceMessage(invoiceData) {
-    const customerName = invoiceData.customerName || 'Customer';
-    const storeName = invoiceData.storeName || 'FlowPOS Store';
-    const invoiceNumber = invoiceData.invoiceNumber || 'INV-001';
-    const total = invoiceData.grandTotal || invoiceData.total || 0;
-    
-    return `Hi ${customerName}!
-
-Thank you for shopping with ${storeName}!
-
-📄 Invoice: ${invoiceNumber}
-💰 Total: ₹${total.toFixed(2)}
-📅 Date: ${invoiceData.date}
-
-Your invoice is attached as an image. Please save it for your records.
-
-We appreciate your business! 🙏
-
-Best regards,
-${storeName} Team
-Powered by FlowPOS`;
-  }
-
-  // Send WhatsApp message via Twilio API
-  async sendTwilioWhatsAppMessage(toPhone, messageBody, imageData) {
-    const url = `https://api.twilio.com/2010-04-01/Accounts/${this.twilioAccountSid}/Messages.json`;
-    
-    // Create form data for the request
-    const formData = new FormData();
-    formData.append('From', this.twilioWhatsAppNumber);
-    formData.append('To', toPhone);
-    formData.append('Body', messageBody);
-    
-    // If we have image data, we need to upload it first
-    // This is a simplified version - in production, upload to cloud storage first
-    if (imageData) {
-      // For now, we'll send the message without the image and show instructions
-      // In production, you'd upload the image to a public URL first
-      formData.append('Body', messageBody + '\n\n📎 Invoice image will be sent separately.');
-    }
-    
-    // Create authorization header
-    const credentials = btoa(`${this.twilioAccountSid}:${this.twilioAuthToken}`);
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-      body: this.formDataToUrlEncoded(formData),
-    });
-    
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Twilio API Error: ${errorData.message || 'Unknown error'}`);
-    }
-    
-    return await response.json();
-  }
-
-  // Convert FormData to URL encoded string (for React Native compatibility)
-  formDataToUrlEncoded(formData) {
-    const params = new URLSearchParams();
-    for (const [key, value] of formData.entries()) {
-      params.append(key, value);
-    }
-    return params.toString();
-  }
-
-  // Send invoice via alternative method (using device's WhatsApp app)
-  async sendViaDeviceWhatsApp(customerPhone, invoiceImageUri, invoiceData) {
-    try {
-      const { Linking, Share } = require('react-native');
-      
-      // First, share the image to save it to device
-      await Share.share({
-        url: invoiceImageUri,
-        message: this.createInvoiceMessage(invoiceData),
-      });
-      
-      // Then open WhatsApp with the customer's number
-      const message = this.createInvoiceMessage(invoiceData);
-      const whatsappUrl = `whatsapp://send?phone=91${customerPhone}&text=${encodeURIComponent(message)}`;
-      
-      const canOpen = await Linking.canOpenURL(whatsappUrl);
-      if (canOpen) {
-        await Linking.openURL(whatsappUrl);
-        return {
-          success: true,
-          method: 'device_whatsapp',
-          message: 'WhatsApp opened. Please send the message and attach the invoice image from your gallery.'
-        };
-      } else {
-        throw new Error('WhatsApp not installed on device');
-      }
-    } catch (error) {
-      console.error('Error sending via device WhatsApp:', error);
-      throw error;
-    }
-  }
-
-  // Test WhatsApp configuration
-  async testConfiguration() {
-    if (!this.isReady()) {
-      return {
-        success: false,
-        error: 'WhatsApp service not configured'
-      };
-    }
-
-    try {
-      // Send a test message to verify configuration
-      const testMessage = 'Test message from FlowPOS - WhatsApp integration is working! 🎉';
-      
-      // You would send this to your own number for testing
-      const response = await this.sendTwilioWhatsAppMessage(
-        this.twilioWhatsAppNumber, // Send to self for testing
-        testMessage,
-        null
-      );
-      
-      return {
-        success: true,
-        messageId: response.sid,
-        status: response.status
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  // Send text message via WhatsApp (for auto-invoice sending)
-  async sendTextMessage(customerPhone, messageText) {
-    if (!this.isReady()) {
-      throw new Error('WhatsApp service not configured. Please set up Twilio credentials.');
-    }
-
-    try {
-      // Format phone number for WhatsApp
-      const formattedPhone = this.formatPhoneNumber(customerPhone);
-      
-      // Send WhatsApp message via Twilio
-      const response = await this.sendTwilioTextMessage(formattedPhone, messageText);
-      
-      return {
-        success: true,
-        messageId: response.sid,
-        message: 'WhatsApp message sent successfully'
-      };
-    } catch (error) {
-      console.error('Error sending WhatsApp text message:', error);
-      return {
-        success: false,
-        error: error.message
-      };
-    }
-  }
-
-  // Send text-only WhatsApp message via Twilio API
-  async sendTwilioTextMessage(toPhone, messageBody) {
-    const url = `https://api.twilio.com/2010-04-01/Accounts/${this.twilioAccountSid}/Messages.json`;
-    
-    // Create form data for the request
-    const formData = new FormData();
-    formData.append('From', this.twilioWhatsAppNumber);
-    formData.append('To', toPhone);
-    formData.append('Body', messageBody);
-    
-    // Create authorization header
-    const credentials = btoa(`${this.twilioAccountSid}:${this.twilioAuthToken}`);
-    
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Authorization': `Basic ${credentials}`,
-      },
-      body: formData,
+  // Create invoice message with store name setting check
+  async createInvoiceMessage(invoiceData) {
+    console.log('📱 [WhatsAppService] Creating invoice message with data:', {
+      storeName: invoiceData.storeName,
+      storeAddress: invoiceData.storeAddress,
+      storePhone: invoiceData.storePhone,
+      storeEmail: invoiceData.storeEmail,
+      gstNumber: invoiceData.gstNumber,
+      grandTotal: invoiceData.grandTotal,
+      total: invoiceData.total,
+      customerName: invoiceData.customerName,
+      itemsCount: invoiceData.items?.length || 0
     });
 
-    if (!response.ok) {
-      const errorData = await response.json();
-      throw new Error(`Twilio API Error: ${errorData.message || 'Unknown error'}`);
+    // Get settings
+    const [showStoreNameSetting, receiptSettings] = await Promise.all([
+      AsyncStorage.getItem('showStoreNameOnInvoice'),
+      AsyncStorage.getItem('receiptSettings')
+    ]);
+    
+    const parsedReceiptSettings = receiptSettings ? JSON.parse(receiptSettings) : {};
+    
+    console.log('🏪 [WhatsAppService] Settings debug:', {
+      showStoreNameSetting,
+      receiptSettings: parsedReceiptSettings,
+      inputStoreName: invoiceData.storeName,
+      hasStoreName: !!(invoiceData.storeName && invoiceData.storeName.trim() !== '')
+    });
+
+    const {
+      storeName,
+      storeAddress,
+      storePhone,
+      storeEmail,
+      gstNumber,
+      orderNumber,
+      customerName,
+      date,
+      items,
+      subtotal,
+      tax,
+      grandTotal,
+      total, // Fallback field
+      paymentMethod
+    } = invoiceData;
+
+    // Check if store name should be shown in WhatsApp message
+    const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
+    
+    // Use store name only if setting is enabled and store name exists
+    const displayStoreName = showStoreName && storeName && storeName.trim() !== '' ? storeName : 'FlowPOS Store';
+    
+    // Get receipt settings with defaults
+    const showAddress = parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true;
+    const showPhone = parsedReceiptSettings.showPhone !== undefined ? parsedReceiptSettings.showPhone : true;
+    const showEmail = parsedReceiptSettings.showEmail !== undefined ? parsedReceiptSettings.showEmail : false;
+    const showGST = parsedReceiptSettings.showGST !== undefined ? parsedReceiptSettings.showGST : true;
+    
+    console.log('🏪 [WhatsAppService] Final display decisions:', {
+      showStoreName,
+      displayStoreName,
+      showAddress,
+      showPhone,
+      showEmail,
+      showGST,
+      willShowCustomName: displayStoreName !== 'FlowPOS Store'
+    });
+
+    let message = `🧾 *Invoice from ${displayStoreName}*\n\n`;
+    
+    // Add store contact information if enabled and available
+    let contactInfo = '';
+    if (showAddress && storeAddress && storeAddress.trim() !== '') {
+      contactInfo += `📍 ${storeAddress.trim()}\n`;
+    }
+    if (showPhone && storePhone && storePhone.trim() !== '') {
+      contactInfo += `📞 ${storePhone.trim()}\n`;
+    }
+    if (showEmail && storeEmail && storeEmail.trim() !== '') {
+      contactInfo += `📧 ${storeEmail.trim()}\n`;
+    }
+    if (showGST && gstNumber && gstNumber.trim() !== '') {
+      contactInfo += `📄 GST: ${gstNumber.trim()}\n`;
+    }
+    
+    if (contactInfo) {
+      message += contactInfo + '\n';
+    }
+    
+    message += `📋 *Order Details:*\n`;
+    message += `Order #: ${orderNumber || 'N/A'}\n`;
+    message += `Date: ${date || new Date().toLocaleDateString()}\n`;
+    message += `Customer: ${customerName || 'Customer'}\n\n`;
+
+    if (items && items.length > 0) {
+      message += `🛍️ *Items:*\n`;
+      items.forEach(item => {
+        const quantity = Number(item.quantity) || 0;
+        const price = Number(item.price) || 0;
+        const itemTotal = quantity * price;
+        message += `• ${quantity}x ${item.name} - ₹${itemTotal.toFixed(2)}\n`;
+      });
+      message += `\n`;
     }
 
-    return await response.json();
+    message += `💰 *Payment Summary:*\n`;
+    const subtotalNum = Number(subtotal) || 0;
+    if (subtotalNum > 0) {
+      message += `Subtotal: ₹${subtotalNum.toFixed(2)}\n`;
+    }
+    
+    const taxNum = Number(tax) || 0;
+    if (taxNum > 0) {
+      message += `Tax: ₹${taxNum.toFixed(2)}\n`;
+    }
+    
+    const grandTotalNum = Number(grandTotal) || Number(total) || 0;
+    message += `*Total: ₹${grandTotalNum.toFixed(2)}*\n`;
+    message += `Payment: ${paymentMethod || 'Cash'}\n\n`;
+
+    message += `Thank you for your business! 🙏\n\n`;
+    message += `Best regards,\n`;
+    message += `${displayStoreName} Team\n`;
+    message += `_Powered by FlowPOS_`;
+
+    return message;
+  }
+
+  // Get service status
+  async getStatus() {
+    // Always reload settings to ensure we have the latest values
+    await this.loadSettings();
+    
+    const isFlowPOSReady = await this.isFlowPOSReady();
+    
+    return {
+      currentMethod: this.whatsappMethod,
+      flowposReady: isFlowPOSReady,
+      deviceReady: true,
+      ready: await this.isReady(),
+      sendInvoiceEnabled: this.sendInvoiceEnabled
+    };
   }
 }
 
-// Export singleton instance
 export default new WhatsAppService();

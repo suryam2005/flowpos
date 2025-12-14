@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,8 +14,9 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
+import productsService from '../../services/ProductsService';
 
-const InventoryScreen = () => {
+const InventoryScreen = ({ isActive }) => {
   const [products, setProducts] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -23,10 +24,22 @@ const InventoryScreen = () => {
   const [showStockModal, setShowStockModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [newStock, setNewStock] = useState('');
+  const hasLoadedOnce = useRef(false);
 
   useEffect(() => {
     loadProducts();
   }, []);
+
+  // Refresh when tab becomes active
+  useEffect(() => {
+    if (isActive && hasLoadedOnce.current) {
+      console.log('📦 [Inventory] Tab became active - refreshing silently');
+      loadProducts(false); // Silent refresh without loader
+    }
+    if (isActive) {
+      hasLoadedOnce.current = true;
+    }
+  }, [isActive]);
 
   const loadProducts = async (isRefresh = false) => {
     if (isRefresh) {
@@ -34,12 +47,24 @@ const InventoryScreen = () => {
     }
 
     try {
-      const storedProducts = await AsyncStorage.getItem('products');
-      if (storedProducts) {
-        setProducts(JSON.parse(storedProducts));
-      }
+      // Load from backend
+      const productsData = await productsService.getProducts();
+      setProducts(productsData);
+      
+      // Also update AsyncStorage for offline access
+      await AsyncStorage.setItem('products', JSON.stringify(productsData));
     } catch (error) {
       console.error('Error loading products:', error);
+      
+      // Fallback to AsyncStorage if backend fails
+      try {
+        const storedProducts = await AsyncStorage.getItem('products');
+        if (storedProducts) {
+          setProducts(JSON.parse(storedProducts));
+        }
+      } catch (storageError) {
+        console.error('Error loading from storage:', storageError);
+      }
     } finally {
       if (isRefresh) {
         setRefreshing(false);
@@ -53,20 +78,26 @@ const InventoryScreen = () => {
 
   const updateStock = async (productId, newStockValue) => {
     try {
-      const updatedProducts = products.map(product =>
-        product.id === productId
-          ? { ...product, stock: parseInt(newStockValue) }
-          : product
-      );
+      const stockQuantity = parseInt(newStockValue);
       
-      await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
-      setProducts(updatedProducts);
+      // Update via backend API
+      await productsService.updateProduct(productId, {
+        stock_quantity: stockQuantity
+      });
+      
+      // Automatically refresh products from backend (without showing loader)
+      console.log('🔄 Auto-refreshing inventory after stock update...');
+      const freshProducts = await productsService.getProducts();
+      setProducts(freshProducts);
+      
+      // Update AsyncStorage for offline access
+      await AsyncStorage.setItem('products', JSON.stringify(freshProducts));
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       Alert.alert('Success', 'Stock updated successfully');
     } catch (error) {
       console.error('Error updating stock:', error);
-      Alert.alert('Error', 'Failed to update stock');
+      Alert.alert('Error', 'Failed to update stock. Please try again.');
     }
   };
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import networkService from './NetworkService';
+import { RequestDeduplicator } from '../utils/debounce';
 
 class ProductsService {
   constructor() {
@@ -10,6 +11,9 @@ class ProductsService {
     this.isOnline = true;
     this.syncInProgress = false;
     this.abortController = null;
+    
+    // Phase 1 Optimization: Request deduplication
+    this.deduplicator = new RequestDeduplicator();
     
     // Initialize network monitoring
     this.initNetworkMonitoring();
@@ -98,7 +102,7 @@ class ProductsService {
     }
   }
 
-  // Get all products (CLOUD ONLY - NO CACHE)
+  // Get all products (CLOUD ONLY - NO CACHE) with request deduplication
   async getProducts(options = {}) {
     try {
       console.log('📦 [MOBILE DEBUG] Fetching products DIRECTLY from Supabase (NO CACHE):', options);
@@ -109,12 +113,14 @@ class ProductsService {
         return [];
       }
 
-      // Don't use abortController to prevent request cancellation issues
-      // Removed problematic abort controller logic
+      // Phase 1 Optimization: Deduplicate concurrent requests
+      const dedupeKey = `getProducts_${JSON.stringify(options)}`;
+      const products = await this.deduplicator.deduplicate(dedupeKey, async () => {
+        // Always fetch fresh data from Supabase - NO LOCAL CACHE
+        console.log('📦 [MOBILE DEBUG] Calling getProductsFromCloud...');
+        return await this.getProductsFromCloud(options);
+      });
       
-      // Always fetch fresh data from Supabase - NO LOCAL CACHE
-      console.log('📦 [MOBILE DEBUG] Calling getProductsFromCloud...');
-      const products = await this.getProductsFromCloud(options);
       console.log('✅ [MOBILE DEBUG] Fresh products fetched directly from Supabase:', products.length);
       console.log('✅ [MOBILE DEBUG] Products data:', products);
 
@@ -156,6 +162,19 @@ class ProductsService {
 
     } catch (error) {
       console.error('❌ Error fetching fresh products from Supabase:', error);
+      
+      // Handle token expiration
+      if (error.message.includes('Invalid or expired token') || 
+          error.message.includes('Unauthorized') ||
+          error.message.includes('401')) {
+        console.log('🔄 Token expired, clearing auth data');
+        try {
+          await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'authToken']);
+        } catch (clearError) {
+          console.error('Error clearing auth data:', clearError);
+        }
+        throw new Error('Session expired. Please login again.');
+      }
       
       // If it's an AbortError, don't throw - just return empty
       if (error.name === 'AbortError') {
@@ -395,6 +414,20 @@ class ProductsService {
     } catch (error) {
       console.error('❌ Error fetching products from cloud:', error.message);
       console.error('❌ Error stack:', error.stack);
+      
+      // Handle token expiration
+      if (error.message.includes('Invalid or expired token') || 
+          error.message.includes('Unauthorized') ||
+          error.message.includes('401')) {
+        console.log('🔄 Token expired, clearing auth data');
+        try {
+          await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'authToken']);
+        } catch (clearError) {
+          console.error('Error clearing auth data:', clearError);
+        }
+        throw new Error('Session expired. Please login again.');
+      }
+      
       throw error;
     }
   }
@@ -440,6 +473,20 @@ class ProductsService {
       console.error('❌ updateProductInCloud ERROR:', error);
       console.error('Error message:', error.message);
       console.error('Error stack:', error.stack);
+      
+      // Handle token expiration
+      if (error.message.includes('Invalid or expired token') || 
+          error.message.includes('Unauthorized') ||
+          error.message.includes('401')) {
+        console.log('🔄 Token expired, clearing auth data');
+        try {
+          await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'authToken']);
+        } catch (clearError) {
+          console.error('Error clearing auth data:', clearError);
+        }
+        throw new Error('Session expired. Please login again.');
+      }
+      
       throw error;
     }
   }
@@ -460,6 +507,20 @@ class ProductsService {
 
     } catch (error) {
       console.error('Error deleting product from cloud:', error);
+      
+      // Handle token expiration
+      if (error.message.includes('Invalid or expired token') || 
+          error.message.includes('Unauthorized') ||
+          error.message.includes('401')) {
+        console.log('🔄 Token expired, clearing auth data');
+        try {
+          await AsyncStorage.multiRemove(['accessToken', 'refreshToken', 'userData', 'authToken']);
+        } catch (clearError) {
+          console.error('Error clearing auth data:', clearError);
+        }
+        throw new Error('Session expired. Please login again.');
+      }
+      
       throw error;
     }
   }

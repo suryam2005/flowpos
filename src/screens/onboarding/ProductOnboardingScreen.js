@@ -39,28 +39,28 @@ const ProductOnboardingScreen = ({ navigation }) => {
   // Sample products to help users get started quickly
   const sampleProducts = {
     'Restaurant/Cafe': [
-      { name: 'Coffee', price: '80', emoji: '☕', category: 'Beverages' },
-      { name: 'Sandwich', price: '120', emoji: '🥪', category: 'Food' },
-      { name: 'Burger', price: '150', emoji: '🍔', category: 'Food' },
-      { name: 'Tea', price: '50', emoji: '🍵', category: 'Beverages' },
+      { name: 'Coffee', price: '80', emoji: '☕', category: 'Beverages', tags: ['Beverages', 'Hot Drinks'] },
+      { name: 'Sandwich', price: '120', emoji: '🥪', category: 'Food', tags: ['Food', 'Snacks'] },
+      { name: 'Burger', price: '150', emoji: '🍔', category: 'Food', tags: ['Food', 'Main Course'] },
+      { name: 'Tea', price: '50', emoji: '🍵', category: 'Beverages', tags: ['Beverages', 'Hot Drinks'] },
     ],
     'Retail Store': [
-      { name: 'T-Shirt', price: '500', emoji: '👕', category: 'Clothing' },
-      { name: 'Jeans', price: '1200', emoji: '👖', category: 'Clothing' },
-      { name: 'Shoes', price: '2000', emoji: '👟', category: 'Footwear' },
-      { name: 'Cap', price: '300', emoji: '🧢', category: 'Accessories' },
+      { name: 'T-Shirt', price: '500', emoji: '👕', category: 'Clothing', tags: ['Clothing', 'Casual Wear'] },
+      { name: 'Jeans', price: '1200', emoji: '👖', category: 'Clothing', tags: ['Clothing', 'Bottom Wear'] },
+      { name: 'Shoes', price: '2000', emoji: '👟', category: 'Footwear', tags: ['Footwear', 'Sports'] },
+      { name: 'Cap', price: '300', emoji: '🧢', category: 'Accessories', tags: ['Accessories', 'Headwear'] },
     ],
     'Grocery Store': [
-      { name: 'Rice (1kg)', price: '80', emoji: '🍚', category: 'Grains' },
-      { name: 'Milk (1L)', price: '60', emoji: '🥛', category: 'Dairy' },
-      { name: 'Bread', price: '40', emoji: '🍞', category: 'Bakery' },
-      { name: 'Eggs (12pc)', price: '120', emoji: '🥚', category: 'Dairy' },
+      { name: 'Rice (1kg)', price: '80', emoji: '🍚', category: 'Grains', tags: ['Grains', 'Staples'] },
+      { name: 'Milk (1L)', price: '60', emoji: '🥛', category: 'Dairy', tags: ['Dairy', 'Fresh'] },
+      { name: 'Bread', price: '40', emoji: '🍞', category: 'Bakery', tags: ['Bakery', 'Fresh'] },
+      { name: 'Eggs (12pc)', price: '120', emoji: '🥚', category: 'Dairy', tags: ['Dairy', 'Fresh'] },
     ],
     'default': [
-      { name: 'Product 1', price: '100', emoji: '📦', category: 'General' },
-      { name: 'Product 2', price: '200', emoji: '📦', category: 'General' },
-      { name: 'Product 3', price: '150', emoji: '📦', category: 'General' },
-      { name: 'Product 4', price: '250', emoji: '📦', category: 'General' },
+      { name: 'Product 1', price: '100', emoji: '📦', category: 'General', tags: ['General'] },
+      { name: 'Product 2', price: '200', emoji: '📦', category: 'General', tags: ['General'] },
+      { name: 'Product 3', price: '150', emoji: '📦', category: 'General', tags: ['General'] },
+      { name: 'Product 4', price: '250', emoji: '📦', category: 'General', tags: ['General'] },
     ]
   };
 
@@ -115,7 +115,9 @@ const ProductOnboardingScreen = ({ navigation }) => {
           name: sample.name,
           price: parseInt(sample.price),
           stock_quantity: 50,
+          track_stock: true, // Enable stock tracking for sample products
           category: sample.category,
+          tags: sample.tags, // Include tags in backend call
           description: `Sample ${sample.category.toLowerCase()} product`,
         };
         
@@ -190,6 +192,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
         stock_quantity: formData.trackStock ? parseInt(formData.stock) : 0,
         track_stock: formData.trackStock,
         category: finalTags[0] || 'General',
+        tags: finalTags, // Include tags in backend call
         description: `Custom product created during onboarding`,
         image_url: formData.image || '',
       };

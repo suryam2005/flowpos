@@ -31,15 +31,10 @@ const PrivacySecurityScreen = ({ navigation }) => {
     
     // Security
     encryptLocalData: true,
-    secureBackup: true,
-    autoLogout: true,
-    screenRecordingProtection: true,
-    screenshotProtection: false,
     
     // Permissions
     locationAccess: false,
     cameraAccess: true,
-    microphoneAccess: false,
     contactsAccess: false,
     storageAccess: true,
     
@@ -50,17 +45,10 @@ const PrivacySecurityScreen = ({ navigation }) => {
     surveyInvitations: false,
   });
 
-  const [dataUsage, setDataUsage] = useState({
-    totalStorage: '2.4 MB',
-    cacheSize: '1.1 MB',
-    documentsSize: '0.8 MB',
-    imagesSize: '0.5 MB',
-    lastBackup: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
-  });
+
 
   useEffect(() => {
     loadPrivacySettings();
-    calculateDataUsage();
   }, []);
 
   const loadPrivacySettings = async () => {
@@ -74,54 +62,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
     }
   };
 
-  const calculateDataUsage = async () => {
-    try {
-      // Simulate data usage calculation
-      const keys = await AsyncStorage.getAllKeys();
-      let totalSize = 0;
-      
-      for (const key of keys) {
-        const value = await AsyncStorage.getItem(key);
-        if (value) {
-          totalSize += new Blob([value]).size;
-        }
-      }
-      
-      setDataUsage(prev => ({
-        ...prev,
-        totalStorage: `${(totalSize / 1024 / 1024).toFixed(1)} MB`,
-        cacheSize: `${(totalSize * 0.4 / 1024 / 1024).toFixed(1)} MB`,
-        documentsSize: `${(totalSize * 0.35 / 1024 / 1024).toFixed(1)} MB`,
-        imagesSize: `${(totalSize * 0.25 / 1024 / 1024).toFixed(1)} MB`,
-      }));
-    } catch (error) {
-      console.error('Error calculating data usage:', error);
-    }
-  };
 
-  const handleClearCache = () => {
-    Alert.alert(
-      'Clear Cache',
-      'This will clear temporary files and may improve app performance. Your data will not be affected.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear Cache',
-          onPress: async () => {
-            try {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              // Simulate cache clearing
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              setDataUsage(prev => ({ ...prev, cacheSize: '0.1 MB' }));
-              Alert.alert('Success', 'Cache cleared successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to clear cache');
-            }
-          },
-        },
-      ]
-    );
-  };
 
   const handleExportData = async () => {
     try {
@@ -135,7 +76,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
         permissions_granted: {
           camera: settings.cameraAccess,
           location: settings.locationAccess,
-          microphone: settings.microphoneAccess,
           contacts: settings.contactsAccess,
           storage: settings.storageAccess,
         },
@@ -354,26 +294,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
               'Encrypt all data stored on your device',
               'encryptLocalData'
             )}
-            {renderSettingItem(
-              'Secure Backup',
-              'Use end-to-end encryption for cloud backups',
-              'secureBackup'
-            )}
-            {renderSettingItem(
-              'Auto Logout',
-              'Automatically log out when app is inactive',
-              'autoLogout'
-            )}
-            {renderSettingItem(
-              'Screen Recording Protection',
-              'Prevent screen recording of sensitive information',
-              'screenRecordingProtection'
-            )}
-            {renderSettingItem(
-              'Screenshot Protection',
-              'Prevent screenshots in sensitive screens',
-              'screenshotProtection'
-            )}
+
           </>
         )}
 
@@ -392,11 +313,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
               'Allow app to use camera for product photos and QR codes',
               'cameraAccess'
             )}
-            {renderSettingItem(
-              'Microphone Access',
-              'Allow app to use microphone for voice features',
-              'microphoneAccess'
-            )}
+
             {renderSettingItem(
               'Contacts Access',
               'Allow app to access contacts for customer management',
@@ -438,40 +355,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
           </>
         )}
 
-        {/* Data Usage */}
-        {renderSection(
-          'Data Usage',
-          'Monitor and manage your data usage',
-          <>
-            <View style={styles.dataUsageCard}>
-              <View style={styles.dataUsageHeader}>
-                <Text style={styles.dataUsageTitle}>Storage Usage</Text>
-                <Text style={styles.dataUsageTotal}>{dataUsage.totalStorage}</Text>
-              </View>
-              <View style={styles.dataUsageBreakdown}>
-                <View style={styles.dataUsageItem}>
-                  <Text style={styles.dataUsageLabel}>Cache</Text>
-                  <Text style={styles.dataUsageValue}>{dataUsage.cacheSize}</Text>
-                </View>
-                <View style={styles.dataUsageItem}>
-                  <Text style={styles.dataUsageLabel}>Documents</Text>
-                  <Text style={styles.dataUsageValue}>{dataUsage.documentsSize}</Text>
-                </View>
-                <View style={styles.dataUsageItem}>
-                  <Text style={styles.dataUsageLabel}>Images</Text>
-                  <Text style={styles.dataUsageValue}>{dataUsage.imagesSize}</Text>
-                </View>
-              </View>
-              <TouchableOpacity
-                style={styles.clearCacheButton}
-                onPress={handleClearCache}
-              >
-                <Ionicons name="trash-outline" size={16} color={colors.primary.main} />
-                <Text style={styles.clearCacheText}>Clear Cache</Text>
-              </TouchableOpacity>
-            </View>
-          </>
-        )}
+
 
         {/* Security Tools */}
         {renderSection(
@@ -611,13 +495,8 @@ const PrivacySecurityScreen = ({ navigation }) => {
                         usageStatistics: false,
                         personalizedAds: false,
                         encryptLocalData: true,
-                        secureBackup: true,
-                        autoLogout: true,
-                        screenRecordingProtection: true,
-                        screenshotProtection: false,
                         locationAccess: false,
                         cameraAccess: true,
-                        microphoneAccess: false,
                         contactsAccess: false,
                         storageAccess: true,
                         marketingEmails: false,
@@ -770,65 +649,7 @@ const styles = StyleSheet.create({
   dangerText: {
     color: colors.error.main,
   },
-  // Enhanced styles
-  dataUsageCard: {
-    backgroundColor: colors.background.surface,
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: colors.border.light,
-    marginHorizontal: 20,
-  },
-  dataUsageHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  dataUsageTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: colors.text.primary,
-  },
-  dataUsageTotal: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: colors.primary.main,
-  },
-  dataUsageBreakdown: {
-    marginBottom: 16,
-  },
-  dataUsageItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingVertical: 8,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
-  },
-  dataUsageLabel: {
-    fontSize: 14,
-    color: colors.text.secondary,
-  },
-  dataUsageValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text.primary,
-  },
-  clearCacheButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: colors.primary.light,
-    borderRadius: 8,
-    gap: 8,
-  },
-  clearCacheText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.primary.main,
-  },
+
 });
 
 export default PrivacySecurityScreen;

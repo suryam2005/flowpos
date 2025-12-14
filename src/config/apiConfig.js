@@ -2,21 +2,32 @@
 // Auto-generated network configuration
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-const API_CONFIGS = [
-  // LOCAL DEVELOPMENT - Testing
-  'http://192.168.1.4:3000',
-  'http://10.0.2.2:3000', // Android emulator
-  'http://localhost:3000',
-  
-  // Cloud backend (Railway production) - DISABLED FOR TESTING
-  // 'https://flowposbackend-production.up.railway.app',
-];
+// Environment-based API configuration
+const ENVIRONMENT = 'development'; // Change to 'production' for Railway deployment
+
+const API_CONFIGS = {
+  development: [
+    // LOCAL DEVELOPMENT - Testing (Multiple IPs for fallback)
+    'http://localhost:3000',        // Primary - localhost
+    'http://192.168.1.6:3000',      // Current machine IP
+    'http://127.0.0.1:3000',        // Loopback
+    'http://10.0.2.2:3000',         // Android emulator
+  ],
+  production: [
+    // PRODUCTION - Railway or other hosting
+    'https://flowposbackend-production.up.railway.app',  // Replace with your Railway URL
+    'http://localhost:3000',        // Fallback to localhost for testing
+  ]
+};
+
+// Get URLs based on environment
+const CURRENT_API_CONFIGS = API_CONFIGS[ENVIRONMENT] || API_CONFIGS.development;
 
 // Export the primary API base URL
-export const API_BASE_URL = API_CONFIGS[0];
+export const API_BASE_URL = CURRENT_API_CONFIGS[0];
 
 // Export all configs for fallback testing
-export const API_FALLBACK_URLS = API_CONFIGS;
+export const API_FALLBACK_URLS = CURRENT_API_CONFIGS;
 
 // API call with fallback functionality (expected by AuthContext)
 export const apiCallWithFallback = async (endpoint, options = {}) => {
@@ -26,7 +37,7 @@ export const apiCallWithFallback = async (endpoint, options = {}) => {
   const token = await AsyncStorage.getItem('access_token');
   
   // Try each URL until one works
-  for (const baseURL of API_CONFIGS) {
+  for (const baseURL of CURRENT_API_CONFIGS) {
     try {
       const url = `${baseURL}/api${endpoint}`;
       const response = await fetch(url, {
@@ -60,6 +71,8 @@ const apiConfig = {
 export default apiConfig;
 
 console.log('📡 API Config loaded:', {
+  environment: ENVIRONMENT,
   primary: API_BASE_URL,
-  fallbacks: API_FALLBACK_URLS.length
+  fallbacks: API_FALLBACK_URLS.length,
+  urls: API_FALLBACK_URLS
 });

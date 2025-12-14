@@ -37,11 +37,9 @@ const StoreSettingsScreen = ({ navigation }) => {
     store_website: '',
     business_type: '',
     gst_number: '',
-    pan_number: '',
     // Local settings (not in backend)
     currency: 'INR',
     currencySymbol: '₹',
-    qrCodeUri: '',
     upiId: '',
     upiId2: '',
     upiId3: '',
@@ -67,7 +65,6 @@ const StoreSettingsScreen = ({ navigation }) => {
   const [businessSettings, setBusinessSettings] = useState({
     lowStockThreshold: 5,
     enableNotifications: true,
-    autoBackup: false,
     workingHours: {
       start: '09:00',
       end: '21:00',
@@ -104,7 +101,6 @@ const StoreSettingsScreen = ({ navigation }) => {
           ...prev,
           currency: localData.currency || 'INR',
           currencySymbol: localData.currencySymbol || '₹',
-          qrCodeUri: localData.qrCodeUri || '',
           upiId: localData.upiId || '',
           upiId2: localData.upiId2 || '',
           upiId3: localData.upiId3 || '',
@@ -134,14 +130,12 @@ const StoreSettingsScreen = ({ navigation }) => {
           store_website: storeData.store_website || '',
           business_type: storeData.business_type || '',
           gst_number: storeData.gst_number || '',
-          pan_number: storeData.pan_number || '',
           // Additional fields from database
           currency: storeData.currency || 'INR',
           currencySymbol: storeData.currency_symbol || '₹',
           upiId: storeData.upi_id || '',
           upiId2: storeData.upi_id_2 || '',
           upiId3: storeData.upi_id_3 || '',
-          qrCodeUri: storeData.qr_code_uri || '',
         };
         
         // Update settings from database if available with safe defaults
@@ -168,7 +162,19 @@ const StoreSettingsScreen = ({ navigation }) => {
         
         setStoreInfo(prev => ({ ...prev, ...backendData }));
         setOriginalData(backendData);
-        console.log('✅ Store data loaded successfully');
+        
+        // Also save to AsyncStorage immediately for invoice access
+        const storeInfoWithCompat = {
+          ...backendData,
+          // Backward compatibility fields
+          name: backendData.store_name,
+          address: backendData.store_address,
+          phone: backendData.store_phone,
+          gstin: backendData.gst_number,
+        };
+        
+        await AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfoWithCompat));
+        console.log('✅ Store data loaded and saved to AsyncStorage:', storeInfoWithCompat);
       } else {
         console.log('⚠️ No store data found');
       }
@@ -202,14 +208,12 @@ const StoreSettingsScreen = ({ navigation }) => {
         store_website: storeInfo.store_website?.trim() || '',
         business_type: storeInfo.business_type?.trim() || '',
         gst_number: storeInfo.gst_number?.trim() || '',
-        pan_number: storeInfo.pan_number?.trim() || '',
         // Additional fields
         currency: storeInfo.currency || 'INR',
         currency_symbol: storeInfo.currencySymbol || '₹',
         upi_id: storeInfo.upiId?.trim() || '',
         upi_id_2: storeInfo.upiId2?.trim() || '',
         upi_id_3: storeInfo.upiId3?.trim() || '',
-        qr_code_uri: storeInfo.qrCodeUri || '',
         tax_settings: taxSettings,
         receipt_settings: receiptSettings,
         business_settings: businessSettings,
@@ -226,9 +230,21 @@ const StoreSettingsScreen = ({ navigation }) => {
       
       console.log('📤 Store save successful:', result);
 
+      // Prepare store info with backward compatibility
+      const storeInfoWithCompat = {
+        ...storeInfo,
+        // Backward compatibility fields
+        name: storeInfo.store_name,
+        address: storeInfo.store_address,
+        phone: storeInfo.store_phone,
+        gstin: storeInfo.gst_number,
+      };
+      
+
+
       // Save local settings and all data to AsyncStorage
       await Promise.all([
-        AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfo)),
+        AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfoWithCompat)),
         AsyncStorage.setItem('taxSettings', JSON.stringify(taxSettings)),
         AsyncStorage.setItem('receiptSettings', JSON.stringify(receiptSettings)),
         AsyncStorage.setItem('businessSettings', JSON.stringify(businessSettings)),
@@ -254,109 +270,7 @@ const StoreSettingsScreen = ({ navigation }) => {
 
 
 
-  const handleQRUpload = () => {
-    Alert.alert(
-      'Upload UPI QR Code',
-      'Choose how you want to add your UPI QR code',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Take Photo', onPress: () => handleQRCamera() },
-        { text: 'Choose from Gallery', onPress: () => handleQRGallery() },
-      ]
-    );
-  };
 
-  const handleQRCamera = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestCameraPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Camera permission is required to take photos.');
-        return;
-      }
-
-      const result = await ImagePicker.launchCameraAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        await saveQRImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Camera error:', error);
-      Alert.alert('Error', 'Failed to take photo. Please try again.');
-    }
-  };
-
-  const handleQRGallery = async () => {
-    try {
-      const permissionResult = await ImagePicker.requestMediaLibraryPermissionsAsync();
-      
-      if (permissionResult.granted === false) {
-        Alert.alert('Permission Required', 'Gallery permission is required to select photos.');
-        return;
-      }
-
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ImagePicker.MediaTypeOptions.Images,
-        allowsEditing: true,
-        aspect: [1, 1],
-        quality: 0.8,
-      });
-
-      if (!result.canceled) {
-        await saveQRImage(result.assets[0].uri);
-      }
-    } catch (error) {
-      console.error('Gallery error:', error);
-      Alert.alert('Error', 'Failed to select image. Please try again.');
-    }
-  };
-
-  const saveQRImage = async (imageUri) => {
-    try {
-      // Create a permanent file path
-      const fileName = `upi_qr_${Date.now()}.jpg`;
-      const permanentUri = `${FileSystem.documentDirectory}${fileName}`;
-      
-      // Copy the image to permanent storage
-      await FileSystem.copyAsync({
-        from: imageUri,
-        to: permanentUri,
-      });
-
-      // Update store info with the new QR code URI
-      const updatedStoreInfo = { ...storeInfo, qrCodeUri: permanentUri };
-      setStoreInfo(updatedStoreInfo);
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'UPI QR code uploaded successfully!');
-    } catch (error) {
-      console.error('Error saving QR image:', error);
-      Alert.alert('Error', 'Failed to save QR code. Please try again.');
-    }
-  };
-
-  const handleQRRemove = () => {
-    Alert.alert(
-      'Remove QR Code',
-      'Are you sure you want to remove the uploaded QR code?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Remove',
-          style: 'destructive',
-          onPress: () => {
-            setStoreInfo({ ...storeInfo, qrCodeUri: '' });
-            Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          },
-        },
-      ]
-    );
-  };
 
   const handleUPIRedirect = () => {
     if (!storeInfo.upiId) {
@@ -439,6 +353,38 @@ const StoreSettingsScreen = ({ navigation }) => {
     </View>
   );
 
+  // Receipt settings switches that work independently of editing mode
+  const renderReceiptSwitchField = (label, description, value, onValueChange) => (
+    <View style={styles.switchGroup}>
+      <View style={styles.switchInfo}>
+        <Text style={styles.switchLabel}>{label}</Text>
+        {description && <Text style={styles.switchDescription}>{description}</Text>}
+      </View>
+      <Switch
+        value={value}
+        onValueChange={onValueChange}
+        disabled={false}
+        trackColor={{ false: colors.gray[100], true: colors.primary.main }}
+        thumbColor={value ? colors.background.surface : colors.background.surface}
+        ios_backgroundColor={colors.gray[100]}
+      />
+    </View>
+  );
+
+  // Handle receipt setting changes with immediate save
+  const handleReceiptSettingChange = async (settingKey, value) => {
+    const newReceiptSettings = { ...receiptSettings, [settingKey]: value };
+    setReceiptSettings(newReceiptSettings);
+    
+    try {
+      // Save immediately to AsyncStorage
+      await AsyncStorage.setItem('receiptSettings', JSON.stringify(newReceiptSettings));
+      console.log(`✅ Receipt setting ${settingKey} updated to ${value}`);
+    } catch (error) {
+      console.error('Error saving receipt setting:', error);
+    }
+  };
+
   if (isLoading) {
     return (
       <View style={styles.loadingContainer}>
@@ -509,11 +455,11 @@ const StoreSettingsScreen = ({ navigation }) => {
               )}
               {renderInputField('Phone Number', storeInfo.store_phone, (text) =>
                 setStoreInfo({ ...storeInfo, store_phone: text }),
-                { keyboardType: 'phone-pad', editable: isEditing }
+                { keyboardType: 'phone-pad', editable: false }
               )}
               {renderInputField('Email', storeInfo.store_email, (text) =>
                 setStoreInfo({ ...storeInfo, store_email: text }),
-                { keyboardType: 'email-address', editable: isEditing }
+                { keyboardType: 'email-address', editable: false }
               )}
               {renderInputField('Website', storeInfo.store_website, (text) =>
                 setStoreInfo({ ...storeInfo, store_website: text }),
@@ -521,10 +467,6 @@ const StoreSettingsScreen = ({ navigation }) => {
               )}
               {renderInputField('GST Number', storeInfo.gst_number, (text) =>
                 setStoreInfo({ ...storeInfo, gst_number: text }),
-                { editable: isEditing }
-              )}
-              {renderInputField('PAN Number', storeInfo.pan_number, (text) =>
-                setStoreInfo({ ...storeInfo, pan_number: text }),
                 { editable: isEditing }
               )}
             </>
@@ -559,29 +501,29 @@ const StoreSettingsScreen = ({ navigation }) => {
         {/* Receipt Settings */}
         {renderSection('Receipt Settings', (
           <>
-            {renderSwitchField(
+            {renderReceiptSwitchField(
               'Show Store Address',
               'Display address on receipts',
               receiptSettings.showAddress,
-              (value) => setReceiptSettings({ ...receiptSettings, showAddress: value })
+              (value) => handleReceiptSettingChange('showAddress', value)
             )}
-            {renderSwitchField(
+            {renderReceiptSwitchField(
               'Show Phone Number',
               'Display phone on receipts',
               receiptSettings.showPhone,
-              (value) => setReceiptSettings({ ...receiptSettings, showPhone: value })
+              (value) => handleReceiptSettingChange('showPhone', value)
             )}
-            {renderSwitchField(
+            {renderReceiptSwitchField(
               'Show Email',
               'Display email on receipts',
               receiptSettings.showEmail,
-              (value) => setReceiptSettings({ ...receiptSettings, showEmail: value })
+              (value) => handleReceiptSettingChange('showEmail', value)
             )}
-            {renderSwitchField(
+            {renderReceiptSwitchField(
               'Show GST Number',
               'Display GST number on receipts',
               receiptSettings.showGST,
-              (value) => setReceiptSettings({ ...receiptSettings, showGST: value })
+              (value) => handleReceiptSettingChange('showGST', value)
             )}
             {renderInputField('Footer Message', receiptSettings.footerMessage, (text) =>
               setReceiptSettings({ ...receiptSettings, footerMessage: text }),
@@ -602,12 +544,6 @@ const StoreSettingsScreen = ({ navigation }) => {
               'Get alerts for low stock and other events',
               businessSettings.enableNotifications,
               (value) => setBusinessSettings({ ...businessSettings, enableNotifications: value })
-            )}
-            {renderSwitchField(
-              'Auto Backup',
-              'Automatically backup data daily',
-              businessSettings.autoBackup,
-              (value) => setBusinessSettings({ ...businessSettings, autoBackup: value })
             )}
           </>
         ))}
@@ -711,48 +647,6 @@ const StoreSettingsScreen = ({ navigation }) => {
                 keyboardType="email-address"
                 autoCapitalize="none"
               />
-            </View>
-
-            <View style={styles.qrSection}>
-              <Text style={styles.inputLabel}>UPI QR Code</Text>
-              <Text style={styles.qrDescription}>
-                Upload your UPI QR code for quick digital payments
-              </Text>
-
-              <TouchableOpacity
-                style={styles.qrUploadButton}
-                onPress={isEditing ? handleQRUpload : undefined}
-                disabled={!isEditing}
-                activeOpacity={0.8}
-              >
-                <Text style={styles.qrUploadIcon}>📷</Text>
-                <Text style={styles.qrUploadText}>Upload QR Code</Text>
-              </TouchableOpacity>
-
-              {storeInfo.qrCodeUri && (
-                <View style={styles.qrPreview}>
-                  <View style={styles.qrImageContainer}>
-                    <Image 
-                      source={{ uri: storeInfo.qrCodeUri }} 
-                      style={styles.qrImage}
-                      resizeMode="contain"
-                    />
-                  </View>
-                  <View style={styles.qrPreviewActions}>
-                    <View style={styles.qrPreviewTextRow}>
-                      <Ionicons name="checkmark-circle" size={16} color={colors.success.main} />
-                      <Text style={styles.qrPreviewText}>UPI QR Code uploaded</Text>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.qrRemoveButton}
-                      onPress={handleQRRemove}
-                      activeOpacity={0.8}
-                    >
-                      <Text style={styles.qrRemoveText}>Remove</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
             </View>
           </>
         ))}
@@ -983,78 +877,6 @@ const styles = StyleSheet.create({
     color: colors.background.surface,
     fontWeight: '600',
     fontSize: 14,
-  },
-  qrSection: {
-    marginBottom: 16,
-  },
-  qrDescription: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    marginBottom: 16,
-    lineHeight: 20,
-  },
-  qrUploadButton: {
-    backgroundColor: colors.background.surface,
-    borderWidth: 2,
-    borderColor: '#d1d5db',
-    borderStyle: 'dashed',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  qrUploadIcon: {
-    fontSize: 32,
-    marginBottom: 8,
-  },
-  qrUploadText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.text.secondary,
-  },
-  qrPreview: {
-    backgroundColor: '#f0fdf4',
-    borderRadius: 12,
-    padding: 16,
-    borderWidth: 1,
-    borderColor: '#bbf7d0',
-    marginTop: 12,
-  },
-  qrImageContainer: {
-    alignItems: 'center',
-    marginBottom: 12,
-  },
-  qrImage: {
-    width: 120,
-    height: 120,
-    borderRadius: 8,
-    backgroundColor: colors.background.surface,
-  },
-  qrPreviewActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  qrPreviewTextRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  qrPreviewText: {
-    fontSize: 14,
-    color: '#15803d',
-    fontWeight: '500',
-  },
-  qrRemoveButton: {
-    backgroundColor: '#fee2e2',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  qrRemoveText: {
-    fontSize: 12,
-    color: '#dc2626',
-    fontWeight: '500',
   },
 });
 

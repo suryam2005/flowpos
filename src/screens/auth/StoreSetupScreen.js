@@ -36,7 +36,6 @@ const StoreSetupScreen = ({ navigation, route }) => {
     store_website: '',
     business_type: '',
     gst_number: '',
-    pan_number: '',
     // Payment methods
     accepts_cash: true,
     accepts_cards: false,
@@ -136,13 +135,6 @@ const StoreSetupScreen = ({ navigation, route }) => {
             return false;
           }
         }
-        if (storeData.pan_number && storeData.pan_number.trim()) {
-          const panRegex = /^[A-Z]{5}[0-9]{4}[A-Z]{1}$/;
-          if (!panRegex.test(storeData.pan_number.toUpperCase())) {
-            Alert.alert('Invalid PAN Number', 'Please enter a valid PAN number (e.g., ABCDE1234F)');
-            return false;
-          }
-        }
         return true;
       default:
         return true;
@@ -192,7 +184,6 @@ const StoreSetupScreen = ({ navigation, route }) => {
         store_website: storeData.store_website?.trim() || '',
         business_type: storeData.business_type || '',
         gst_number: storeData.gst_number?.trim() || '',
-        pan_number: storeData.pan_number?.trim() || '',
         // Payment method data
         upi_id: storeData.accepts_upi ? storeData.upi_id?.trim() || '' : '',
         // Additional fields
@@ -609,22 +600,6 @@ const StoreSetupScreen = ({ navigation, route }) => {
           />
         </View>
         <Text style={styles.inputHint}>15-digit GST identification number (optional)</Text>
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>PAN Number</Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="card-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
-          <TextInput
-            style={styles.inputWithIcon}
-            value={storeData.pan_number}
-            onChangeText={(value) => handleInputChange('pan_number', value.toUpperCase())}
-            placeholder="ABCDE1234F"
-            autoCapitalize="characters"
-            maxLength={10}
-          />
-        </View>
-        <Text style={styles.inputHint}>10-character PAN card number (optional)</Text>
       </View>
 
       <View style={styles.completionCard}>

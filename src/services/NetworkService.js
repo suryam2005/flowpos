@@ -12,14 +12,14 @@ class NetworkService {
   }
 
   async testConnection(url, timeout = 5000) {
-    console.log(`🔍 Testing server: ${url}`);
+    console.log(`🔍 [NetworkService] Testing server: ${url}`);
     
     try {
       const controller = new AbortController();
       const timeoutId = setTimeout(() => controller.abort(), timeout);
       
-      // Test with a simple endpoint that doesn't require auth
-      const response = await fetch(`${url}/api/products`, {
+      // Test with health endpoint first (doesn't require auth)
+      const response = await fetch(`${url}/health`, {
         method: 'GET',
         signal: controller.signal,
         headers: {
@@ -29,29 +29,29 @@ class NetworkService {
       
       clearTimeout(timeoutId);
       
-      // Even if we get 401 (unauthorized), it means the server is responding
-      if (response.status === 401 || response.ok) {
-        console.log(`✅ Connected: ${url}`);
+      if (response.ok) {
+        console.log(`✅ [NetworkService] Connected: ${url}`);
         this.baseURL = url;
         this.lastSuccessfulURL = url;
         this.isConnected = true;
         return true;
       } else {
-        console.log(`❌ Failed: ${url} - HTTP ${response.status}`);
+        console.log(`❌ [NetworkService] Failed: ${url} - HTTP ${response.status}`);
         return false;
       }
     } catch (error) {
-      console.log(`❌ Failed: ${url} - ${error.message}`);
+      console.log(`❌ [NetworkService] Failed: ${url} - ${error.message}`);
       return false;
     }
   }
 
   async findWorkingServer() {
-    console.log('🔍 Finding working server...');
+    console.log('🔍 [NetworkService] Finding working server...');
+    console.log('🔍 [NetworkService] Available URLs:', this.fallbackURLs);
     
     // Try last successful URL first
     if (this.lastSuccessfulURL) {
-      console.log('🔍 Testing priority server:', this.lastSuccessfulURL);
+      console.log('🔍 [NetworkService] Testing priority server:', this.lastSuccessfulURL);
       if (await this.testConnection(this.lastSuccessfulURL)) {
         return this.lastSuccessfulURL;
       }
@@ -59,12 +59,14 @@ class NetworkService {
     
     // Try all configured URLs
     for (const url of this.fallbackURLs) {
+      console.log(`🔍 [NetworkService] Trying: ${url}`);
       if (await this.testConnection(url)) {
         return url;
       }
     }
     
-    console.log('❌ No working server found');
+    console.log('❌ [NetworkService] No working server found');
+    console.log('❌ [NetworkService] Tried URLs:', this.fallbackURLs);
     this.isConnected = false;
     return null;
   }
@@ -82,16 +84,23 @@ class NetworkService {
   // Main API call method (expected by ProductsService and OrdersService)
   async apiCall(endpoint, options = {}) {
     try {
+      console.log(`🌐 [NetworkService] API Call: ${options.method || 'GET'} ${endpoint}`);
+      
       await this.ensureConnection();
       
-      // Get auth token if available (try both keys for compatibility)
-      let token = await AsyncStorage.getItem('accessToken') || await AsyncStorage.getItem('access_token') || await AsyncStorage.getItem('authToken');
-      console.log('🔧 [NETWORK] Token available:', token ? 'YES' : 'NO');
+      // Get auth token if available (try multiple keys for compatibility)
+      let token = await AsyncStorage.getItem('accessToken') || 
+                  await AsyncStorage.getItem('access_token') || 
+                  await AsyncStorage.getItem('authToken');
+      
+      console.log('🔧 [NetworkService] Token available:', token ? 'YES' : 'NO');
       if (token) {
-        console.log('🔧 [NETWORK] Token preview:', token.substring(0, 20) + '...');
+        console.log('🔧 [NetworkService] Token preview:', token.substring(0, 20) + '...');
       }
       
       const url = `${this.baseURL}/api${endpoint}`;
+      console.log('🌐 [NetworkService] Request URL:', url);
+      
       let response = await fetch(url, {
         ...options,
         headers: {
@@ -101,66 +110,64 @@ class NetworkService {
         },
       });
       
-      console.log('🔧 [NETWORK] Response status:', response.status);
+      console.log('🔧 [NetworkService] Response status:', response.status);
       
-      // If 401 and we have credentials, try to get a new token
-      if (response.status === 401 && !token) {
-        console.log('🔧 [NETWORK] No token, attempting mobile user auto-login...');
+      // Handle different response statuses
+      if (response.status === 401) {
+        console.log('🔧 [NetworkService] 401 Unauthorized - clearing expired tokens');
         
-        try {
-          const loginResponse = await fetch(`${this.baseURL}/api/auth/login`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              email: 'mobile_user@flowpos.com',
-              password: 'mobile123'
-            })
-          });
-          
-          if (loginResponse.ok) {
-            const loginData = await loginResponse.json();
-            token = loginData.access_token;
-            await AsyncStorage.setItem('access_token', token);
-            await AsyncStorage.setItem('user_email', 'mobile_user@flowpos.com');
-            console.log('🔧 [NETWORK] Mobile user auto-login successful, retrying request...');
-            
-            // Retry original request with new token
-            response = await fetch(url, {
-              ...options,
-              headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`,
-                ...options.headers,
-              },
-            });
-            
-            console.log('🔧 [NETWORK] Retry response status:', response.status);
-          } else {
-            console.log('🔧 [NETWORK] Auto-login failed:', loginResponse.status);
-          }
-        } catch (loginError) {
-          console.log('🔧 [NETWORK] Auto-login error:', loginError.message);
+        // Clear all possible token keys
+        await Promise.all([
+          AsyncStorage.removeItem('access_token'),
+          AsyncStorage.removeItem('accessToken'),
+          AsyncStorage.removeItem('authToken')
+        ]);
+        
+        if (token) {
+          console.log('🔧 [NetworkService] Token was expired, user needs to re-authenticate');
+        } else {
+          console.log('🔧 [NetworkService] No token provided for protected endpoint');
         }
+      } else if (response.ok) {
+        console.log('✅ [NetworkService] Request successful');
+      } else {
+        console.log(`⚠️ [NetworkService] Request failed with status: ${response.status}`);
       }
       
       return response;
     } catch (error) {
-      console.log('❌ API Call failed, trying to reconnect...');
-      this.isConnected = false;
+      console.log('❌ [NetworkService] API Call failed:', error.message);
       
-      // Try to find working server and retry once
-      const workingURL = await this.findWorkingServer();
-      if (workingURL) {
-        const token = await AsyncStorage.getItem('access_token');
-        const url = `${this.baseURL}/api${endpoint}`;
-        return fetch(url, {
-          ...options,
-          headers: {
-            'Content-Type': 'application/json',
-            ...(token && { 'Authorization': `Bearer ${token}` }),
-            ...options.headers,
-          },
-        });
+      // Check if it's a network connectivity issue
+      if (error.message.includes('Network request failed') || 
+          error.message.includes('fetch') ||
+          error.message.includes('ECONNREFUSED')) {
+        
+        console.log('🔄 [NetworkService] Network error detected, trying to reconnect...');
+        this.isConnected = false;
+        
+        // Try to find working server and retry once
+        const workingURL = await this.findWorkingServer();
+        if (workingURL) {
+          console.log('🔄 [NetworkService] Retrying with working server:', workingURL);
+          
+          const token = await AsyncStorage.getItem('accessToken') || 
+                        await AsyncStorage.getItem('access_token') || 
+                        await AsyncStorage.getItem('authToken');
+          
+          const url = `${this.baseURL}/api${endpoint}`;
+          return fetch(url, {
+            ...options,
+            headers: {
+              'Content-Type': 'application/json',
+              ...(token && { 'Authorization': `Bearer ${token}` }),
+              ...options.headers,
+            },
+          });
+        } else {
+          console.log('❌ [NetworkService] No working server found for retry');
+          throw new Error('Cannot connect to backend server. Please check your internet connection and ensure the backend is running.');
+        }
       }
       
       throw error;

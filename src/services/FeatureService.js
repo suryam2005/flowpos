@@ -3,7 +3,7 @@ import { Alert } from 'react-native';
 
 class FeatureService {
   constructor() {
-    this.userPlan = 'free'; // Default to free plan
+    this.userPlan = 'trial'; // Default to trial plan
     this.features = {};
     this.limits = {};
     this.isInitialized = false;
@@ -11,85 +11,110 @@ class FeatureService {
 
   // Plan configurations
   PLAN_CONFIGS = {
-    free: {
+    trial: {
       features: {
         cash_payments: true,
-        card_payments: true,
         upi_payments: true,
-        sms_detection: true,
+        basic_invoice: true,
+        basic_analytics: true,
+        cloud_backup: true,
         multi_device_sync: false,
         advanced_analytics: false,
         custom_branding: false,
-        api_access: false,
-        priority_support: false,
+        whatsapp_integration: false,
+        email_reports: false,
+        data_export: false,
+      },
+      limits: {
+        products: 10,
+        orders_per_month: 50,
+        devices: 1,
+        storage_mb: 100,
+        trial_days: 7,
+      },
+      price: 0,
+      name: 'Free Trial',
+      description: 'Experience all core features before choosing a paid plan',
+      duration: '7 days'
+    },
+    starter: {
+      features: {
+        cash_payments: true,
+        upi_payments: true,
+        basic_invoice: true,
+        basic_analytics: true,
+        daily_weekly_analytics: true,
+        cloud_backup: true,
+        multi_device_sync: false,
+        advanced_analytics: false,
+        custom_branding: false,
+        whatsapp_integration: false,
+        email_reports: false,
+        data_export: false,
       },
       limits: {
         products: 50,
         orders_per_month: 100,
         devices: 1,
+        storage_gb: 0.5,
       },
-      price: 0,
-      name: 'Free Plan'
+      price: 99,
+      name: 'Starter Plan',
+      description: 'Perfect for small businesses beginning their digital journey'
     },
-    starter: {
+    growth: {
       features: {
         cash_payments: true,
-        card_payments: true,
         upi_payments: true,
-        sms_detection: true,
-        multi_device_sync: false,
-        advanced_analytics: false,
-        custom_branding: false,
-        api_access: false,
-        priority_support: false,
+        basic_invoice: true,
+        basic_analytics: true,
+        advanced_analytics: true,
+        daily_weekly_analytics: true,
+        cloud_backup: true,
+        whatsapp_integration: true,
+        email_reports: true,
+        data_export: true,
+        multi_device_sync: true,
+        custom_branding: true, // Store name in invoices implemented
       },
       limits: {
         products: 500,
-        orders_per_month: 3000,
+        orders_per_month: 2000,
         devices: 3,
+        storage_gb: 5,
       },
-      price: 299,
-      name: 'Starter Plan'
-    },
-    business: {
-      features: {
-        cash_payments: true,
-        card_payments: true,
-        upi_payments: true,
-        sms_detection: true,
-        multi_device_sync: true,
-        advanced_analytics: true,
-        custom_branding: true,
-        api_access: false,
-        priority_support: true,
-      },
-      limits: {
-        products: 2000,
-        orders_per_month: 5000,
-        devices: 10,
-      },
-      price: 599,
-      name: 'Business Plan'
+      price: 499,
+      name: 'Growth Plan',
+      description: 'Designed for growing businesses needing customization and deeper insights'
     },
     enterprise: {
       features: {
         cash_payments: true,
-        card_payments: true,
         upi_payments: true,
-        sms_detection: true,
-        multi_device_sync: true,
+        basic_invoice: true,
+        basic_analytics: true,
         advanced_analytics: true,
+        performance_insights: true,
+        pdf_reports: true,
+        daily_weekly_analytics: true,
+        cloud_backup: true,
+        whatsapp_integration: true,
+        email_reports: true,
+        monthly_reports: true,
+        data_export: true,
+        csv_pdf_export: true,
+        multi_device_sync: true,
         custom_branding: true,
-        api_access: true,
-        priority_support: true,
       },
       limits: {
         products: -1, // unlimited
         orders_per_month: -1, // unlimited
-        devices: -1, // unlimited
+        devices: 10,
+        storage_gb: 50,
       },
-      price: 1299,
-      name: 'Enterprise Plan'
+      price: 999,
+      name: 'Enterprise Plan',
+      description: 'For high-volume stores requiring maximum scale and advanced reporting'
     }
   };
 
@@ -122,23 +147,23 @@ class FeatureService {
         }
       }
 
-      // If no plan found, default to free
+      // If no plan found, default to trial
       if (!this.userPlan) {
-        this.userPlan = 'free';
+        this.userPlan = 'trial';
         await AsyncStorage.setItem('userPlan', this.userPlan);
       }
 
       this.updateFeatures();
     } catch (error) {
       console.error('Error loading user plan:', error);
-      this.userPlan = 'free';
+      this.userPlan = 'trial';
       this.updateFeatures();
     }
   }
 
   // Update features based on current plan
   updateFeatures() {
-    const planConfig = this.PLAN_CONFIGS[this.userPlan] || this.PLAN_CONFIGS.free;
+    const planConfig = this.PLAN_CONFIGS[this.userPlan] || this.PLAN_CONFIGS.trial;
     this.features = planConfig.features;
     this.limits = planConfig.limits;
   }
@@ -182,7 +207,15 @@ class FeatureService {
             return products.length;
           } catch (error) {
             console.error('Error fetching products count:', error);
-            // Fallback to AsyncStorage
+            
+            // Handle token expiration - don't fallback, let it bubble up
+            if (error.message.includes('Session expired') || 
+                error.message.includes('Invalid or expired token') ||
+                error.message.includes('Authentication expired')) {
+              throw error;
+            }
+            
+            // For other errors, fallback to AsyncStorage
             const products = await AsyncStorage.getItem('products');
             return products ? JSON.parse(products).length : 0;
           }
@@ -206,7 +239,15 @@ class FeatureService {
             return thisMonthOrders.length;
           } catch (error) {
             console.error('Error fetching orders count:', error);
-            // Fallback to AsyncStorage
+            
+            // Handle token expiration - don't fallback, let it bubble up
+            if (error.message.includes('Session expired') || 
+                error.message.includes('Invalid or expired token') ||
+                error.message.includes('Authentication expired')) {
+              throw error;
+            }
+            
+            // For other errors, fallback to AsyncStorage
             const orders = await AsyncStorage.getItem('orders');
             if (!orders) return 0;
             
@@ -240,37 +281,58 @@ class FeatureService {
       products: {
         title: 'Product Limit Reached',
         message: `You've reached your limit of ${this.getLimit('products')} products. Upgrade to add more products and grow your business.`,
-        suggestedPlan: this.userPlan === 'free' ? 'starter' : 'business'
+        suggestedPlan: this.userPlan === 'trial' ? 'starter' : this.userPlan === 'starter' ? 'growth' : 'enterprise'
       },
       orders_per_month: {
         title: 'Monthly Order Limit Reached',
         message: `You've processed ${this.getLimit('orders_per_month')} orders this month. Upgrade to handle more orders.`,
-        suggestedPlan: this.userPlan === 'free' ? 'starter' : 'business'
+        suggestedPlan: this.userPlan === 'trial' ? 'starter' : this.userPlan === 'starter' ? 'growth' : 'enterprise'
       },
-      upi_payments: {
-        title: 'Unlock UPI Payments',
-        message: 'Accept UPI payments and increase your sales by up to 40%. Customers love the convenience of digital payments.',
-        suggestedPlan: 'starter'
-      },
-      sms_detection: {
-        title: 'Auto Payment Detection',
-        message: 'Automatically detect UPI payment confirmations from SMS. No more manual confirmation needed.',
+
+      daily_weekly_analytics: {
+        title: 'Daily & Weekly Analytics',
+        message: 'Track your business performance with detailed daily and weekly analytics. See trends, compare periods, and make data-driven decisions.',
         suggestedPlan: 'starter'
       },
       advanced_analytics: {
         title: 'Advanced Analytics',
         message: 'Get detailed insights into your sales, best-selling products, and customer behavior.',
-        suggestedPlan: 'business'
+        suggestedPlan: 'growth'
       },
-      cloud_backup: {
-        title: 'Cloud Backup',
-        message: 'Secure your business data with automatic cloud backup. Never lose your important information.',
-        suggestedPlan: 'starter'
+      customizable_invoice: {
+        title: 'Customizable Invoice',
+        message: 'Create professional invoices with your business branding and custom fields.',
+        suggestedPlan: 'growth'
+      },
+      whatsapp_integration: {
+        title: 'WhatsApp Integration',
+        message: 'Send invoices and updates directly to customers via WhatsApp.',
+        suggestedPlan: 'growth'
+      },
+      email_reports: {
+        title: 'Email Reports',
+        message: 'Get automated weekly and monthly business reports via email.',
+        suggestedPlan: 'growth'
+      },
+      data_export: {
+        title: 'Data Export',
+        message: 'Export your sales data in CSV format for analysis and accounting.',
+        suggestedPlan: 'growth'
+      },
+      performance_insights: {
+        title: 'Performance Insights',
+        message: 'Get advanced performance insights with graphs and detailed analytics.',
+        suggestedPlan: 'enterprise'
+      },
+      pdf_reports: {
+        title: 'PDF Reports',
+        message: 'Generate detailed PDF performance reports for your business.',
+        suggestedPlan: 'enterprise'
       },
       multi_device_sync: {
-        title: 'Multi-Device Sync',
+        title: 'Multi-Device Access',
         message: 'Access your POS from multiple devices. Perfect for businesses with multiple counters or staff.',
-        suggestedPlan: 'business'
+        suggestedPlan: 'growth'
       }
     };
 

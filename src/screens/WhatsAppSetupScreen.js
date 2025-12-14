@@ -131,7 +131,7 @@ const WhatsAppSetupScreen = ({ navigation }) => {
           onPress={() => navigation.goBack()}
           activeOpacity={0.7}
         >
-          <Text style={styles.backIcon}>←</Text>
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>WhatsApp Setup</Text>
         <View style={styles.headerRight} />
@@ -299,10 +299,7 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-  backIcon: {
-    fontSize: 20,
-    color: colors.text.primary,
-  },
+
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',

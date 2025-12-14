@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, useRef } from 'r
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import productsService from '../services/ProductsService';
 import ordersService from '../services/OrdersService';
+import CloudStorageService from '../services/CloudStorageService';
 
 const DataSyncContext = createContext();
 
@@ -106,8 +107,9 @@ export const DataSyncProvider = ({ children }) => {
   // Debounce timer for fetch
   const fetchTimerRef = useRef(null);
   const lastFetchRef = useRef(0);
+  const pendingFetchRef = useRef(null); // Track in-flight requests for deduplication
 
-  // Fetch fresh data from backend with debounce
+  // Fetch fresh data from backend with debounce and request deduplication
   const fetchFreshData = async (forceRefresh = false) => {
     try {
       // Debounce: Don't fetch if we fetched less than 1 second ago (unless forced)
@@ -117,80 +119,151 @@ export const DataSyncProvider = ({ children }) => {
         return;
       }
 
+      // Request deduplication: If a fetch is already in progress, reuse it
+      if (pendingFetchRef.current) {
+        console.log('🔄 [DataSync] Reusing in-flight request');
+        return pendingFetchRef.current;
+      }
+
       // Clear any pending fetch
       if (fetchTimerRef.current) {
         clearTimeout(fetchTimerRef.current);
       }
 
       lastFetchRef.current = now;
-      console.log('🌐 [DataSync] Fetching products from backend...');
+      console.log('🌐 [DataSync] Fetching products and orders from backend...');
       
-      // Fetch products from backend
-      const freshProducts = await productsService.getProducts();
-      console.log('✅ [DataSync] Fetched products:', freshProducts.length);
-      console.log('📦 [DataSync] First product track_stock:', freshProducts[0]?.track_stock);
-      
-      if (freshProducts && freshProducts.length > 0) {
-        // Save to AsyncStorage
-        await AsyncStorage.setItem('products', JSON.stringify(freshProducts));
-        
-        // Update state
-        setProducts(freshProducts);
-        currentDataRef.current.products = freshProducts;
-        notifyListeners('products', freshProducts);
-        setLastSync(Date.now());
-        
-        console.log('✅ [DataSync] Products synced successfully');
-      } else if (freshProducts && freshProducts.length === 0) {
-        console.log('ℹ️ [DataSync] No products found for user');
-      }
+      // Create the fetch promise and store it for deduplication
+      const fetchPromise = (async () => {
+        try {
+          // Fetch both products and orders from backend
+          console.log('🌐 [DataSync] Fetching products and orders from backend...');
+          
+          const [freshProducts, freshOrders] = await Promise.all([
+            productsService.getProducts(),
+            ordersService.getOrders()
+          ]);
+          
+          console.log('✅ [DataSync] Fetched products:', freshProducts.length);
+          console.log('✅ [DataSync] Fetched orders:', freshOrders.length);
+          
+          // Handle products
+          if (freshProducts && freshProducts.length >= 0) {
+            await AsyncStorage.setItem('products', JSON.stringify(freshProducts));
+            setProducts(freshProducts);
+            currentDataRef.current.products = freshProducts;
+            notifyListeners('products', freshProducts);
+            console.log('✅ [DataSync] Products synced to AsyncStorage');
+          }
+          
+          // Handle orders
+          if (freshOrders && freshOrders.length >= 0) {
+            await AsyncStorage.setItem('orders', JSON.stringify(freshOrders));
+            setOrders(freshOrders);
+            currentDataRef.current.orders = freshOrders;
+            notifyListeners('orders', freshOrders);
+            console.log('✅ [DataSync] Orders synced to AsyncStorage');
+          }
+          
+          setLastSync(Date.now());
+          console.log('✅ [DataSync] Full data sync completed successfully');
+          
+        } finally {
+          // Clear the pending request reference
+          pendingFetchRef.current = null;
+        }
+      })();
+
+      // Store the promise for deduplication
+      pendingFetchRef.current = fetchPromise;
+      await fetchPromise;
       
     } catch (error) {
       console.error('❌ [DataSync] Error fetching fresh data:', error);
+      pendingFetchRef.current = null;
       // Don't throw - just log the error and continue with cached data
     }
   };
 
   // Save data to storage and notify listeners
-  const saveProducts = async (newProducts) => {
+  const saveProducts = async (newProducts, userPlan = 'trial') => {
     try {
+      // Check storage quota before saving
+      const dataSize = new TextEncoder().encode(JSON.stringify(newProducts)).length;
+      const canStore = await CloudStorageService.canStoreAdditionalData(userPlan, dataSize);
+      
+      if (!canStore.canStore) {
+        console.warn('⚠️ [DataSync] Storage quota exceeded, cannot save products');
+        return { success: false, error: 'QUOTA_EXCEEDED', quotaInfo: canStore };
+      }
+
       await AsyncStorage.setItem('products', JSON.stringify(newProducts));
       setProducts(newProducts);
       currentDataRef.current.products = newProducts;
       notifyListeners('products', newProducts);
       setLastSync(Date.now());
-      return true;
+      
+      // Update storage usage after successful save
+      await CloudStorageService.calculateStorageUsage();
+      
+      return { success: true };
     } catch (error) {
       console.error('Error saving products:', error);
-      return false;
+      return { success: false, error: 'SAVE_ERROR' };
     }
   };
 
-  const saveOrders = async (newOrders) => {
+  const saveOrders = async (newOrders, userPlan = 'trial') => {
     try {
+      // Check storage quota before saving
+      const dataSize = new TextEncoder().encode(JSON.stringify(newOrders)).length;
+      const canStore = await CloudStorageService.canStoreAdditionalData(userPlan, dataSize);
+      
+      if (!canStore.canStore) {
+        console.warn('⚠️ [DataSync] Storage quota exceeded, cannot save orders');
+        return { success: false, error: 'QUOTA_EXCEEDED', quotaInfo: canStore };
+      }
+
       await AsyncStorage.setItem('orders', JSON.stringify(newOrders));
       setOrders(newOrders);
       currentDataRef.current.orders = newOrders;
       notifyListeners('orders', newOrders);
       setLastSync(Date.now());
-      return true;
+      
+      // Update storage usage after successful save
+      await CloudStorageService.calculateStorageUsage();
+      
+      return { success: true };
     } catch (error) {
       console.error('Error saving orders:', error);
-      return false;
+      return { success: false, error: 'SAVE_ERROR' };
     }
   };
 
-  const saveStoreInfo = async (newStoreInfo) => {
+  const saveStoreInfo = async (newStoreInfo, userPlan = 'trial') => {
     try {
+      // Check storage quota before saving
+      const dataSize = new TextEncoder().encode(JSON.stringify(newStoreInfo)).length;
+      const canStore = await CloudStorageService.canStoreAdditionalData(userPlan, dataSize);
+      
+      if (!canStore.canStore) {
+        console.warn('⚠️ [DataSync] Storage quota exceeded, cannot save store info');
+        return { success: false, error: 'QUOTA_EXCEEDED', quotaInfo: canStore };
+      }
+
       await AsyncStorage.setItem('storeInfo', JSON.stringify(newStoreInfo));
       setStoreInfo(newStoreInfo);
       currentDataRef.current.storeInfo = newStoreInfo;
       notifyListeners('storeInfo', newStoreInfo);
       setLastSync(Date.now());
-      return true;
+      
+      // Update storage usage after successful save
+      await CloudStorageService.calculateStorageUsage();
+      
+      return { success: true };
     } catch (error) {
       console.error('Error saving store info:', error);
-      return false;
+      return { success: false, error: 'SAVE_ERROR' };
     }
   };
 
@@ -229,13 +302,14 @@ export const DataSyncProvider = ({ children }) => {
     return await saveOrders(updatedOrders);
   };
 
-  // Start background sync
+  // Start background sync - OPTIMIZED: Changed from 5 seconds to 5 minutes
   const startBackgroundSync = () => {
     if (syncIntervalRef.current) return;
 
     syncIntervalRef.current = setInterval(() => {
-      loadData(true); // Silent sync
-    }, 5000); // Check every 5 seconds
+      console.log('🔄 [DataSync] Background sync triggered');
+      fetchFreshData(false); // Fetch from backend (not forced, respects debounce)
+    }, 300000); // Check every 5 minutes (300000ms) - Phase 1 optimization
   };
 
   // Stop background sync
