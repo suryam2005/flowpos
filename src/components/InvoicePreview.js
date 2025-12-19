@@ -207,7 +207,7 @@ const InvoicePreview = ({
             disabled={!pdfUri}
           >
             <Text style={styles.actionButtonText}>
-              📄 {isGeneratingPDF ? 'Generating...' : 'Download PDF'}
+              📄 Download PDF
             </Text>
           </TouchableOpacity>
 

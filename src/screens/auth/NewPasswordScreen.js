@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const NewPasswordScreen = ({ navigation, route }) => {
@@ -275,14 +275,16 @@ const NewPasswordScreen = ({ navigation, route }) => {
             onPress={handleResetPassword}
             disabled={!formData.password || !formData.confirmPassword || passwordStrength < 4 || isLoading}
           >
-            {isLoading ? (
-              <LoadingSpinner size="small" color="#fff" />
-            ) : (
-              <Text style={styles.resetButtonText}>Reset Password</Text>
-            )}
+            <Text style={styles.resetButtonText}>Reset Password</Text>
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isLoading} 
+        message="Resetting password..." 
+      />
     </SafeAreaView>
   );
 };

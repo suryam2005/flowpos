@@ -14,7 +14,10 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../styles/colors';
+import LoadingOverlay from '../components/LoadingOverlay';
 import WhatsAppService from '../services/WhatsAppService';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
 
 const WhatsAppSetupScreen = ({ navigation }) => {
   const [credentials, setCredentials] = useState({
@@ -24,6 +27,9 @@ const WhatsAppSetupScreen = ({ navigation }) => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
+  
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('WhatsAppSetup');
 
   useEffect(() => {
     loadSavedCredentials();
@@ -271,12 +277,25 @@ const WhatsAppSetupScreen = ({ navigation }) => {
           disabled={isLoading}
           activeOpacity={0.8}
         >
-          <Ionicons name={isLoading ? "hourglass-outline" : "save-outline"} size={18} color="#ffffff" style={{ marginRight: 8 }} />
-          <Text style={[styles.saveButtonText, isLoading && styles.buttonTextDisabled]}>
-            {isLoading ? 'Saving...' : 'Save Configuration'}
+          <Ionicons name="save-outline" size={18} color="#ffffff" style={{ marginRight: 8 }} />
+          <Text style={styles.saveButtonText}>
+            Save Configuration
           </Text>
         </TouchableOpacity>
       </View>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isLoading} 
+        message="Saving configuration..." 
+      />
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        currentScreen="WhatsAppSetup"
+        onComplete={completeTour}
+      />
     </SafeAreaView>
   );
 };

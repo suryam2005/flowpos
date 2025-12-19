@@ -272,6 +272,7 @@ const TabletCartScreen = ({ navigation }) => {
               style={[styles.checkoutButton, isTablet && styles.tabletCheckoutButton]}
               onPress={handleCheckout}
               activeOpacity={0.9}
+              hitSlop={{ top: 0, bottom: 0, left: 0, right: 0 }}
             >
               <Text style={[styles.checkoutButtonText, isTablet && styles.tabletCheckoutButtonText]}>
                 Complete Order
@@ -572,8 +573,11 @@ const styles = StyleSheet.create({
   checkoutButton: {
     backgroundColor: '#1f2937',
     paddingVertical: 16,
+    paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: 56,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,

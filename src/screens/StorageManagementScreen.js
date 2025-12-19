@@ -14,6 +14,8 @@ import CloudStorageService from '../services/CloudStorageService';
 import { useAuth } from '../context/AuthContext';
 import Icon from '../components/SVGIcons';
 import { colors } from '../styles/colors';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
 
 const { width } = Dimensions.get('window');
 
@@ -25,6 +27,9 @@ const StorageManagementScreen = ({ navigation }) => {
   
   // Get current plan from user data or default to trial
   const currentPlan = user?.subscription_plan || 'trial';
+  
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('StorageManagement');
 
   useEffect(() => {
     loadStorageData();
@@ -191,11 +196,14 @@ const StorageManagementScreen = ({ navigation }) => {
     return (
       <View style={styles.container}>
         <View style={styles.header}>
-          <TouchableOpacity onPress={() => navigation.goBack()}>
-            <Icon name="arrow-back" size={24} color={colors.text.primary} />
+          <TouchableOpacity
+            style={styles.backButton}
+            onPress={() => navigation.goBack()}
+          >
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Storage Management</Text>
-          <View style={{ width: 24 }} />
+          <Text style={styles.title}>Storage Management</Text>
+          <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
           <Text>Loading storage information...</Text>
@@ -207,10 +215,13 @@ const StorageManagementScreen = ({ navigation }) => {
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()}>
-          <Icon name="arrow-back" size={24} color={colors.text.primary} />
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.goBack()}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Storage Management</Text>
+        <Text style={styles.title}>Storage Management</Text>
         <TouchableOpacity onPress={handleRefresh}>
           <Ionicons name="refresh" size={24} color={colors.primary.main} />
         </TouchableOpacity>
@@ -270,6 +281,13 @@ const StorageManagementScreen = ({ navigation }) => {
           </View>
         )}
       </ScrollView>
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        currentScreen="StorageManagement"
+        onComplete={completeTour}
+      />
     </View>
   );
 };
@@ -281,19 +299,25 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 50,
-    paddingBottom: 20,
-    backgroundColor: '#fff',
+    paddingVertical: 16,
+    paddingTop: 60,
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomColor: colors.border.light,
   },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#333',
+  backButton: {
+    padding: 8,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  placeholder: {
+    width: 36,
   },
   content: {
     flex: 1,

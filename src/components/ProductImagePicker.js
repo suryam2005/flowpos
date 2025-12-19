@@ -8,8 +8,19 @@ import {
   Alert,
 } from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
+import { Ionicons } from '@expo/vector-icons';
+import productImageService from '../services/ProductImageService';
+import LoadingOverlay from './LoadingOverlay';
+import { colors } from '../styles/colors';
 
-const ProductImagePicker = ({ image, onImageChange, productName = 'Product' }) => {
+const ProductImagePicker = ({ 
+  image, 
+  onImageChange, 
+  productName = 'Product',
+  productId = null,
+  userId = null,
+  mode = 'local' // 'local' or 'supabase'
+}) => {
   const [isLoading, setIsLoading] = useState(false);
 
   const requestPermissions = async () => {
@@ -41,7 +52,10 @@ const ProductImagePicker = ({ image, onImageChange, productName = 'Product' }) =
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        onImageChange(result.assets[0].uri);
+        const selectedImageUri = result.assets[0].uri;
+        
+        // Always return the local URI first - upload will happen when product is saved
+        onImageChange(selectedImageUri);
       }
     } catch (error) {
       console.error('Error picking image:', error);
@@ -50,6 +64,8 @@ const ProductImagePicker = ({ image, onImageChange, productName = 'Product' }) =
       setIsLoading(false);
     }
   };
+
+
 
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
@@ -132,6 +148,12 @@ const ProductImagePicker = ({ image, onImageChange, productName = 'Product' }) =
           : 'Add a photo to help customers identify your product'
         }
       </Text>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isLoading} 
+        message="Processing image..." 
+      />
     </View>
   );
 };

@@ -18,7 +18,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const { width } = Dimensions.get('window');
@@ -36,11 +36,11 @@ const StoreSetupScreen = ({ navigation, route }) => {
     store_website: '',
     business_type: '',
     gst_number: '',
-    // Payment methods
+    // Payment methods (Cash and UPI selected by default)
     accepts_cash: true,
-    accepts_cards: false,
-    accepts_upi: false,
+    accepts_upi: true,
     upi_id: '',
+    upi_id_2: '',
   });
   
   const [isLoading, setIsLoading] = useState(false);
@@ -114,7 +114,7 @@ const StoreSetupScreen = ({ navigation, route }) => {
       case 3:
         // Business operations step - validate UPI ID if UPI is selected
         if (storeData.accepts_upi && !storeData.upi_id.trim()) {
-          Alert.alert('UPI ID Required', 'Please enter your UPI ID since you selected UPI as a payment method');
+          Alert.alert('UPI ID Required', 'Please enter your primary UPI ID since UPI payment is enabled');
           return false;
         }
         if (storeData.accepts_upi && storeData.upi_id.trim()) {
@@ -122,6 +122,14 @@ const StoreSetupScreen = ({ navigation, route }) => {
           const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
           if (!upiRegex.test(storeData.upi_id)) {
             Alert.alert('Invalid UPI ID', 'Please enter a valid UPI ID (e.g., yourname@paytm)');
+            return false;
+          }
+        }
+        // Validate second UPI ID if provided
+        if (storeData.upi_id_2 && storeData.upi_id_2.trim()) {
+          const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
+          if (!upiRegex.test(storeData.upi_id_2)) {
+            Alert.alert('Invalid Secondary UPI ID', 'Please enter a valid secondary UPI ID (e.g., business@gpay)');
             return false;
           }
         }
@@ -155,14 +163,13 @@ const StoreSetupScreen = ({ navigation, route }) => {
     if (currentStep > 1) {
       setCurrentStep(currentStep - 1);
     } else {
-      // Don't allow going back to signup during onboarding
+      // During onboarding, show confirmation but don't allow exit
       if (isOnboarding) {
         Alert.alert(
-          'Exit Setup?',
-          'Are you sure you want to exit store setup? You can complete this later from settings.',
+          'Store Setup Required',
+          'Store setup is required to continue using FlowPOS. Please complete the setup to access all features.',
           [
-            { text: 'Continue Setup', style: 'cancel' },
-            { text: 'Exit', style: 'destructive', onPress: () => handleSkip() }
+            { text: 'Continue Setup', style: 'default' }
           ]
         );
       } else {
@@ -186,6 +193,7 @@ const StoreSetupScreen = ({ navigation, route }) => {
         gst_number: storeData.gst_number?.trim() || '',
         // Payment method data
         upi_id: storeData.accepts_upi ? storeData.upi_id?.trim() || '' : '',
+        upi_id_2: storeData.accepts_upi ? storeData.upi_id_2?.trim() || '' : '',
         // Additional fields
         store_logo_url: null,
         social_media: {}
@@ -207,30 +215,91 @@ const StoreSetupScreen = ({ navigation, route }) => {
       
       console.log('🏪 Creating store via backend API');
       
-      const result = await createStore(completeStoreData);
-      console.log('✅ Store creation result:', result);
+      let result;
+      let isOfflineMode = false;
+      
+      try {
+        result = await createStore(completeStoreData);
+        console.log('✅ Store creation result:', result);
+      } catch (backendError) {
+        console.error('❌ Backend store creation failed:', backendError.message);
+        
+        // Enhanced error handling for different scenarios
+        if (backendError.message.includes('Cannot connect to server') || 
+            backendError.message.includes('Network request failed') ||
+            backendError.message.includes('timeout') ||
+            backendError.message.includes('All connection attempts failed')) {
+          
+          // Network issues - save locally and continue
+          console.log('🔄 Network issue detected, saving store data locally...');
+          
+          // Save store data to AsyncStorage as fallback
+          const storeInfoWithCompat = {
+            ...completeStoreData,
+            // Backward compatibility fields
+            name: completeStoreData.store_name,
+            address: completeStoreData.store_address,
+            phone: completeStoreData.store_phone,
+            gstin: completeStoreData.gst_number,
+            businessType: completeStoreData.business_type, // For ProductOnboardingScreen
+          };
+          
+          await AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfoWithCompat));
+          await AsyncStorage.setItem('storeSetupCompleted', 'true');
+          
+          isOfflineMode = true;
+          result = { success: true, offline: true };
+          
+        } else if (backendError.message.includes('Authentication') || 
+                   backendError.message.includes('token')) {
+          // Auth issues - show specific error
+          Alert.alert(
+            'Authentication Error', 
+            'Your session has expired. Please log in again.',
+            [{ text: 'OK' }]
+          );
+          return;
+        } else {
+          // Other backend errors - show error but don't allow skip during onboarding
+          if (isOnboarding) {
+            Alert.alert(
+              'Setup Failed',
+              `Failed to set up store: ${backendError.message}. Store setup is required to continue.`,
+              [
+                { text: 'Retry', onPress: () => handleSubmit() }
+              ]
+            );
+            return;
+          } else {
+            throw backendError;
+          }
+        }
+      }
+      
+      // Success message based on mode
+      const successTitle = isOfflineMode ? 'Store Setup Saved Locally!' : 'Store Setup Complete!';
+      const successMessage = isOfflineMode 
+        ? 'Your store has been set up locally. It will sync when you\'re online. Welcome to FlowPOS!'
+        : 'Your store has been set up successfully. Welcome to FlowPOS!';
       
       Alert.alert(
-        'Store Setup Complete!',
-        'Your store has been set up successfully. Welcome to FlowPOS!',
+        successTitle,
+        successMessage,
         [
           {
-            text: 'Get Started',
+            text: 'Continue',
             onPress: async () => {
               if (isOnboarding) {
                 try {
-                  // Mark onboarding and store setup as completed to enable app tour
-                  await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+                  // Mark store setup as completed but not full onboarding yet
                   await AsyncStorage.setItem('storeSetupCompleted', 'true');
-                  console.log('✅ Onboarding and store setup marked as completed - app tour will be available');
+                  console.log('✅ Store setup marked as completed - navigating to product onboarding');
                   
-                  navigation.reset({
-                    index: 0,
-                    routes: [{ name: 'Main', params: { screen: 'POS', params: { startTour: true } } }],
-                  });
+                  // Navigate to ProductOnboardingScreen to let user choose sample products
+                  navigation.navigate('ProductOnboarding');
                 } catch (navError) {
                   console.error('Navigation error:', navError);
-                  navigation.navigate('Main', { screen: 'POS', params: { startTour: true } });
+                  navigation.navigate('ProductOnboarding');
                 }
               } else {
                 navigation.goBack();
@@ -241,44 +310,49 @@ const StoreSetupScreen = ({ navigation, route }) => {
       );
     } catch (error) {
       console.error('❌ Store setup error:', error);
-      Alert.alert(
-        'Setup Failed',
-        error.message || 'Failed to set up store. Please check your connection and try again.'
-      );
+      
+      // Enhanced error messages
+      let errorMessage = 'Failed to set up store. Please try again.';
+      
+      if (error.message.includes('Cannot connect to server')) {
+        errorMessage = 'Cannot connect to server. Please check your network connection and try again.';
+      } else if (error.message.includes('timeout')) {
+        errorMessage = 'Connection timeout. Please check your network and try again.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      // During onboarding, don't allow skip
+      if (isOnboarding) {
+        Alert.alert(
+          'Setup Failed',
+          `${errorMessage} Store setup is required to continue using FlowPOS.`,
+          [
+            { text: 'Retry', onPress: () => handleSubmit() }
+          ]
+        );
+      } else {
+        Alert.alert(
+          'Setup Failed',
+          errorMessage,
+          [
+            { text: 'Retry', onPress: () => handleSubmit() },
+            { text: 'Cancel', style: 'cancel', onPress: () => navigation.goBack() }
+          ]
+        );
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
-    const handleSkip = () => {
+  // Skip function removed - store setup is now mandatory
+  const handleSkip = () => {
     Alert.alert(
-      'Skip Store Setup?',
-      'You can set up your store information later from the settings menu. You\'ll still be able to use FlowPOS with basic features.',
+      'Store Setup Required',
+      'Store setup is mandatory to use FlowPOS. Please complete the setup to access all features.',
       [
-        { text: 'Continue Setup', style: 'cancel' },
-        {
-          text: 'Skip for Now',
-          onPress: async () => {
-            if (isOnboarding) {
-              try {
-                // Mark onboarding and store setup as completed even when skipped
-                await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
-                await AsyncStorage.setItem('storeSetupCompleted', 'true');
-                console.log('✅ Onboarding and store setup marked as completed (skipped) - app tour will be available');
-                
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Main', params: { screen: 'POS', params: { startTour: true } } }],
-                });
-              } catch (navError) {
-                console.error('Skip navigation error:', navError);
-                navigation.navigate('Main');
-              }
-            } else {
-              navigation.goBack();
-            }
-          },
-        },
+        { text: 'Continue Setup', style: 'default' }
       ]
     );
   };
@@ -506,6 +580,9 @@ const StoreSetupScreen = ({ navigation, route }) => {
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Payment Methods Accepted</Text>
+        <Text style={styles.paymentMethodsHelpText}>
+          💡 Cash and UPI are pre-selected. Tap to toggle on/off.
+        </Text>
         <View style={styles.paymentMethodsContainer}>
           <TouchableOpacity
             style={[
@@ -513,26 +590,23 @@ const StoreSetupScreen = ({ navigation, route }) => {
               storeData.accepts_cash && styles.paymentMethodCardSelected
             ]}
             onPress={() => handleInputChange('accepts_cash', !storeData.accepts_cash)}
+            activeOpacity={0.7}
           >
-            <FontAwesome5 name="money-bill-wave" size={20} color={storeData.accepts_cash ? '#fff' : '#4CAF50'} />
+            <View style={styles.paymentMethodHeader}>
+              <FontAwesome5 name="money-bill-wave" size={24} color="#4CAF50" />
+              {storeData.accepts_cash && (
+                <View style={styles.selectedBadge}>
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                </View>
+              )}
+            </View>
+            <Text style={styles.paymentMethodText}>Cash</Text>
             <Text style={[
-              styles.paymentMethodText,
-              storeData.accepts_cash && styles.paymentMethodTextSelected
-            ]}>Cash</Text>
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={[
-              styles.paymentMethodCard,
-              storeData.accepts_cards && styles.paymentMethodCardSelected
-            ]}
-            onPress={() => handleInputChange('accepts_cards', !storeData.accepts_cards)}
-          >
-            <FontAwesome5 name="credit-card" size={20} color={storeData.accepts_cards ? '#fff' : '#2196F3'} />
-            <Text style={[
-              styles.paymentMethodText,
-              storeData.accepts_cards && styles.paymentMethodTextSelected
-            ]}>Cards</Text>
+              styles.paymentMethodStatus,
+              { color: storeData.accepts_cash ? colors.success.main : colors.text.secondary }
+            ]}>
+              {storeData.accepts_cash ? 'ENABLED' : 'DISABLED'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -541,22 +615,33 @@ const StoreSetupScreen = ({ navigation, route }) => {
               storeData.accepts_upi && styles.paymentMethodCardSelected
             ]}
             onPress={() => handleInputChange('accepts_upi', !storeData.accepts_upi)}
+            activeOpacity={0.7}
           >
-            <FontAwesome5 name="mobile-alt" size={20} color={storeData.accepts_upi ? '#fff' : '#FF9800'} />
+            <View style={styles.paymentMethodHeader}>
+              <FontAwesome5 name="mobile-alt" size={24} color="#FF9800" />
+              {storeData.accepts_upi && (
+                <View style={styles.selectedBadge}>
+                  <Ionicons name="checkmark" size={16} color="#fff" />
+                </View>
+              )}
+            </View>
+            <Text style={styles.paymentMethodText}>UPI</Text>
             <Text style={[
-              styles.paymentMethodText,
-              storeData.accepts_upi && styles.paymentMethodTextSelected
-            ]}>UPI</Text>
+              styles.paymentMethodStatus,
+              { color: storeData.accepts_upi ? colors.success.main : colors.text.secondary }
+            ]}>
+              {storeData.accepts_upi ? 'ENABLED' : 'DISABLED'}
+            </Text>
           </TouchableOpacity>
         </View>
         
-        {/* UPI ID Input - Show only when UPI is selected */}
+        {/* UPI IDs Input - Show only when UPI is selected */}
         {storeData.accepts_upi && (
           <View style={styles.upiInputContainer}>
-            <Text style={styles.inputLabel}>UPI ID *</Text>
+            <Text style={styles.inputLabel}>Primary UPI ID *</Text>
             <TextInput
               style={styles.textInput}
-              placeholder="Enter your UPI ID (e.g., yourname@paytm)"
+              placeholder="Enter your primary UPI ID (e.g., yourname@paytm)"
               value={storeData.upi_id}
               onChangeText={(text) => handleInputChange('upi_id', text.toLowerCase())}
               keyboardType="email-address"
@@ -565,6 +650,20 @@ const StoreSetupScreen = ({ navigation, route }) => {
             />
             <Text style={styles.upiHelpText}>
               💡 This will be used for digital payments and QR code generation
+            </Text>
+            
+            <Text style={[styles.inputLabel, { marginTop: 16 }]}>Secondary UPI ID (Optional)</Text>
+            <TextInput
+              style={styles.textInput}
+              placeholder="Enter secondary UPI ID (e.g., business@gpay)"
+              value={storeData.upi_id_2}
+              onChangeText={(text) => handleInputChange('upi_id_2', text.toLowerCase())}
+              keyboardType="email-address"
+              autoCapitalize="none"
+              autoCorrect={false}
+            />
+            <Text style={styles.upiHelpText}>
+              💡 Optional backup UPI ID for additional payment options
             </Text>
           </View>
         )}
@@ -717,12 +816,8 @@ const StoreSetupScreen = ({ navigation, route }) => {
             </Text>
           </View>
 
-          <TouchableOpacity 
-            style={styles.skipButton}
-            onPress={handleSkip}
-          >
-            <Text style={styles.skipText}>Skip</Text>
-          </TouchableOpacity>
+          {/* Skip button removed - store setup is now mandatory */}
+          <View style={styles.skipButton} />
         </View>
 
         {/* Progress Bar */}
@@ -744,17 +839,11 @@ const StoreSetupScreen = ({ navigation, route }) => {
             onPress={handleNext}
             disabled={isLoading}
           >
-            {isLoading ? (
-              <LoadingSpinner size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.nextButtonText}>
-                  {currentStep === totalSteps ? 'Complete Setup' : 'Next'}
-                </Text>
-                {currentStep < totalSteps && (
-                  <Ionicons name="chevron-forward" size={20} color="#fff" />
-                )}
-              </>
+            <Text style={styles.nextButtonText}>
+              {currentStep === totalSteps ? 'Complete Setup' : 'Next'}
+            </Text>
+            {currentStep < totalSteps && (
+              <Ionicons name="chevron-forward" size={20} color="#fff" />
             )}
           </TouchableOpacity>
         </View>
@@ -762,6 +851,12 @@ const StoreSetupScreen = ({ navigation, route }) => {
 
       {/* Modals */}
       {renderBusinessTypeModal()}
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isLoading} 
+        message={currentStep === totalSteps ? "Setting up your store..." : "Processing..."} 
+      />
     </SafeAreaView>
   );
 };
@@ -1132,9 +1227,16 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   // Payment Methods
+  paymentMethodsHelpText: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    marginBottom: 12,
+    fontStyle: 'italic',
+  },
   paymentMethodsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    gap: 12,
   },
   paymentMethodCard: {
     flex: 1,
@@ -1144,19 +1246,46 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.surface,
     borderWidth: 2,
     borderColor: colors.border.light,
-    marginHorizontal: 4,
+    minHeight: 100,
   },
   paymentMethodCardSelected: {
-    backgroundColor: colors.primary.main,
     borderColor: colors.primary.main,
+    borderWidth: 3,
+  },
+  paymentMethodHeader: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  selectedBadge: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: colors.success.main,
+    borderRadius: 10,
+    width: 20,
+    height: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 2,
+    borderColor: colors.background.surface,
   },
   paymentMethodText: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.text.primary,
-    marginTop: 8,
+    marginBottom: 4,
   },
   paymentMethodTextSelected: {
+    color: colors.text.primary,
+  },
+  paymentMethodStatus: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: colors.text.secondary,
+    letterSpacing: 0.5,
+  },
+  paymentMethodStatusSelected: {
     color: '#fff',
   },
   // UPI Input

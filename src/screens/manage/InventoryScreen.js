@@ -15,6 +15,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
 import productsService from '../../services/ProductsService';
+import LoadingOverlay from '../../components/LoadingOverlay';
 
 const InventoryScreen = ({ isActive }) => {
   const [products, setProducts] = useState([]);
@@ -24,6 +25,7 @@ const InventoryScreen = ({ isActive }) => {
   const [showStockModal, setShowStockModal] = useState(false);
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [newStock, setNewStock] = useState('');
+  const [isUpdating, setIsUpdating] = useState(false);
   const hasLoadedOnce = useRef(false);
 
   useEffect(() => {
@@ -77,6 +79,7 @@ const InventoryScreen = ({ isActive }) => {
   };
 
   const updateStock = async (productId, newStockValue) => {
+    setIsUpdating(true);
     try {
       const stockQuantity = parseInt(newStockValue);
       
@@ -98,6 +101,8 @@ const InventoryScreen = ({ isActive }) => {
     } catch (error) {
       console.error('Error updating stock:', error);
       Alert.alert('Error', 'Failed to update stock. Please try again.');
+    } finally {
+      setIsUpdating(false);
     }
   };
 
@@ -310,6 +315,12 @@ const InventoryScreen = ({ isActive }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isUpdating} 
+        message="Updating stock..." 
+      />
     </View>
   );
 };

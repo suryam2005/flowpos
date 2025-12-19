@@ -77,14 +77,23 @@ export const useAppTour = (screenName) => {
 
   const skipAllTours = async () => {
     try {
+      console.log(`🎯 [${screenName}] skipAllTours called - marking all tours as completed`);
+      
+      // Mark overall app tour as seen
       await AsyncStorage.setItem('hasSeenAppTour', 'true');
-      const allScreens = ['POS', 'Cart', 'Manage', 'Orders', 'Analytics'];
+      
+      // Mark all screen tours as completed
+      const allScreens = ['POS', 'Cart', 'Manage', 'Orders', 'Analytics', 'Settings', 'WhatsAppSetup', 'PerformanceInsights', 'StorageManagement'];
       const tours = {};
       allScreens.forEach(screen => {
         tours[screen] = true;
       });
       await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
+      
+      // Hide current tour
       setShowTour(false);
+      
+      console.log(`🎯 [${screenName}] All tours skipped successfully`);
     } catch (error) {
       console.error('Error skipping tours:', error);
     }

@@ -17,8 +17,10 @@ import { safeGoBack } from '../utils/navigationUtils';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
 import featureService from '../services/FeatureService';
+import { useAuth } from '../context/AuthContext';
 
 const SettingsScreen = ({ navigation }) => {
+  const { logout } = useAuth();
   const [autoPaymentDetection, setAutoPaymentDetection] = useState(true);
   const [notifications, setNotifications] = useState(true);
   const [requireCustomerDetails, setRequireCustomerDetails] = useState(true);
@@ -137,66 +139,46 @@ const SettingsScreen = ({ navigation }) => {
     
     Alert.alert(
       'Reset All Data',
-      'This will permanently delete all products, orders, revenue data, and cart items. This action cannot be undone.\n\nAre you sure you want to continue?',
+      'This will log you out of the app. You can log back in anytime with your credentials.\n\nYour data remains safe on the server.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Reset All Data',
+          text: 'Logout',
           style: 'destructive',
-          onPress: confirmResetData,
+          onPress: performLogout,
         },
       ]
     );
   };
 
-  const confirmResetData = () => {
-    Alert.alert(
-      'Final Confirmation',
-      'This is your last chance to cancel. All your business data will be permanently deleted.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Yes, Delete Everything',
-          style: 'destructive',
-          onPress: performDataReset,
-        },
-      ]
-    );
-  };
-
-
-
-  const performDataReset = async () => {
+  const performLogout = async () => {
     try {
-      const success = await clearAllAppData();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      if (success) {
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        Alert.alert(
-          'Data Reset Complete',
-          'All data has been successfully deleted. The app will restart to the welcome screen.',
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate back to welcome screen
-                navigation.reset({
-                  index: 0,
-                  routes: [{ name: 'Welcome' }],
-                });
-              },
+      // Simply logout the user
+      await logout();
+      
+      Alert.alert(
+        'Logged Out',
+        'You have been logged out successfully. You can log back in anytime.',
+        [
+          {
+            text: 'OK',
+            onPress: () => {
+              // Navigate back to welcome screen
+              navigation.reset({
+                index: 0,
+                routes: [{ name: 'Welcome' }],
+              });
             },
-          ]
-        );
-      } else {
-        throw new Error('Failed to clear data');
-      }
+          },
+        ]
+      );
     } catch (error) {
-      console.error('Error resetting data:', error);
+      console.error('Error logging out:', error);
       Alert.alert(
         'Error',
-        'Failed to reset data. Please try again or restart the app manually.'
+        'Failed to logout. Please try again.'
       );
     }
   };
@@ -223,7 +205,7 @@ const SettingsScreen = ({ navigation }) => {
     );
   };
 
-  const handleShowAppTour = () => {
+  const handleShowAppTour = async () => {
     Alert.alert(
       'App Tour',
       'Would you like to see the app tour again? This will show you how to use different features.',
@@ -231,12 +213,24 @@ const SettingsScreen = ({ navigation }) => {
         { text: 'Cancel', style: 'cancel' },
         { 
           text: 'Start Tour', 
-          onPress: () => {
-            // Reset tour status and start from POS screen
-            navigation.navigate('Main', { screen: 'POS' });
-            setTimeout(() => {
-              startTour();
-            }, 500);
+          onPress: async () => {
+            try {
+              console.log('🎯 [Settings] Resetting tour status and starting from POS');
+              
+              // Reset tour completion status to allow tour to show again
+              await AsyncStorage.removeItem('hasSeenAppTour');
+              await AsyncStorage.removeItem('completedTours');
+              
+              // Navigate to POS screen and trigger tour
+              navigation.navigate('Main', { 
+                screen: 'POS',
+                params: { startTour: true }
+              });
+              
+            } catch (error) {
+              console.error('Error resetting tour status:', error);
+              Alert.alert('Error', 'Failed to start tour. Please try again.');
+            }
           }
         },
       ]
@@ -477,12 +471,12 @@ const SettingsScreen = ({ navigation }) => {
             onPress={handleResetAllData}
             activeOpacity={0.8}
           >
-            <Ionicons name="trash-outline" size={20} color={colors.background.surface} style={{ marginRight: 8 }} />
-            <Text style={styles.dangerButtonText}>Reset All Data</Text>
+            <Ionicons name="log-out-outline" size={20} color={colors.background.surface} style={{ marginRight: 8 }} />
+            <Text style={styles.dangerButtonText}>Logout</Text>
           </TouchableOpacity>
           
           <Text style={styles.warningText}>
-            Reset will permanently delete all products, orders, and revenue data. This action cannot be undone.
+            This will log you out of the app. Your data remains safe and you can log back in anytime.
           </Text>
         </View>
 

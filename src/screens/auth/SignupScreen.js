@@ -13,7 +13,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingSpinner from '../../components/LoadingSpinner';
+
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const SignupScreen = ({ navigation }) => {
@@ -212,14 +213,8 @@ const SignupScreen = ({ navigation }) => {
             onPress={handleSignup}
             disabled={isLoading}
           >
-            {isLoading ? (
-              <LoadingSpinner size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.continueButtonText}>Send Verification Code</Text>
-                <Ionicons name="arrow-forward" size={20} color="#fff" />
-              </>
-            )}
+            <Text style={styles.continueButtonText}>Send Verification Code</Text>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
 
           {/* Login Link */}
@@ -231,6 +226,9 @@ const SignupScreen = ({ navigation }) => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      
+      {/* Loading Overlay */}
+      <LoadingOverlay visible={isLoading} message="Sending verification code..." />
     </SafeAreaView>
   );
 };

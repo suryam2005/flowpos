@@ -228,7 +228,7 @@ class PerformanceInsightsService {
       if (!orders || orders.length === 0) {
         insights.push({
           type: 'info',
-          icon: '📊',
+          icon: 'analytics-outline',
           message: 'Start making sales to see business insights'
         });
         return insights;
@@ -255,7 +255,7 @@ class PerformanceInsightsService {
       if (topCategory) {
         insights.push({
           type: 'success',
-          icon: '🏆',
+          icon: 'target-outline',
           message: `${topCategory[0]} is your top performing category`
         });
       }
@@ -276,7 +276,7 @@ class PerformanceInsightsService {
         const timeRange = `${hour}:00-${hour + 1}:00`;
         insights.push({
           type: 'info',
-          icon: '⏰',
+          icon: 'calendar-outline',
           message: `Peak business hours: ${timeRange}`
         });
       }
@@ -289,13 +289,13 @@ class PerformanceInsightsService {
       if (lowStockProducts.length > 0) {
         insights.push({
           type: 'warning',
-          icon: '⚠️',
+          icon: 'cube-outline',
           message: `${lowStockProducts.length} products need restocking`
         });
       } else if (products.length > 0) {
         insights.push({
           type: 'success',
-          icon: '✅',
+          icon: 'checkmark',
           message: 'All products are well stocked'
         });
       }
@@ -305,7 +305,7 @@ class PerformanceInsightsService {
         const totalRevenue = orders.reduce((sum, order) => sum + (order.total || 0), 0);
         insights.push({
           type: 'info',
-          icon: '💰',
+          icon: 'currency-outline',
           message: `Total business revenue: ₹${totalRevenue.toFixed(0)}`
         });
       }
@@ -318,7 +318,7 @@ class PerformanceInsightsService {
       console.error('Error generating simple insights:', error);
       return [{
         type: 'error',
-        icon: '❌',
+        icon: 'information-circle-outline',
         message: 'Unable to generate insights at this time'
       }];
     }

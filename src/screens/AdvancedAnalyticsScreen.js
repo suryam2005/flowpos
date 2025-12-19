@@ -19,6 +19,7 @@ import productsService from '../services/ProductsService';
 import { colors } from '../styles/colors';
 import { PageLoader } from '../components/LoadingSpinner';
 import { usePageLoading } from '../hooks/usePageLoading';
+import LoadingOverlay from '../components/LoadingOverlay';
 
 const AdvancedAnalyticsScreen = ({ navigation }) => {
   const [selectedView, setSelectedView] = useState('daily'); // daily, weekly, monthly, yearly
@@ -541,7 +542,6 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     // Payment method analysis
     const paymentMethods = {
       cash: filteredData.filter(o => (o.paymentMethod || '').toLowerCase().includes('cash')).length,
-      card: filteredData.filter(o => (o.paymentMethod || '').toLowerCase().includes('card')).length,
       upi: filteredData.filter(o => (o.paymentMethod || '').toLowerCase().includes('upi')).length
     };
     
@@ -609,14 +609,38 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       const result = await generateDetailedAnalyticsPDF(analyticsData);
 
       Alert.alert(
-        'Detailed Analytics Report Generated',
-        'Your comprehensive analytics report has been generated successfully. Would you like to share it?',
+        'Analytics Report Generated!',
+        `${result.filename} has been generated successfully!\n\nChoose how you'd like to save or share your report:`,
         [
-          { text: 'Later', style: 'cancel' },
-          {
-            text: 'Share',
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Save to Device', 
             onPress: async () => {
-              await shareAnalyticsPDF(result.uri, result.filename);
+              try {
+                await saveAnalyticsPDFToDevice(result);
+                Alert.alert(
+                  'Report Saved!',
+                  `${result.filename} has been saved to your device. You can find it in your Files app or Downloads folder.`
+                );
+              } catch (saveError) {
+                console.error('Save error:', saveError);
+                Alert.alert('Save Failed', 'Could not save the PDF report. Please try again.');
+              }
+            }
+          },
+          {
+            text: 'Share Report',
+            onPress: async () => {
+              try {
+                await shareAnalyticsPDF(result.uri, result.filename);
+                Alert.alert(
+                  'Report Shared!',
+                  `${result.filename} has been shared successfully. You can save it to files or send via email/messaging apps.`
+                );
+              } catch (shareError) {
+                console.error('Share error:', shareError);
+                Alert.alert('Share Failed', 'Could not share the PDF report. Please try again.');
+              }
             }
           }
         ]
@@ -646,10 +670,10 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       html: htmlContent,
       base64: false,
       margins: {
-        left: 20,
-        top: 20,
-        right: 20,
-        bottom: 20,
+        left: 40,
+        top: 40,
+        right: 40,
+        bottom: 40,
       },
     });
 
@@ -665,6 +689,29 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         dialogTitle: 'Share Detailed Analytics Report',
         UTI: 'com.adobe.pdf'
       });
+    }
+  };
+
+  const saveAnalyticsPDFToDevice = async (reportResult) => {
+    try {
+      console.log('💾 [AdvancedAnalytics] Saving report to device:', reportResult.filename);
+      
+      const { isAvailableAsync, shareAsync } = await import('expo-sharing');
+      
+      if (await isAvailableAsync()) {
+        await shareAsync(reportResult.uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: `Save ${reportResult.filename}`,
+          UTI: 'com.adobe.pdf',
+        });
+        console.log('✅ [AdvancedAnalytics] Report saved to device successfully');
+        return true;
+      } else {
+        throw new Error('Sharing/saving is not available on this device');
+      }
+    } catch (error) {
+      console.error('❌ [AdvancedAnalytics] Error saving report to device:', error);
+      throw error;
     }
   };
 
@@ -772,12 +819,22 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         <meta charset="utf-8">
         <title>FlowPOS Detailed Analytics Report</title>
         <style>
+          @page {
+            margin: 60px 40px;
+          }
+          
           body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             margin: 0;
-            padding: 20px;
+            padding: 0;
             color: #333;
             line-height: 1.6;
+          }
+          .container {
+            max-width: 700px;
+            margin: 0 auto;
+            padding: 40px;
+            box-sizing: border-box;
           }
           .header {
             text-align: center;
@@ -809,8 +866,8 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
           .section-title {
             font-size: 20px;
             font-weight: bold;
-            color: #1f2937;
-            border-bottom: 2px solid #e5e7eb;
+            color: #2563eb;
+            border-bottom: 2px solid #2563eb;
             padding-bottom: 10px;
             margin-bottom: 20px;
           }
@@ -821,8 +878,8 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
             margin-bottom: 30px;
           }
           .metric-card {
-            background: #f8fafc;
-            border: 1px solid #e2e8f0;
+            background: #eff6ff;
+            border: 1px solid #2563eb;
             border-radius: 8px;
             padding: 20px;
             text-align: center;
@@ -830,7 +887,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
           .metric-value {
             font-size: 24px;
             font-weight: bold;
-            color: #1e293b;
+            color: #2563eb;
             margin-bottom: 5px;
           }
           .metric-label {
@@ -850,12 +907,12 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
             text-align: left;
           }
           .data-table th {
-            background-color: #f1f5f9;
+            background-color: #2563eb;
             font-weight: 600;
-            color: #374151;
+            color: #ffffff;
           }
           .data-table tr:nth-child(even) {
-            background-color: #f8fafc;
+            background-color: #eff6ff;
           }
           .filter-info {
             background: #fef3c7;
@@ -884,8 +941,9 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         </style>
       </head>
       <body>
-        <!-- Header -->
-        <div class="header">
+        <div class="container">
+          <!-- Header -->
+          <div class="header">
           <div class="store-name">${storeInfo.name}</div>
           <div class="store-details">
             ${storeInfo.address}<br>
@@ -1002,10 +1060,6 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
               <div class="metric-label">Cash Payments</div>
             </div>
             <div class="metric-card">
-              <div class="metric-value">${data.paymentMethods.card}</div>
-              <div class="metric-label">Card Payments</div>
-            </div>
-            <div class="metric-card">
               <div class="metric-value">${data.paymentMethods.upi}</div>
               <div class="metric-label">UPI Payments</div>
             </div>
@@ -1053,6 +1107,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
           <p>This detailed report was generated by FlowPOS Advanced Analytics</p>
           <p>Report contains comprehensive business analytics and insights</p>
           <p>Generated on: ${new Date(data.generatedAt).toLocaleString('en-IN')}</p>
+        </div>
         </div>
       </body>
       </html>
@@ -1654,30 +1709,34 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   return (
     <SafeAreaView style={styles.container}>
       <PageLoader visible={isLoading} text="Loading analytics..." />
+      <LoadingOverlay visible={isExportingPDF} message="Generating PDF..." />
       
       <View style={[styles.content, contentStyle]}>
         {/* Header */}
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Advanced Analytics</Text>
+        <View style={styles.headerContainer}>
+          <View style={styles.headerTop}>
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => navigation.goBack()}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Advanced Analytics</Text>
+            <View style={styles.placeholder} />
+          </View>
           <View style={styles.headerButtons}>
             <TouchableOpacity
-              style={[styles.pdfButton, isExportingPDF && styles.pdfButtonDisabled]}
+              style={styles.pdfButton}
               onPress={handlePDFExport}
               disabled={isExportingPDF}
             >
               <Ionicons 
-                name={isExportingPDF ? "hourglass-outline" : "document-text-outline"} 
-                size={16} 
+                name="document-text-outline" 
+                size={18} 
                 color={colors.background.surface} 
               />
               <Text style={styles.pdfButtonText}>
-                {isExportingPDF ? 'Generating...' : 'PDF'}
+                PDF
               </Text>
             </TouchableOpacity>
             {renderFilterButton()}
@@ -1708,49 +1767,60 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
   },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+  headerContainer: {
     backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
+    paddingTop: 30,
+  },
+  headerTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
   },
   backButton: {
     padding: 8,
   },
   headerTitle: {
-    flex: 1,
-    fontSize: 20,
+    fontSize: 24,
     fontWeight: '700',
     color: colors.text.primary,
-    marginLeft: 12,
+  },
+  placeholder: {
+    width: 36,
   },
   headerButtons: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    justifyContent: 'center',
+    gap: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
   },
   pdfButton: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     backgroundColor: colors.success.main,
-    borderRadius: 6,
-    marginRight: 8,
+    borderRadius: 8,
+    shadowColor: colors.shadow.default,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 3,
   },
   pdfButtonDisabled: {
     backgroundColor: colors.text.secondary,
     opacity: 0.7,
   },
   pdfButtonText: {
-    fontSize: 12,
+    fontSize: 14,
     fontWeight: '600',
     color: colors.background.surface,
-    marginLeft: 4,
+    marginLeft: 6,
   },
   filterButton: {
     flexDirection: 'row',

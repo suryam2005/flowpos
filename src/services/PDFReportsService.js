@@ -137,7 +137,7 @@ class PDFReportsService {
             subtotal: 75,
             tax: 13.5,
             total: 88.5,
-            paymentMethod: 'Card',
+            paymentMethod: 'Cash',
             timestamp: new Date(Date.now() - 7200000).toISOString()
           }
         ];
@@ -165,7 +165,6 @@ class PDFReportsService {
     // Calculate by payment method
     const paymentMethods = {
       cash: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('cash')).length,
-      card: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('card')).length,
       upi: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('upi')).length
     };
 
@@ -235,6 +234,12 @@ class PDFReportsService {
         base64: false,
         width: 612,
         height: 792,
+        margins: {
+          left: 40,
+          top: 40,
+          right: 40,
+          bottom: 40,
+        },
       });
 
       console.log('✅ [PDF Reports] Business Summary Report generated:', filename);
@@ -286,6 +291,12 @@ class PDFReportsService {
         base64: false,
         width: 612,
         height: 792,
+        margins: {
+          left: 40,
+          top: 40,
+          right: 40,
+          bottom: 40,
+        },
       });
 
       console.log('✅ [PDF Reports] Sales Report generated:', filename);
@@ -312,6 +323,12 @@ class PDFReportsService {
         base64: false,
         width: 612,
         height: 792,
+        margins: {
+          left: 40,
+          top: 40,
+          right: 40,
+          bottom: 40,
+        },
       });
 
       console.log('✅ [PDF Reports] Products Report generated:', filename);
@@ -338,6 +355,12 @@ class PDFReportsService {
         base64: false,
         width: 612,
         height: 792,
+        margins: {
+          left: 40,
+          top: 40,
+          right: 40,
+          bottom: 40,
+        },
       });
 
       console.log('✅ [PDF Reports] Inventory Report generated:', filename);
@@ -366,6 +389,28 @@ class PDFReportsService {
       }
     } catch (error) {
       console.error('❌ [PDF Reports] Error sharing report:', error);
+      throw error;
+    }
+  }
+
+  // Save PDF report to device
+  async saveReportToDevice(reportResult) {
+    try {
+      console.log('💾 [PDF Reports] Saving report to device:', reportResult.filename);
+      
+      if (await Sharing.isAvailableAsync()) {
+        await Sharing.shareAsync(reportResult.uri, {
+          mimeType: 'application/pdf',
+          dialogTitle: `Save ${reportResult.filename}`,
+          UTI: 'com.adobe.pdf',
+        });
+        console.log('✅ [PDF Reports] Report saved to device successfully');
+        return true;
+      } else {
+        throw new Error('Sharing/saving is not available on this device');
+      }
+    } catch (error) {
+      console.error('❌ [PDF Reports] Error saving report to device:', error);
       throw error;
     }
   }
@@ -459,10 +504,6 @@ class PDFReportsService {
               <div class="payment-item">
                 <span class="payment-label">Cash Payments:</span>
                 <span class="payment-value">${metrics.paymentMethods.cash} orders</span>
-              </div>
-              <div class="payment-item">
-                <span class="payment-label">Card Payments:</span>
-                <span class="payment-value">${metrics.paymentMethods.card} orders</span>
               </div>
               <div class="payment-item">
                 <span class="payment-label">UPI Payments:</span>
@@ -740,22 +781,29 @@ class PDFReportsService {
 
   getReportStyles() {
     return `
+      @page {
+        margin: 60px 40px;
+      }
+      
       body {
         font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
         margin: 0;
-        padding: 20px;
+        padding: 0;
         background-color: #ffffff;
         color: #1f2937;
         line-height: 1.6;
       }
       
       .report-container {
-        max-width: 800px;
+        max-width: 700px;
         margin: 0 auto;
+        padding: 40px;
         background: white;
+        box-sizing: border-box;
       }
       
       .report-header {
+        text-align: center;
         border-bottom: 3px solid #2563eb;
         padding-bottom: 20px;
         margin-bottom: 30px;
@@ -765,11 +813,13 @@ class PDFReportsService {
         color: #2563eb;
         margin: 0 0 10px 0;
         font-size: 28px;
+        text-align: center;
       }
       
       .store-info p {
         margin: 5px 0;
         color: #6b7280;
+        text-align: center;
       }
       
       .report-title {
@@ -792,8 +842,8 @@ class PDFReportsService {
       }
       
       .content-section h2 {
-        color: #1f2937;
-        border-bottom: 2px solid #e5e7eb;
+        color: #2563eb;
+        border-bottom: 2px solid #2563eb;
         padding-bottom: 8px;
         margin: 30px 0 20px 0;
       }
@@ -806,8 +856,8 @@ class PDFReportsService {
       }
       
       .metric-card {
-        background: #f8fafc;
-        border: 1px solid #e5e7eb;
+        background: #eff6ff;
+        border: 1px solid #2563eb;
         border-radius: 8px;
         padding: 20px;
         text-align: center;
@@ -834,12 +884,12 @@ class PDFReportsService {
       }
       
       .data-table th {
-        background: #f3f4f6;
+        background: #2563eb;
         padding: 12px 8px;
         text-align: left;
         font-weight: 600;
-        color: #374151;
-        border-bottom: 2px solid #e5e7eb;
+        color: #ffffff;
+        border-bottom: 2px solid #2563eb;
       }
       
       .data-table td {
@@ -848,11 +898,12 @@ class PDFReportsService {
       }
       
       .data-table tr:nth-child(even) {
-        background: #f9fafb;
+        background: #eff6ff;
       }
       
       .payment-methods, .inventory-summary {
-        background: #f8fafc;
+        background: #eff6ff;
+        border: 1px solid #2563eb;
         border-radius: 8px;
         padding: 20px;
         margin-bottom: 20px;

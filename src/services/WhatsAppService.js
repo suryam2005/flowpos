@@ -242,7 +242,7 @@ class WhatsAppService {
     return cleaned;
   }
 
-  // Create invoice message with store name setting check
+  // Create invoice message with store name setting check and onboarding support
   async createInvoiceMessage(invoiceData) {
     console.log('📱 [WhatsAppService] Creating invoice message with data:', {
       storeName: invoiceData.storeName,
@@ -256,17 +256,20 @@ class WhatsAppService {
       itemsCount: invoiceData.items?.length || 0
     });
 
-    // Get settings
-    const [showStoreNameSetting, receiptSettings] = await Promise.all([
+    // Get settings and store info for onboarding compatibility
+    const [showStoreNameSetting, receiptSettings, storeInfo] = await Promise.all([
       AsyncStorage.getItem('showStoreNameOnInvoice'),
-      AsyncStorage.getItem('receiptSettings')
+      AsyncStorage.getItem('receiptSettings'),
+      AsyncStorage.getItem('storeInfo')
     ]);
     
     const parsedReceiptSettings = receiptSettings ? JSON.parse(receiptSettings) : {};
+    const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
     
     console.log('🏪 [WhatsAppService] Settings debug:', {
       showStoreNameSetting,
       receiptSettings: parsedReceiptSettings,
+      storeInfo: parsedStoreInfo,
       inputStoreName: invoiceData.storeName,
       hasStoreName: !!(invoiceData.storeName && invoiceData.storeName.trim() !== '')
     });
@@ -291,8 +294,23 @@ class WhatsAppService {
     // Check if store name should be shown in WhatsApp message
     const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
     
-    // Use store name only if setting is enabled and store name exists
-    const displayStoreName = showStoreName && storeName && storeName.trim() !== '' ? storeName : 'FlowPOS Store';
+    // Enhanced store name logic with onboarding support
+    let displayStoreName = 'FlowPOS Store';
+    if (showStoreName) {
+      if (storeName && storeName.trim() !== '') {
+        displayStoreName = storeName.trim();
+      } else if (parsedStoreInfo.store_name && parsedStoreInfo.store_name.trim() !== '') {
+        displayStoreName = parsedStoreInfo.store_name.trim();
+      } else if (parsedStoreInfo.name && parsedStoreInfo.name.trim() !== '') {
+        displayStoreName = parsedStoreInfo.name.trim();
+      }
+    }
+    
+    // Enhanced store info with onboarding support
+    const finalStoreAddress = storeAddress || parsedStoreInfo.store_address || parsedStoreInfo.address || '';
+    const finalStorePhone = storePhone || parsedStoreInfo.store_phone || parsedStoreInfo.phone || '';
+    const finalStoreEmail = storeEmail || parsedStoreInfo.store_email || parsedStoreInfo.email || '';
+    const finalGstNumber = gstNumber || parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '';
     
     // Get receipt settings with defaults
     const showAddress = parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true;
@@ -312,19 +330,19 @@ class WhatsAppService {
 
     let message = `🧾 *Invoice from ${displayStoreName}*\n\n`;
     
-    // Add store contact information if enabled and available
+    // Add store contact information if enabled and available (using enhanced store info)
     let contactInfo = '';
-    if (showAddress && storeAddress && storeAddress.trim() !== '') {
-      contactInfo += `📍 ${storeAddress.trim()}\n`;
+    if (showAddress && finalStoreAddress && finalStoreAddress.trim() !== '') {
+      contactInfo += `📍 ${finalStoreAddress.trim()}\n`;
     }
-    if (showPhone && storePhone && storePhone.trim() !== '') {
-      contactInfo += `📞 ${storePhone.trim()}\n`;
+    if (showPhone && finalStorePhone && finalStorePhone.trim() !== '') {
+      contactInfo += `📞 ${finalStorePhone.trim()}\n`;
     }
-    if (showEmail && storeEmail && storeEmail.trim() !== '') {
-      contactInfo += `📧 ${storeEmail.trim()}\n`;
+    if (showEmail && finalStoreEmail && finalStoreEmail.trim() !== '') {
+      contactInfo += `📧 ${finalStoreEmail.trim()}\n`;
     }
-    if (showGST && gstNumber && gstNumber.trim() !== '') {
-      contactInfo += `📄 GST: ${gstNumber.trim()}\n`;
+    if (showGST && finalGstNumber && finalGstNumber.trim() !== '') {
+      contactInfo += `📄 GST: ${finalGstNumber.trim()}\n`;
     }
     
     if (contactInfo) {

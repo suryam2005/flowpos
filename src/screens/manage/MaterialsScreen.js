@@ -13,6 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
+import LoadingOverlay from '../../components/LoadingOverlay';
 
 const MaterialsScreen = () => {
   const [materials, setMaterials] = useState([]);
@@ -21,6 +22,7 @@ const MaterialsScreen = () => {
   const [activeTab, setActiveTab] = useState('materials'); // materials, suppliers, orders
   const [showAddModal, setShowAddModal] = useState(false);
   const [modalType, setModalType] = useState('material'); // material, supplier
+  const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState({
     name: '',
     category: '',
@@ -80,6 +82,7 @@ const MaterialsScreen = () => {
       return;
     }
 
+    setLoading(true);
     try {
       const newMaterial = {
         id: Date.now().toString(),
@@ -101,6 +104,8 @@ const MaterialsScreen = () => {
     } catch (error) {
       console.error('Error saving material:', error);
       Alert.alert('Error', 'Failed to save material');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -110,6 +115,7 @@ const MaterialsScreen = () => {
       return;
     }
 
+    setLoading(true);
     try {
       const newSupplier = {
         id: Date.now().toString(),
@@ -128,6 +134,8 @@ const MaterialsScreen = () => {
     } catch (error) {
       console.error('Error saving supplier:', error);
       Alert.alert('Error', 'Failed to save supplier');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -280,6 +288,10 @@ const MaterialsScreen = () => {
 
   return (
     <View style={styles.container}>
+      <LoadingOverlay 
+        visible={loading} 
+        message={modalType === 'material' ? 'Adding material...' : 'Adding supplier...'} 
+      />
       {/* Tab Bar */}
       <View style={styles.tabBar}>
         {renderTabButton('materials', 'Materials')}

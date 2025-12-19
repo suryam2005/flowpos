@@ -35,6 +35,7 @@ import LoadingScreen from './src/screens/LoadingScreen';
 import ProductOnboardingScreen from './src/screens/onboarding/ProductOnboardingScreen';
 import WhatsAppSetupScreen from './src/screens/WhatsAppSetupScreen';
 import InvoiceScreen from './src/screens/InvoiceScreen';
+import SimpleInvoicePreviewScreen from './src/screens/SimpleInvoicePreviewScreen';
 import { CartProvider } from './src/context/CartContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { DataSyncProvider } from './src/context/DataSyncContext';
@@ -262,6 +263,7 @@ export default function App() {
                 component={isTablet ? TabletCartScreen : CartScreen} 
               />
               <Stack.Screen name="Invoice" component={InvoiceScreen} />
+              <Stack.Screen name="SimpleInvoicePreview" component={SimpleInvoicePreviewScreen} />
               <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
               <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
               <Stack.Screen name="Settings" component={SettingsScreen} />

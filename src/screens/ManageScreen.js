@@ -23,14 +23,17 @@ import productsService from '../services/ProductsService';
 import StoreSettingsScreen from './manage/StoreSettingsScreen';
 import { PageLoader, InlineLoader } from '../components/LoadingSpinner';
 import { usePageLoading, useTabLoading } from '../hooks/usePageLoading';
+import LoadingOverlay from '../components/LoadingOverlay';
 import featureService from '../services/FeatureService';
 import TagInput from '../components/TagInput';
 import ProductImagePicker from '../components/ProductImagePicker';
 import { generateProductTags } from '../utils/tagGenerator';
+import productImageService from '../services/ProductImageService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
 import { useAuth } from '../context/AuthContext';
+import { getProductImageUrl } from '../utils/imageUtils';
 import { useDataSync } from '../context/DataSyncContext';
 
 
@@ -45,6 +48,7 @@ const ManageScreen = ({ navigation }) => {
   const [storeSetupCompleted, setStoreSetupCompleted] = useState(false);
   const [storeInfo, setStoreInfo] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
+  const [saving, setSaving] = useState(false);
   
   // Page and tab loading states
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
@@ -306,7 +310,7 @@ const ManageScreen = ({ navigation }) => {
       stock: isTrackingEnabled ? (product.stock || product.stock_quantity || '').toString() : '',
       trackStock: isTrackingEnabled,
       tags: product.tags || [],
-      image: product.image || null,
+      image: product.image_url || product.image || null,
     });
     setModalVisible(true);
   };
@@ -347,6 +351,8 @@ const ManageScreen = ({ navigation }) => {
     console.log('=== handleSaveProduct CALLED ===');
     console.log('editingProduct:', editingProduct?.id);
     console.log('formData:', formData);
+    
+    setSaving(true);
     
     // Enhanced validation
     if (!formData.name.trim()) {
@@ -393,6 +399,34 @@ const ManageScreen = ({ navigation }) => {
 
     try {
       console.log('INSIDE TRY BLOCK - editingProduct:', editingProduct?.id);
+      
+      // Handle image upload to Supabase if a new image was selected
+      let imageUrl = null;
+      if (formData.image && formData.image.startsWith('file://')) {
+        // This is a new local image that needs to be uploaded
+        console.log('📸 [ManageScreen] Uploading new image to Supabase...');
+        try {
+          const userInfo = await AsyncStorage.getItem('userInfo');
+          const userId = userInfo ? JSON.parse(userInfo)?.id || 'unknown' : 'unknown';
+          const productId = editingProduct?.id || `temp_${Date.now()}`;
+          
+          const uploadResult = await productImageService.uploadProductImage(formData.image, productId, userId);
+          if (uploadResult.success) {
+            imageUrl = uploadResult.url;
+            console.log('✅ [ManageScreen] Image uploaded successfully:', imageUrl);
+          } else {
+            console.warn('⚠️ [ManageScreen] Image upload failed, using local URI');
+            imageUrl = formData.image;
+          }
+        } catch (uploadError) {
+          console.error('❌ [ManageScreen] Image upload error:', uploadError);
+          imageUrl = formData.image; // Fallback to local URI
+        }
+      } else if (formData.image) {
+        // This is already a Supabase URL or existing image
+        imageUrl = formData.image;
+      }
+      
       if (editingProduct) {
         // Update existing product using ProductsService
         console.log('🚨 MANAGESCREEN: Updating product in Supabase:', editingProduct.id);
@@ -414,8 +448,8 @@ const ManageScreen = ({ navigation }) => {
           track_stock: formData.trackStock,
           category: finalTags[0] || 'General',
           tags: finalTags,
-          // Only update image_url if a new image was selected
-          ...(formData.image && { image_url: formData.image }),
+          // Use the uploaded Supabase URL or existing image URL
+          ...(imageUrl && { image_url: imageUrl }),
         };
         
         console.log('\n🟡🟡🟡 === MANAGESCREEN SENDING UPDATE === 🟡🟡🟡');
@@ -438,7 +472,7 @@ const ManageScreen = ({ navigation }) => {
           category: finalTags[0] || 'General',
           tags: finalTags,
           description: `New product created from ManageScreen`,
-          image_url: formData.image || '',
+          image_url: imageUrl || '',
         };
         
         console.log('📦 Product data:', {
@@ -516,20 +550,32 @@ const ManageScreen = ({ navigation }) => {
       // More specific error message
       const errorMessage = error.message || 'Failed to save product. Please try again.';
       Alert.alert('Error', errorMessage);
+    } finally {
+      setSaving(false);
     }
   };
 
-  const renderProduct = ({ item }) => (
-    <View style={styles.productCard}>
-      <View style={styles.productImage}>
-        {item.image ? (
-          <Image source={{ uri: item.image }} style={styles.productImageStyle} />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="cube-outline" size={32} color="#6b7280" />
-          </View>
-        )}
-      </View>
+  const renderProduct = ({ item }) => {
+    // Get image URL using utility function
+    const displayImageUrl = getProductImageUrl(item);
+
+    return (
+      <View style={styles.productCard}>
+        <View style={styles.productImage}>
+          {displayImageUrl ? (
+            <Image 
+              source={{ uri: displayImageUrl }} 
+              style={styles.productImageStyle}
+              onError={(error) => {
+                console.log('❌ [ManageScreen] Image load error:', error.nativeEvent.error);
+              }}
+            />
+          ) : (
+            <View style={styles.productImagePlaceholder}>
+              <Ionicons name="cube-outline" size={32} color="#6b7280" />
+            </View>
+          )}
+        </View>
       <View style={styles.productInfo}>
         <Text style={styles.productName}>{item.name}</Text>
         <Text style={styles.productDetails}>
@@ -564,6 +610,7 @@ const ManageScreen = ({ navigation }) => {
       </View>
     </View>
   );
+};
 
   // Load business type from store info
   useEffect(() => {
@@ -641,6 +688,14 @@ const ManageScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
+      <LoadingOverlay 
+        visible={saving} 
+        message={
+          formData.image && formData.image.startsWith('file://') 
+            ? (editingProduct ? 'Uploading image and updating product...' : 'Uploading image and creating product...')
+            : (editingProduct ? 'Updating product...' : 'Adding product...')
+        } 
+      />
       <PageLoader visible={isLoading} text="Loading manage..." />
       
       <View style={[styles.content, contentStyle]}>
@@ -876,6 +931,9 @@ const ManageScreen = ({ navigation }) => {
                   image={formData.image}
                   onImageChange={(image) => setFormData({ ...formData, image })}
                   productName={formData.name}
+                  productId={editingProduct?.id || 'new'}
+                  userId={user?.id || userInfo?.id}
+                  mode="supabase"
                 />
 
                 {/* Product Tags */}
@@ -1178,18 +1236,19 @@ const styles = StyleSheet.create({
   modalScrollContent: {
     flexGrow: 1,
     justifyContent: 'center',
-    paddingVertical: 20,
+    paddingVertical: 30,
+    paddingHorizontal: 20,
   },
   modalContent: {
     backgroundColor: colors.background.surface,
     borderRadius: 16,
-    padding: 20,
+    padding: 16,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 16,
   },
   modalTitle: {
     fontSize: 20,

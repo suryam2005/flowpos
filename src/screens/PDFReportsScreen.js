@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../styles/colors';
+import LoadingOverlay from '../components/LoadingOverlay';
 import pdfReportsService from '../services/PDFReportsService';
 import Icon from '../components/SVGIcons';
 
@@ -80,12 +81,27 @@ const PDFReportsScreen = ({ navigation }) => {
         type: result.type
       });
 
-      // Show preview and share options
+      // Show preview with save and share options
       Alert.alert(
         'Report Generated!',
-        `${reportType.name} has been generated successfully!\n\nFile: ${result.filename}\n\nWould you like to share it now?`,
+        `${reportType.name} has been generated successfully!\n\nFile: ${result.filename}\n\nChoose how you'd like to save or share your report:`,
         [
-          { text: 'Save Only', style: 'cancel' },
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Save to Device', 
+            onPress: async () => {
+              try {
+                await pdfReportsService.saveReportToDevice(result);
+                Alert.alert(
+                  'Report Saved!',
+                  `${reportType.name} has been saved to your device. You can find it in your Files app or Downloads folder.`
+                );
+              } catch (saveError) {
+                console.error('Save error:', saveError);
+                Alert.alert('Save Failed', 'Could not save the PDF report. Please try again.');
+              }
+            }
+          },
           { 
             text: 'Share Report', 
             onPress: async () => {
@@ -143,23 +159,16 @@ const PDFReportsScreen = ({ navigation }) => {
           onPress={() => !isGenerating ? handleGenerateReport(reportType) : null}
           disabled={isGenerating}
         >
-          {isGenerating ? (
-            <View style={styles.buttonContent}>
-              <ActivityIndicator size="small" color={colors.background.surface} />
-              <Text style={styles.generateButtonText}>Generating...</Text>
-            </View>
-          ) : (
-            <View style={styles.buttonContent}>
-              <Ionicons 
-                name="document-text-outline" 
-                size={20} 
-                color={colors.background.surface} 
-              />
-              <Text style={styles.generateButtonText}>
-                Generate PDF
-              </Text>
-            </View>
-          )}
+          <View style={styles.buttonContent}>
+            <Ionicons 
+              name="document-text-outline" 
+              size={20} 
+              color={colors.background.surface} 
+            />
+            <Text style={styles.generateButtonText}>
+              Generate PDF
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
     );
@@ -183,7 +192,7 @@ const PDFReportsScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color={colors.text.primary} />
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.title}>PDF Reports</Text>
         <View style={styles.placeholder} />
@@ -232,6 +241,12 @@ const PDFReportsScreen = ({ navigation }) => {
           </View>
         </View>
       </ScrollView>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isGenerating} 
+        message="Generating PDF report..." 
+      />
     </SafeAreaView>
   );
 };
@@ -247,6 +262,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingTop: 60,
     backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,

@@ -17,7 +17,7 @@ const CustomAlert = ({
   onClose,
   type = 'default' // default, success, warning, error
 }) => {
-  const scaleAnim = new Animated.Value(0);
+  const scaleAnim = React.useRef(new Animated.Value(0)).current;
 
   React.useEffect(() => {
     if (visible) {
@@ -64,15 +64,15 @@ const CustomAlert = ({
   const typeStyles = getTypeStyles();
 
   const handleButtonPress = (button) => {
-    // Close alert first
-    if (onClose) {
-      onClose();
-    }
-    // Then execute the button action
+    // Execute the button action first
     if (button.onPress) {
+      button.onPress();
+    }
+    // Then close alert
+    if (onClose) {
       setTimeout(() => {
-        button.onPress();
-      }, 100);
+        onClose();
+      }, 50);
     }
   };
 
@@ -148,7 +148,6 @@ const styles = StyleSheet.create({
     width: '85%',
     maxWidth: 500,
     minWidth: 280,
-    minHeight: 240, // Consistent minimum height
     alignItems: 'center',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 10 },
@@ -171,7 +170,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 24,
     width: '100%',
-    minHeight: 60, // Consistent content area
   },
   title: {
     fontSize: 18,
@@ -191,7 +189,6 @@ const styles = StyleSheet.create({
   },
   buttonContainer: {
     width: '100%',
-    height: 'auto',
   },
   button: {
     backgroundColor: colors.primary.main,

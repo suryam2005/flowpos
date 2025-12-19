@@ -13,7 +13,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Device from 'expo-device';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingSpinner from '../../components/LoadingSpinner';
+
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const LoginScreen = ({ navigation }) => {
@@ -146,14 +147,8 @@ const LoginScreen = ({ navigation }) => {
             onPress={handleLogin}
             disabled={!email.trim() || !password || isLoading}
           >
-            {isLoading ? (
-              <LoadingSpinner size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.continueButtonText}>Sign In</Text>
-                <Ionicons name="arrow-forward" size={20} color="#fff" />
-              </>
-            )}
+            <Text style={styles.continueButtonText}>Sign In</Text>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
 
           {/* Forgot Password Link */}
@@ -172,6 +167,9 @@ const LoginScreen = ({ navigation }) => {
           </View>
         </View>
       </KeyboardAvoidingView>
+      
+      {/* Loading Overlay */}
+      <LoadingOverlay visible={isLoading} message="Signing in..." />
     </SafeAreaView>
   );
 };

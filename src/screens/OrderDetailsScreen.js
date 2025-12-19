@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 import { colors } from '../styles/colors';
 
@@ -47,7 +48,19 @@ const OrderDetailsScreen = ({ navigation, route }) => {
   );
 
   return (
-    <View style={styles.container}>
+    <SafeAreaView style={styles.container}>
+      {/* Header matching Settings screen style */}
+      <View style={styles.header}>
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => safeGoBack(navigation, 'Main', { screen: 'Orders' })}
+        >
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+        </TouchableOpacity>
+        <Text style={styles.title}>Order Details</Text>
+        <View style={styles.placeholder} />
+      </View>
+
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.receiptCard}>
           <View style={styles.orderHeader}>
@@ -105,13 +118,6 @@ const OrderDetailsScreen = ({ navigation, route }) => {
 
           <View style={styles.actionButtons}>
             <TouchableOpacity
-              style={styles.backButton}
-              onPress={() => safeGoBack(navigation, 'Main', { screen: 'Orders' })}
-            >
-              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-            </TouchableOpacity>
-            
-            <TouchableOpacity
               style={styles.newOrderButton}
               onPress={() => safeNavigate(navigation, 'Main', { screen: 'POS' })}
             >
@@ -120,7 +126,7 @@ const OrderDetailsScreen = ({ navigation, route }) => {
           </View>
         </View>
       </ScrollView>
-    </View>
+    </SafeAreaView>
   );
 };
 
@@ -128,7 +134,28 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: colors.background.primary,
-    paddingTop: 60, // Proper space for status bar like YouTube app
+  },
+  header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingTop: 60,
+    backgroundColor: colors.background.surface,
+    borderBottomWidth: 1,
+    borderBottomColor: colors.border.light,
+  },
+  backButton: {
+    padding: 8,
+  },
+  title: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: colors.text.primary,
+  },
+  placeholder: {
+    width: 36,
   },
   scrollContainer: {
     flex: 1,
@@ -286,20 +313,6 @@ const styles = StyleSheet.create({
   actionButtons: {
     flexDirection: 'row',
     gap: 12,
-  },
-  backButton: {
-    flex: 1,
-    backgroundColor: colors.gray[100],
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    borderWidth: 1,
-    borderColor: colors.border.light,
-  },
-  backButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text.secondary,
   },
   newOrderButton: {
     flex: 1,

@@ -35,6 +35,7 @@ const DynamicQRGenerator = ({
   const [paymentId, setPaymentId] = useState('');
   const [isAutoListening, setIsAutoListening] = useState(false);
   const [showUpiError, setShowUpiError] = useState(false);
+  const [autoPaymentDetectionEnabled, setAutoPaymentDetectionEnabled] = useState(true);
   const { isTablet } = getDeviceInfo();
   const { getStore } = useAuth();
   
@@ -69,6 +70,21 @@ const DynamicQRGenerator = ({
       generateQRCode();
     }
   }, [storeInfo, amount, visible, selectedUpiId]);
+
+  // Load auto payment detection setting
+  useEffect(() => {
+    const loadAutoDetectionSetting = async () => {
+      try {
+        const setting = await AsyncStorage.getItem('autoPaymentDetection');
+        if (setting !== null) {
+          setAutoPaymentDetectionEnabled(JSON.parse(setting));
+        }
+      } catch (error) {
+        console.error('Error loading auto payment detection setting:', error);
+      }
+    };
+    loadAutoDetectionSetting();
+  }, []);
 
   const loadStoreInfo = async () => {
     try {
@@ -201,8 +217,8 @@ const DynamicQRGenerator = ({
       setQrValue(upiUrl);
       setShowUpiError(false);
       
-      // Start tracking this payment for automatic confirmation
-      if (paymentId && isListening && !isAutoListening) {
+      // Start tracking this payment for automatic confirmation (only if enabled)
+      if (paymentId && isListening && !isAutoListening && autoPaymentDetectionEnabled) {
         trackPayment(paymentId, amount, selectedUpiId, customerName);
         setIsAutoListening(true);
       }
@@ -251,42 +267,53 @@ const DynamicQRGenerator = ({
   // Handle automatic payment confirmation
   useEffect(() => {
     if (lastConfirmation && paymentId && isAutoListening && visible) {
-      // Check if this confirmation is for our current payment (exact amount match)
-      if (lastConfirmation.activePayment && 
-          lastConfirmation.paymentId === paymentId &&
-          Math.abs(lastConfirmation.amount - amount) < 0.01) {
-        
-        // Stop tracking immediately
-        stopTrackingPayment(paymentId);
-        setIsAutoListening(false);
-        
-        // Auto-complete payment and redirect to home
-        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-        
-        if (onPaymentComplete) {
-          onPaymentComplete();
-        }
-        
-        // Close QR modal immediately
-        onClose();
-        
-        // Show success message briefly
-        Alert.alert(
-          '✅ Payment Received!',
-          `₹${lastConfirmation.amount} received successfully${lastConfirmation.sender ? ` from ${lastConfirmation.sender}` : ''}`,
-          [
-            {
-              text: 'OK',
-              onPress: () => {
-                // Navigate to home (POS screen)
-                // This will be handled by the parent component
+      // Only auto-complete if auto detection is enabled
+      if (autoPaymentDetectionEnabled) {
+        // Check if this confirmation is for our current payment (exact amount match)
+        if (lastConfirmation.activePayment && 
+            lastConfirmation.paymentId === paymentId &&
+            Math.abs(lastConfirmation.amount - amount) < 0.01) {
+          
+          // Stop tracking immediately
+          stopTrackingPayment(paymentId);
+          setIsAutoListening(false);
+          
+          // Auto-complete payment and redirect to home
+          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+          
+          if (onPaymentComplete) {
+            onPaymentComplete();
+          }
+          
+          // Close QR modal immediately
+          onClose();
+          
+          // Show success message briefly
+          Alert.alert(
+            'Payment Received!',
+            `₹${lastConfirmation.amount} received successfully${lastConfirmation.sender ? ` from ${lastConfirmation.sender}` : ''}`,
+            [
+              {
+                text: 'OK',
+                onPress: () => {
+                  // Navigate to home (POS screen)
+                  // This will be handled by the parent component
+                }
               }
-            }
-          ]
-        );
+            ]
+          );
+        }
+      } else {
+        // If auto detection is OFF, just log the notification but don't auto-complete
+        console.log('🔔 Payment notification received but auto-detection is OFF - manual completion required');
+        console.log('💰 Payment details:', {
+          amount: lastConfirmation.amount,
+          sender: lastConfirmation.sender,
+          paymentId: lastConfirmation.paymentId
+        });
       }
     }
-  }, [lastConfirmation]);
+  }, [lastConfirmation, paymentId, isAutoListening, visible, autoPaymentDetectionEnabled, amount, onPaymentComplete, onClose]);
 
   // Cleanup effect - only run on unmount
   useEffect(() => {
@@ -409,7 +436,10 @@ const DynamicQRGenerator = ({
                     <View style={styles.autoListenIndicator}>
                       <Text style={styles.autoListenIcon}>🔔</Text>
                       <ResponsiveText variant="small" style={styles.autoListenText}>
-                        Auto-detecting payment from notifications...
+                        {autoPaymentDetectionEnabled 
+                          ? 'Auto-detecting payment from notifications...'
+                          : 'Waiting for manual payment confirmation...'
+                        }
                       </ResponsiveText>
                     </View>
                   )}
@@ -437,7 +467,7 @@ const DynamicQRGenerator = ({
               activeOpacity={0.8}
             >
               <ResponsiveText variant="button" style={styles.confirmButtonText}>
-                ✅ Payment Received
+                Payment Received
               </ResponsiveText>
             </TouchableOpacity>
 
@@ -461,13 +491,15 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 40,
   },
   modalContainer: {
-    width: '90%',
+    width: '100%',
     maxWidth: 400,
     backgroundColor: colors.background.surface,
     borderRadius: 20,
-    maxHeight: '90%',
+    maxHeight: '100%',
   },
   tabletModalContainer: {
     maxWidth: 500,
@@ -477,7 +509,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
@@ -494,7 +526,9 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
   },
   modalContent: {
-    padding: 20,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 16,
   },
   paymentDetails: {
     alignItems: 'center',

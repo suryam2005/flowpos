@@ -12,6 +12,7 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import Icon from '../components/SVGIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
@@ -22,6 +23,7 @@ import { useOrders } from '../hooks/useOrders';
 
 import CustomAlert from '../components/CustomAlert';
 import DynamicQRGenerator from '../components/DynamicQRGenerator';
+import LoadingOverlay from '../components/LoadingOverlay';
 import { useQRPayment } from '../hooks/useQRPayment';
 import featureService from '../services/FeatureService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
@@ -36,7 +38,7 @@ const CartScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [customerNameError, setCustomerNameError] = useState('');
-  const [availablePaymentMethods, setAvailablePaymentMethods] = useState(['Cash', 'Card', 'QR Pay']);
+  const [availablePaymentMethods, setAvailablePaymentMethods] = useState(['Cash', 'QR Pay']);
   const [phoneNumberError, setPhoneNumberError] = useState('');
   const [requireCustomerDetails, setRequireCustomerDetails] = useState(true);
 
@@ -51,6 +53,25 @@ const CartScreen = ({ navigation }) => {
   useEffect(() => {
     loadAvailablePaymentMethods();
     loadCustomerDetailsRequirement();
+  }, []);
+
+  // Auto-close cart when empty and navigate back to POS (but not during order completion)
+  useEffect(() => {
+    if (items.length === 0 && !completingOrder && !orderCompleted) {
+      // Small delay to allow for smooth transition
+      const timer = setTimeout(() => {
+        safeGoBack(navigation);
+      }, 500);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [items.length, navigation, completingOrder, orderCompleted]);
+
+  // Reset order completed flag when component unmounts
+  useEffect(() => {
+    return () => {
+      setOrderCompleted(false);
+    };
   }, []);
 
   const loadCustomerDetailsRequirement = async () => {
@@ -77,7 +98,7 @@ const CartScreen = ({ navigation }) => {
       
       // Get configured methods from store settings
       const storeInfo = await AsyncStorage.getItem('storeInfo');
-      let configuredMethods = ['Cash', 'Card', 'QR Pay']; // Default
+      let configuredMethods = ['Cash', 'QR Pay']; // Default (Card payment removed)
       
       if (storeInfo) {
         const parsedStore = JSON.parse(storeInfo);
@@ -109,21 +130,34 @@ const CartScreen = ({ navigation }) => {
   useEffect(() => {
     const loadGSTSettings = async () => {
       try {
-        const storeData = await AsyncStorage.getItem('storeInfo');
+        // Load store data and tax settings
+        const [storeData, taxSettingsData] = await Promise.all([
+          AsyncStorage.getItem('storeInfo'),
+          AsyncStorage.getItem('taxSettings')
+        ]);
+        
         if (storeData) {
           const store = JSON.parse(storeData);
-          const hasGSTNumber = store.gstNumber && store.gstNumber.trim() !== '';
-          const gstPercentage = store.gstPercentage || 18;
+          const taxSettings = taxSettingsData ? JSON.parse(taxSettingsData) : { enableGST: false, gstRate: 18 };
+          
+          // Check if GST is enabled and GST number exists
+          const hasGSTNumber = store.gstin && store.gstin.trim() !== '';
+          const isGSTEnabled = taxSettings.enableGST && hasGSTNumber;
+          const gstPercentage = taxSettings.gstRate || 18;
+          
           console.log('CartScreen GST Settings:', {
             hasGSTNumber,
+            isGSTEnabled,
             gstPercentage,
-            gstNumber: store.gstNumber,
+            gstNumber: store.gstin,
+            taxSettings,
             storeData: store
           });
+          
           setGstSettings({
-            hasGST: hasGSTNumber,
+            hasGST: isGSTEnabled,
             percentage: gstPercentage,
-            number: store.gstNumber || ''
+            number: store.gstin || ''
           });
         }
       } catch (error) {
@@ -274,9 +308,9 @@ const CartScreen = ({ navigation }) => {
     }
   };
 
-  const handleCashCardPaymentConfirmation = () => {
-    const paymentMethodName = paymentMethod === 'Cash' ? 'cash' : 'card';
-    const paymentIcon = paymentMethod === 'Cash' ? '💵' : '💳';
+  const handleCashPaymentConfirmation = () => {
+    const paymentMethodName = 'cash';
+    const paymentIcon = '💵';
     
     setAlertConfig({
       title: `${paymentIcon} ${paymentMethod} Payment`,
@@ -370,6 +404,7 @@ _Powered by FlowPOS_`;
   };
 
   const [completingOrder, setCompletingOrder] = useState(false);
+  const [orderCompleted, setOrderCompleted] = useState(false);
 
   const handleCompleteOrder = async (paymentDetails = null) => {
     // Check order limits
@@ -442,13 +477,14 @@ _Powered by FlowPOS_`;
       return;
     }
 
-    // If Cash or Card is selected, show payment confirmation dialog
-    if ((paymentMethod === 'Cash' || paymentMethod === 'Card') && !paymentDetails) {
-      handleCashCardPaymentConfirmation();
+    // If Cash is selected, show payment confirmation dialog
+    if (paymentMethod === 'Cash' && !paymentDetails) {
+      handleCashPaymentConfirmation();
       return;
     }
 
     // Set loading state
+    console.log('🔄 [CartScreen] Setting loading state...');
     setCompletingOrder(true);
     
     // Haptic feedback only
@@ -506,12 +542,17 @@ _Powered by FlowPOS_`;
         }),
       };
       
-      console.log('🛒 Creating order:', orderData);
+      console.log('🛒 [CartScreen] Creating order:', orderData);
       
       // Save order using the new orders system (works offline/online)
+      console.log('💾 [CartScreen] Calling createOrder...');
       const savedOrder = await createOrder(orderData);
       
-      console.log('✅ Order saved:', savedOrder);
+      console.log('✅ [CartScreen] Order saved successfully:', savedOrder);
+
+      // Clear cart immediately after order creation
+      console.log('🧹 [CartScreen] Clearing cart...');
+      clearCart();
 
       // Update revenue (keep existing functionality)
       const existingRevenue = await AsyncStorage.getItem('revenue');
@@ -543,20 +584,22 @@ _Powered by FlowPOS_`;
         await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
       }
 
-      clearCart();
-
-      // Navigate to invoice screen with order data (backward compatibility)
+      // Navigate to SimpleInvoicePreview instead of direct Invoice screen
       const invoiceOrderData = {
         id: savedOrder.id,
+        invoiceNumber: savedOrder.orderNumber,
         orderNumber: savedOrder.orderNumber,
         customerName: finalCustomerName, // Use the final processed customer name
         phoneNumber: finalPhoneNumber, // Use the final processed phone number
         items: items,
         subtotal,
         gst,
-        total,
+        total: total,
+        grandTotal: total,
         paymentMethod,
         timestamp: savedOrder.timestamp,
+        date: new Date(savedOrder.timestamp).toLocaleDateString(),
+        time: new Date(savedOrder.timestamp).toLocaleTimeString(),
         status: 'completed',
         ...(paymentDetails && {
           paymentDetails: {
@@ -567,7 +610,7 @@ _Powered by FlowPOS_`;
         }),
       };
       
-      console.log('Navigating to Invoice with data:', invoiceOrderData);
+      console.log('Navigating to SimpleInvoicePreview with data:', invoiceOrderData);
       
       // Auto-send WhatsApp invoice if enabled and phone number is provided
       if (phoneNumber && phoneNumber.trim()) {
@@ -577,7 +620,22 @@ _Powered by FlowPOS_`;
         }
       }
       
-      navigation.navigate('Invoice', { orderData: invoiceOrderData, autoRedirect: true });
+      // Set order completed flag to prevent auto-close
+      console.log('✅ [CartScreen] Setting order completed flag...');
+      setOrderCompleted(true);
+      
+      // Navigate to SimpleInvoicePreview for better user experience
+      console.log('🚀 [CartScreen] Navigating to SimpleInvoicePreview...');
+      
+      // Small delay to ensure all state updates are complete
+      setTimeout(() => {
+        navigation.navigate('SimpleInvoicePreview', { 
+          invoiceData: invoiceOrderData
+        });
+      }, 100);
+      
+      // Loading state will be reset in finally block
+
     } catch (error) {
       console.error('❌ Error completing order:', error);
       setAlertConfig({
@@ -608,7 +666,14 @@ _Powered by FlowPOS_`;
       };
       
       clearCart();
-      navigation.navigate('Invoice', { orderData: invoiceOrderData, autoRedirect: true });
+      
+      // Set order completed flag to prevent auto-close
+      setOrderCompleted(true);
+      
+      console.log('🚀 [CartScreen] Error case - Navigating to SimpleInvoicePreview...');
+      navigation.navigate('SimpleInvoicePreview', { 
+        invoiceData: invoiceOrderData
+      });
     } finally {
       setCompletingOrder(false);
     }
@@ -726,9 +791,10 @@ _Powered by FlowPOS_`;
           style={styles.backButton}
           onPress={() => safeGoBack(navigation, 'Main', { screen: 'POS' })}
         >
-          <Icon name="arrow-back" size={24} color={colors.text.primary} />
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.title}>Order Details</Text>
+        <View style={styles.placeholder} />
       </View>
 
       <View style={{ flex: 1 }}>
@@ -795,7 +861,6 @@ _Powered by FlowPOS_`;
               {availablePaymentMethods.map((method) => {
                 const methodConfig = {
                   'Cash': { icon: '💵', label: 'Cash' },
-                  'Card': { icon: '💳', label: 'Card' },
                   'QR Pay': { icon: '📲', label: 'QR Pay' },
                 };
                 const config = methodConfig[method];
@@ -828,28 +893,31 @@ _Powered by FlowPOS_`;
             </View>
           </View>
 
-          <TouchableOpacity
-            style={[styles.completeButton, (orderLoading || completingOrder) && { opacity: 0.6 }]}
-            onPress={handleCompleteOrder}
-            disabled={orderLoading || completingOrder}
-          >
-            <Text style={styles.completeButtonText}>
-              {(orderLoading || completingOrder)
-                ? 'Processing...'
-                : paymentMethod === 'QR Pay' 
-                  ? (isQRVisible ? 'Waiting for Payment...' : 'Generate QR Code')
-                  : paymentMethod === 'Cash' 
-                    ? 'Collect Cash Payment' 
-                    : paymentMethod === 'Card'
-                      ? 'Process Card Payment'
+          <View style={styles.completeButtonContainer}>
+            <TouchableOpacity
+              style={[styles.completeButton, (orderLoading || completingOrder) && { opacity: 0.6 }]}
+              onPress={handleCompleteOrder}
+              disabled={orderLoading || completingOrder}
+              activeOpacity={0.7}
+              hitSlop={{ top: 0, bottom: 0, left: 0, right: 0 }}
+            >
+              <Text style={styles.completeButtonText}>
+                {(orderLoading || completingOrder)
+                  ? 'Processing...'
+                  : paymentMethod === 'QR Pay' 
+                    ? (isQRVisible ? 'Waiting for Payment...' : 'Generate QR Code')
+                    : paymentMethod === 'Cash' 
+                      ? 'Collect Cash Payment' 
                       : 'Complete Order'
-              }
-            </Text>
-          </TouchableOpacity>
+                }
+              </Text>
+            </TouchableOpacity>
+          </View>
         </ScrollView>
       </View>
 
-
+      {/* Loading Overlay for Order Completion */}
+      <LoadingOverlay visible={completingOrder} message="Processing order..." />
 
       <DynamicQRGenerator
         amount={paymentData.amount}
@@ -894,6 +962,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingTop: 60,
     backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
@@ -901,11 +970,13 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-
   title: {
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: '700',
     color: colors.text.primary,
+  },
+  placeholder: {
+    width: 36,
   },
 
   scrollContainer: {
@@ -1148,25 +1219,25 @@ const styles = StyleSheet.create({
   paymentTextActive: {
     color: colors.primary.main,
   },
+  completeButtonContainer: {
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 20,
+  },
   completeButton: {
     backgroundColor: colors.success.main,
-    marginHorizontal: 20,
     borderRadius: 12,
     paddingVertical: 16,
+    paddingHorizontal: 20,
     alignItems: 'center',
-    marginTop: 20,
-    marginBottom: 20,
+    justifyContent: 'center',
+    minHeight: 56,
   },
   completeButtonText: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.background.surface,
-  },
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    justifyContent: 'center',
-    alignItems: 'center',
+    textAlign: 'center',
   },
 
 });

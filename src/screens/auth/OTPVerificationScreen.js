@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const OTPVerificationScreen = ({ navigation, route }) => {
@@ -197,11 +197,7 @@ const OTPVerificationScreen = ({ navigation, route }) => {
             onPress={() => handleVerification()}
             disabled={isLoading || otp.join('').length !== 6}
           >
-            {isLoading ? (
-              <LoadingSpinner size="small" color="#fff" />
-            ) : (
-              <Text style={styles.verifyButtonText}>Verify & Continue</Text>
-            )}
+            <Text style={styles.verifyButtonText}>Verify & Continue</Text>
           </TouchableOpacity>
 
           {/* Resend Section */}
@@ -228,6 +224,12 @@ const OTPVerificationScreen = ({ navigation, route }) => {
           </Text>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isLoading} 
+        message="Verifying code..." 
+      />
     </SafeAreaView>
   );
 };

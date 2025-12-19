@@ -18,6 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { Linking } from 'react-native';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { colors } from '../../styles/colors';
 import { useAuth } from '../../context/AuthContext';
 import LoadingSpinner from '../../components/LoadingSpinner';
@@ -171,6 +172,7 @@ const StoreSettingsScreen = ({ navigation }) => {
           address: backendData.store_address,
           phone: backendData.store_phone,
           gstin: backendData.gst_number,
+          businessType: backendData.business_type, // For ProductOnboardingScreen
         };
         
         await AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfoWithCompat));
@@ -219,16 +221,34 @@ const StoreSettingsScreen = ({ navigation }) => {
         business_settings: businessSettings,
       };
 
-      // Save to backend via AuthContext
+      // Save to backend via AuthContext with enhanced error handling
       console.log('💾 Saving store data to backend via AuthContext...', backendData);
       
-      const result = await updateStore(backendData);
-      
-      if (!result) {
-        throw new Error('Failed to save store information');
+      let result;
+      try {
+        result = await updateStore(backendData);
+        console.log('📤 Store save successful:', result);
+      } catch (backendError) {
+        console.error('❌ Backend save failed:', backendError.message);
+        
+        // Enhanced error handling for different failure scenarios
+        if (backendError.message.includes('Cannot connect to server') || 
+            backendError.message.includes('Network request failed') ||
+            backendError.message.includes('timeout')) {
+          // Network/connection issues - save locally and inform user
+          console.log('🔄 Network issue detected, saving locally...');
+          result = { success: true, offline: true };
+        } else if (backendError.message.includes('Authentication') || 
+                   backendError.message.includes('token')) {
+          // Auth issues - show specific error
+          Alert.alert('Authentication Error', 'Your session has expired. Please log in again.');
+          return;
+        } else {
+          // Other backend errors - save locally as fallback
+          console.log('⚠️ Backend error, falling back to local save...');
+          result = { success: true, offline: true, error: backendError.message };
+        }
       }
-      
-      console.log('📤 Store save successful:', result);
 
       // Prepare store info with backward compatibility
       const storeInfoWithCompat = {
@@ -238,6 +258,7 @@ const StoreSettingsScreen = ({ navigation }) => {
         address: storeInfo.store_address,
         phone: storeInfo.store_phone,
         gstin: storeInfo.gst_number,
+        businessType: storeInfo.business_type, // For ProductOnboardingScreen
       };
       
 
@@ -254,7 +275,12 @@ const StoreSettingsScreen = ({ navigation }) => {
       setIsEditing(false);
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Store settings saved successfully!');
+      
+      const message = result?.offline 
+        ? 'Store settings saved locally! They will sync when you\'re online.'
+        : 'Store settings saved successfully!';
+      
+      Alert.alert('Success', message);
     } catch (error) {
       console.error('Error saving settings:', error);
       Alert.alert('Error', error.message || 'Failed to save settings. Please try again.');
@@ -418,11 +444,7 @@ const StoreSettingsScreen = ({ navigation }) => {
                   onPress={saveSettings}
                   disabled={isSaving}
                 >
-                  {isSaving ? (
-                    <LoadingSpinner size="small" color="#fff" />
-                  ) : (
-                    <Text style={styles.saveHeaderButtonText}>Save</Text>
-                  )}
+                  <Text style={styles.saveHeaderButtonText}>Save</Text>
                 </TouchableOpacity>
               </>
             ) : (
@@ -652,6 +674,12 @@ const StoreSettingsScreen = ({ navigation }) => {
         ))}
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isSaving} 
+        message="Saving store settings..." 
+      />
     </View>
   );
 };

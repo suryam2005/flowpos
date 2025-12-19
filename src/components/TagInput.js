@@ -217,6 +217,8 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: '#ffffff',
     fontWeight: '600',
+    lineHeight: 12,
+    textAlign: 'center',
   },
   inputContainer: {
     flexDirection: 'row',

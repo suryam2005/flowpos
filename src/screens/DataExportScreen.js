@@ -11,6 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../styles/colors';
+import LoadingOverlay from '../components/LoadingOverlay';
 import csvExportService from '../services/CSVExportService';
 import Icon from '../components/SVGIcons';
 
@@ -92,7 +93,7 @@ const DataExportScreen = ({ navigation }) => {
         contentLength: result.content?.length || 0
       });
 
-      // Show CSV preview before sharing
+      // Show CSV preview with save and share options
       const previewContent = result.content.length > 200 
         ? result.content.substring(0, 200) + '...\n\n[Content truncated for preview]'
         : result.content;
@@ -102,6 +103,21 @@ const DataExportScreen = ({ navigation }) => {
         `${exportType.name} export completed!\n\nFile: ${result.filename}\nRecords: ${result.recordCount}\nSize: ${result.content.length} characters\n\nPreview:\n${previewContent}`,
         [
           { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Save to Device', 
+            onPress: async () => {
+              try {
+                await csvExportService.saveCSVToDevice(result);
+                Alert.alert(
+                  'Export Saved!',
+                  `${exportType.name} has been saved to your device. You can find it in your Files app or Downloads folder.`
+                );
+              } catch (saveError) {
+                console.error('Save error:', saveError);
+                Alert.alert('Save Failed', 'Could not save the CSV file. Please try again.');
+              }
+            }
+          },
           { 
             text: 'Share CSV', 
             onPress: async () => {
@@ -158,20 +174,16 @@ const DataExportScreen = ({ navigation }) => {
           onPress={() => isAvailable ? handleExport(exportType) : null}
           disabled={exporting}
         >
-          {exporting ? (
-            <ActivityIndicator size="small" color={colors.background.surface} />
-          ) : (
-            <View style={styles.buttonContent}>
-              <Ionicons 
-                name="download-outline" 
-                size={20} 
-                color={colors.background.surface} 
-              />
-              <Text style={styles.exportButtonText}>
-                Export CSV
-              </Text>
-            </View>
-          )}
+          <View style={styles.buttonContent}>
+            <Ionicons 
+              name="download-outline" 
+              size={20} 
+              color={colors.background.surface} 
+            />
+            <Text style={styles.exportButtonText}>
+              Export CSV
+            </Text>
+          </View>
         </TouchableOpacity>
       </View>
     );
@@ -195,7 +207,7 @@ const DataExportScreen = ({ navigation }) => {
           style={styles.backButton}
           onPress={() => navigation.goBack()}
         >
-          <Icon name="arrow-back" size={24} color={colors.text.primary} />
+          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.title}>Data Export</Text>
         <View style={styles.placeholder} />
@@ -264,6 +276,12 @@ const DataExportScreen = ({ navigation }) => {
           </Text>
         </View>
       </ScrollView>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={exporting} 
+        message="Exporting data..." 
+      />
     </SafeAreaView>
   );
 };
@@ -279,6 +297,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    paddingTop: 60,
     backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,

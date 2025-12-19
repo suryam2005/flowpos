@@ -12,7 +12,8 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingSpinner from '../../components/LoadingSpinner';
+
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const ForgotPasswordScreen = ({ navigation }) => {
@@ -112,14 +113,8 @@ const ForgotPasswordScreen = ({ navigation }) => {
             onPress={handleForgotPassword}
             disabled={!email.trim() || isLoading}
           >
-            {isLoading ? (
-              <LoadingSpinner size="small" color="#fff" />
-            ) : (
-              <>
-                <Text style={styles.sendButtonText}>Send Reset Code</Text>
-                <Ionicons name="arrow-forward" size={20} color="#fff" />
-              </>
-            )}
+            <Text style={styles.sendButtonText}>Send Reset Code</Text>
+            <Ionicons name="arrow-forward" size={20} color="#fff" />
           </TouchableOpacity>
 
           {/* Back to Login */}
@@ -131,6 +126,9 @@ const ForgotPasswordScreen = ({ navigation }) => {
           </View>
         </View>
       </KeyboardAvoidingView>
+      
+      {/* Loading Overlay */}
+      <LoadingOverlay visible={isLoading} message="Sending reset code..." />
     </SafeAreaView>
   );
 };

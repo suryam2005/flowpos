@@ -16,6 +16,7 @@ import { Ionicons } from '@expo/vector-icons';
 import Icon from './SVGIcons';
 import { captureRef } from 'react-native-view-shot';
 import { colors } from '../styles/colors';
+import LoadingOverlay from './LoadingOverlay';
 import WhatsAppService from '../services/WhatsAppService';
 
 const SimpleInvoicePreview = ({ 
@@ -255,7 +256,7 @@ const SimpleInvoicePreview = ({
           {/* Success Icon */}
           <View style={styles.successIconContainer}>
             <View style={styles.successIcon}>
-              <Icon name="checkmark" size={32} color="#ffffff" />
+              <Icon name="checkmark" size={48} color="#ffffff" />
             </View>
           </View>
 
@@ -281,25 +282,25 @@ const SimpleInvoicePreview = ({
             <View style={styles.storeContactSection}>
               {receiptSettings.showAddress && invoiceData.storeAddress && (
                 <View style={styles.contactRow}>
-                  <Icon name="location-outline" size={16} color="#6b7280" />
+                  <Icon name="location-outline" size={20} color="#6b7280" />
                   <Text style={styles.contactText}>{invoiceData.storeAddress}</Text>
                 </View>
               )}
               {receiptSettings.showPhone && invoiceData.storePhone && (
                 <View style={styles.contactRow}>
-                  <Icon name="call-outline" size={16} color="#6b7280" />
+                  <Icon name="call-outline" size={20} color="#6b7280" />
                   <Text style={styles.contactText}>{invoiceData.storePhone}</Text>
                 </View>
               )}
               {receiptSettings.showEmail && invoiceData.storeEmail && (
                 <View style={styles.contactRow}>
-                  <Icon name="mail-outline" size={16} color="#6b7280" />
+                  <Icon name="mail-outline" size={20} color="#6b7280" />
                   <Text style={styles.contactText}>{invoiceData.storeEmail}</Text>
                 </View>
               )}
               {receiptSettings.showGST && invoiceData.gstNumber && (
                 <View style={styles.contactRow}>
-                  <Icon name="document-text-outline" size={16} color="#6b7280" />
+                  <Icon name="document-text-outline" size={20} color="#6b7280" />
                   <Text style={styles.contactText}>GST: {invoiceData.gstNumber}</Text>
                 </View>
               )}
@@ -311,7 +312,7 @@ const SimpleInvoicePreview = ({
             <Text style={styles.billedToLabel}>Billed to</Text>
             <View style={styles.customerInfo}>
               <View style={styles.customerIcon}>
-                <Icon name="person-outline" size={20} color="#6b7280" />
+                <Icon name="person-outline" size={24} color="#6b7280" />
               </View>
               <View style={styles.customerDetails}>
                 <Text style={styles.customerName}>
@@ -333,7 +334,7 @@ const SimpleInvoicePreview = ({
               invoiceData.items.map((item, index) => (
                 <View key={index} style={styles.itemRow}>
                   <View style={styles.itemIcon}>
-                    <Icon name="cube-outline" size={16} color="#6b7280" />
+                    <Icon name="cube-outline" size={20} color="#6b7280" />
                   </View>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>
@@ -366,7 +367,7 @@ const SimpleInvoicePreview = ({
                   invoiceData.paymentMethod === 'Card' ? 'card-outline' : 
                   invoiceData.paymentMethod === 'QR Pay' ? 'qr-code-outline' : 'cash-outline'
                 } 
-                size={16} 
+                size={20} 
                 color="#6b7280" 
               />
             </View>
@@ -394,9 +395,9 @@ const SimpleInvoicePreview = ({
           activeOpacity={0.8}
           disabled={isGenerating}
         >
-          <Ionicons name={isGenerating ? "hourglass-outline" : "share-outline"} size={18} color={colors.text.primary} style={{ marginRight: 8 }} />
+          <Ionicons name="share-outline" size={18} color={colors.text.primary} style={{ marginRight: 8 }} />
           <Text style={styles.shareButtonText}>
-            {isGenerating ? 'Generating...' : 'Share Invoice'}
+            Share Invoice
           </Text>
         </TouchableOpacity>
         
@@ -414,6 +415,12 @@ const SimpleInvoicePreview = ({
           </TouchableOpacity>
         )}
       </View>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isGenerating} 
+        message="Generating invoice..." 
+      />
     </SafeAreaView>
   );
 };
@@ -469,9 +476,9 @@ const styles = StyleSheet.create({
     marginBottom: 20,
   },
   successIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
     backgroundColor: '#10b981',
     alignItems: 'center',
     justifyContent: 'center',

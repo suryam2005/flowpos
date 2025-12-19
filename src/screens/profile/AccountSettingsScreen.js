@@ -20,6 +20,7 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
 import { safeGoBack } from '../../utils/navigationUtils';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const AccountSettingsScreen = ({ navigation }) => {
@@ -445,11 +446,7 @@ const AccountSettingsScreen = ({ navigation }) => {
                 onPress={handleChangePassword}
                 disabled={isLoading}
               >
-                {isLoading ? (
-                  <LoadingSpinner size="small" color={colors.background.surface} />
-                ) : (
-                  <Text style={styles.saveButtonText}>Change Password</Text>
-                )}
+                <Text style={styles.saveButtonText}>Change Password</Text>
               </TouchableOpacity>
             </View>
           </View>
@@ -497,16 +494,18 @@ const AccountSettingsScreen = ({ navigation }) => {
                 onPress={confirmDeleteAccount}
                 disabled={!deletePassword.trim() || isLoading}
               >
-                {isLoading ? (
-                  <LoadingSpinner size="small" color={colors.text.inverse} />
-                ) : (
-                  <Text style={styles.deleteButtonText}>Delete My Account</Text>
-                )}
+                <Text style={styles.deleteButtonText}>Delete My Account</Text>
               </TouchableOpacity>
             </View>
           </View>
         </View>
       </Modal>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isLoading} 
+        message={deleteAccountModal ? "Deleting account..." : "Changing password..."} 
+      />
     </SafeAreaView>
   );
 };

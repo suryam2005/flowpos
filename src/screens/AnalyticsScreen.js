@@ -24,6 +24,7 @@ import { usePageLoading } from '../hooks/usePageLoading';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import { getProductImageUrl } from '../utils/imageUtils';
 
 // Helper functions for chart data generation
 const generateDailyRevenueData = (orders) => {
@@ -496,13 +497,24 @@ const AnalyticsScreen = ({ navigation }) => {
         <Text style={styles.rankText}>{index + 1}</Text>
       </View>
       <View style={styles.productImage}>
-        {product.image ? (
-          <Image source={{ uri: product.image }} style={styles.productImageStyle} />
-        ) : (
-          <View style={styles.productImagePlaceholder}>
-            <Ionicons name="cube-outline" size={24} color="#6b7280" />
-          </View>
-        )}
+        {(() => {
+          // Get image URL using utility function
+          const displayImageUrl = getProductImageUrl(product);
+          
+          return displayImageUrl ? (
+            <Image 
+              source={{ uri: displayImageUrl }} 
+              style={styles.productImageStyle}
+              onError={(error) => {
+                console.log('❌ [AnalyticsScreen] Image load error:', error.nativeEvent.error);
+              }}
+            />
+          ) : (
+            <View style={styles.productImagePlaceholder}>
+              <Ionicons name="cube-outline" size={24} color="#6b7280" />
+            </View>
+          );
+        })()}
       </View>
       <View style={styles.productInfo}>
         <Text style={styles.productName} numberOfLines={1} ellipsizeMode="tail">

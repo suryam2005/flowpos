@@ -17,12 +17,17 @@ import { PageLoader } from '../components/LoadingSpinner';
 import { usePageLoading } from '../hooks/usePageLoading';
 import PerformanceInsightsService from '../services/PerformanceInsightsService';
 import Icon from '../components/SVGIcons';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
 
 const PerformanceInsightsScreen = ({ navigation }) => {
   const [insightsData, setInsightsData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   
   const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
+  
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('PerformanceInsights');
 
   useEffect(() => {
     loadInsights();
@@ -238,7 +243,11 @@ const PerformanceInsightsScreen = ({ navigation }) => {
           {insightsData.insights.map((insight, index) => (
             <View key={index} style={styles.insightItem}>
               <View style={styles.insightIconContainer}>
-                <Text style={styles.insightEmoji}>{insight.icon}</Text>
+                <Icon 
+                  name={insight.icon} 
+                  size={18} 
+                  color={colors.primary.main} 
+                />
               </View>
               <Text style={styles.insightText}>{insight.message}</Text>
             </View>
@@ -259,10 +268,10 @@ const PerformanceInsightsScreen = ({ navigation }) => {
             style={styles.backButton}
             onPress={() => navigation.goBack()}
           >
-            <Icon name="arrow-back" size={24} color={colors.text.primary} />
+            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Performance Insights</Text>
-          <View style={styles.headerSpacer} />
+          <Text style={styles.title}>Performance Insights</Text>
+          <View style={styles.placeholder} />
         </View>
 
         {/* Content */}
@@ -292,6 +301,13 @@ const PerformanceInsightsScreen = ({ navigation }) => {
           </View>
         </ScrollView>
       </View>
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        currentScreen="PerformanceInsights"
+        onComplete={completeTour}
+      />
     </SafeAreaView>
   );
 };
@@ -306,10 +322,11 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    paddingTop: 60,
     backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
@@ -317,16 +334,13 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
-  headerTitle: {
-    flex: 1,
-    fontSize: 20,
+  title: {
+    fontSize: 24,
     fontWeight: '700',
     color: colors.text.primary,
-    textAlign: 'center',
-    marginHorizontal: 16,
   },
-  headerSpacer: {
-    width: 40,
+  placeholder: {
+    width: 36,
   },
   scrollView: {
     flex: 1,
@@ -450,9 +464,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  insightEmoji: {
-    fontSize: 18,
-  },
+
   insightText: {
     flex: 1,
     fontSize: 15,

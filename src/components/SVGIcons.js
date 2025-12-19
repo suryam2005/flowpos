@@ -493,6 +493,299 @@ const SVGIcons = {
         borderBottomColor: color
       }} />
     </View>
+  ),
+
+  // Trending Up icon (for growth/increase)
+  TrendingUpIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Upward trending line */}
+      <View style={{
+        width: size * 0.8,
+        height: 2,
+        backgroundColor: color,
+        transform: [{ rotate: '-20deg' }],
+        position: 'absolute'
+      }} />
+      {/* Arrow head */}
+      <View style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: size * 0.15,
+        borderBottomWidth: size * 0.15,
+        borderLeftColor: 'transparent',
+        borderBottomColor: color,
+        position: 'absolute',
+        right: size * 0.05,
+        top: size * 0.25,
+        transform: [{ rotate: '45deg' }]
+      }} />
+    </View>
+  ),
+
+  // Trending Down icon (for decrease)
+  TrendingDownIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Downward trending line */}
+      <View style={{
+        width: size * 0.8,
+        height: 2,
+        backgroundColor: color,
+        transform: [{ rotate: '20deg' }],
+        position: 'absolute'
+      }} />
+      {/* Arrow head */}
+      <View style={{
+        width: 0,
+        height: 0,
+        borderLeftWidth: size * 0.15,
+        borderTopWidth: size * 0.15,
+        borderLeftColor: 'transparent',
+        borderTopColor: color,
+        position: 'absolute',
+        right: size * 0.05,
+        bottom: size * 0.25,
+        transform: [{ rotate: '-45deg' }]
+      }} />
+    </View>
+  ),
+
+  // Target icon (for goals/targets)
+  TargetIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Outer circle */}
+      <View style={{
+        width: size * 0.9,
+        height: size * 0.9,
+        borderRadius: size * 0.45,
+        borderWidth: 1.5,
+        borderColor: color,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        {/* Middle circle */}
+        <View style={{
+          width: size * 0.6,
+          height: size * 0.6,
+          borderRadius: size * 0.3,
+          borderWidth: 1.5,
+          borderColor: color,
+          backgroundColor: 'transparent',
+          justifyContent: 'center',
+          alignItems: 'center'
+        }}>
+          {/* Center dot */}
+          <View style={{
+            width: size * 0.2,
+            height: size * 0.2,
+            borderRadius: size * 0.1,
+            backgroundColor: color
+          }} />
+        </View>
+      </View>
+    </View>
+  ),
+
+  // Calendar icon (for date ranges)
+  CalendarIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Calendar body */}
+      <View style={{
+        width: size * 0.8,
+        height: size * 0.8,
+        borderWidth: 1.5,
+        borderColor: color,
+        borderRadius: 2,
+        backgroundColor: 'transparent',
+        marginTop: size * 0.1
+      }}>
+        {/* Calendar header */}
+        <View style={{
+          width: '100%',
+          height: size * 0.2,
+          backgroundColor: color,
+          borderTopLeftRadius: 1,
+          borderTopRightRadius: 1
+        }} />
+        {/* Calendar grid dots */}
+        <View style={{
+          flexDirection: 'row',
+          justifyContent: 'space-around',
+          alignItems: 'center',
+          flex: 1,
+          paddingHorizontal: size * 0.1
+        }}>
+          <View style={{ width: 2, height: 2, backgroundColor: color, borderRadius: 1 }} />
+          <View style={{ width: 2, height: 2, backgroundColor: color, borderRadius: 1 }} />
+          <View style={{ width: 2, height: 2, backgroundColor: color, borderRadius: 1 }} />
+        </View>
+      </View>
+      {/* Calendar rings */}
+      <View style={{
+        position: 'absolute',
+        top: size * 0.02,
+        left: size * 0.25,
+        width: size * 0.1,
+        height: size * 0.15,
+        borderWidth: 1,
+        borderColor: color,
+        borderBottomWidth: 0,
+        borderRadius: 2
+      }} />
+      <View style={{
+        position: 'absolute',
+        top: size * 0.02,
+        right: size * 0.25,
+        width: size * 0.1,
+        height: size * 0.15,
+        borderWidth: 1,
+        borderColor: color,
+        borderBottomWidth: 0,
+        borderRadius: 2
+      }} />
+    </View>
+  ),
+
+  // Currency icon (for revenue)
+  CurrencyIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Dollar sign */}
+      <View style={{
+        width: size * 0.7,
+        height: size * 0.9,
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        {/* Vertical line */}
+        <View style={{
+          width: 2,
+          height: size * 0.9,
+          backgroundColor: color,
+          position: 'absolute'
+        }} />
+        {/* Top curve */}
+        <View style={{
+          width: size * 0.5,
+          height: size * 0.3,
+          borderWidth: 2,
+          borderColor: color,
+          borderBottomWidth: 0,
+          borderLeftWidth: 0,
+          borderTopRightRadius: size * 0.15,
+          position: 'absolute',
+          top: size * 0.1
+        }} />
+        {/* Bottom curve */}
+        <View style={{
+          width: size * 0.5,
+          height: size * 0.3,
+          borderWidth: 2,
+          borderColor: color,
+          borderTopWidth: 0,
+          borderRightWidth: 0,
+          borderBottomLeftRadius: size * 0.15,
+          position: 'absolute',
+          bottom: size * 0.1,
+          right: 0
+        }} />
+      </View>
+    </View>
+  ),
+
+  // Users icon (for customers)
+  UsersIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* First person (left) */}
+      <View style={{
+        position: 'absolute',
+        left: 0,
+        width: size * 0.6,
+        height: size * 0.8,
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        {/* Head */}
+        <View style={{
+          width: size * 0.25,
+          height: size * 0.25,
+          borderRadius: size * 0.125,
+          borderWidth: 1.5,
+          borderColor: color,
+          backgroundColor: 'transparent',
+          marginBottom: size * 0.05
+        }} />
+        {/* Body */}
+        <View style={{
+          width: size * 0.45,
+          height: size * 0.35,
+          borderTopLeftRadius: size * 0.225,
+          borderTopRightRadius: size * 0.225,
+          borderWidth: 1.5,
+          borderColor: color,
+          backgroundColor: 'transparent'
+        }} />
+      </View>
+      {/* Second person (right, slightly overlapped) */}
+      <View style={{
+        position: 'absolute',
+        right: 0,
+        width: size * 0.6,
+        height: size * 0.8,
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        {/* Head */}
+        <View style={{
+          width: size * 0.25,
+          height: size * 0.25,
+          borderRadius: size * 0.125,
+          borderWidth: 1.5,
+          borderColor: color,
+          backgroundColor: 'transparent',
+          marginBottom: size * 0.05
+        }} />
+        {/* Body */}
+        <View style={{
+          width: size * 0.45,
+          height: size * 0.35,
+          borderTopLeftRadius: size * 0.225,
+          borderTopRightRadius: size * 0.225,
+          borderWidth: 1.5,
+          borderColor: color,
+          backgroundColor: 'transparent'
+        }} />
+      </View>
+    </View>
   )
 };
 
@@ -513,6 +806,12 @@ const Icon = ({ name, size = 20, color = '#000', style }) => {
     'cloud-outline': SVGIcons.CloudIcon,
     'information-circle-outline': SVGIcons.InfoIcon,
     'document-pdf-outline': SVGIcons.PDFIcon,
+    'trending-up-outline': SVGIcons.TrendingUpIcon,
+    'trending-down-outline': SVGIcons.TrendingDownIcon,
+    'target-outline': SVGIcons.TargetIcon,
+    'calendar-outline': SVGIcons.CalendarIcon,
+    'currency-outline': SVGIcons.CurrencyIcon,
+    'users-outline': SVGIcons.UsersIcon,
     'cash-outline': () => <Text style={{ fontSize: size * 0.8, color }}>$</Text>,
     'card-outline': () => <Text style={{ fontSize: size * 0.8, color }}>💳</Text>,
     'qr-code-outline': () => <Text style={{ fontSize: size * 0.8, color }}>⚏</Text>,

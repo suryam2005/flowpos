@@ -22,6 +22,7 @@ import featureService from '../services/FeatureService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import { getProductImageUrl } from '../utils/imageUtils';
 
 
 
@@ -42,8 +43,9 @@ const POSScreen = ({ navigation, route }) => {
   const { data: products, refresh: refreshProducts } = useRealtimeProducts();
   const { data: storeInfo } = useRealtimeStoreInfo();
   
-  // Get store name - check both name and store_name fields
-  const storeName = storeInfo?.name || storeInfo?.store_name || 'FlowPOS Store';
+  // Get store name - always display, independent of settings
+  // Priority: user settings → profile → store name → fallback: "My Store"
+  const storeName = storeInfo?.store_name || storeInfo?.name || 'My Store';
 
   // Initialize feature service and trigger initial load
   useEffect(() => {
@@ -72,10 +74,13 @@ const POSScreen = ({ navigation, route }) => {
   // Handle tour trigger from route params
   useEffect(() => {
     if (route?.params?.startTour) {
+      console.log('🎯 [POS] Tour trigger received from route params');
+      
       // Small delay to ensure screen is fully loaded
       setTimeout(() => {
+        console.log('🎯 [POS] Starting tour manually from route params');
         startTour();
-      }, 1000);
+      }, 1500);
       
       // Clear the param to prevent re-triggering
       navigation.setParams({ startTour: undefined });
@@ -210,6 +215,9 @@ const POSScreen = ({ navigation, route }) => {
   const renderProduct = ({ item }) => {
     const quantity = getProductQuantity(item.id);
     
+    // Get image URL using utility function
+    const displayImageUrl = getProductImageUrl(item);
+    
     return (
       <TouchableOpacity
         style={styles.productCard}
@@ -219,8 +227,18 @@ const POSScreen = ({ navigation, route }) => {
       >
         {/* Image Section - 60% of card */}
         <View style={styles.productImage}>
-          {item.image ? (
-            <Image source={{ uri: item.image }} style={styles.productImageStyle} />
+          {displayImageUrl ? (
+            <Image 
+              source={{ uri: displayImageUrl }} 
+              style={styles.productImageStyle}
+              onError={(error) => {
+                console.log('❌ [POSScreen] Image load error for', item.name, ':', error.nativeEvent.error);
+                console.log('❌ [POSScreen] Failed URL:', displayImageUrl);
+              }}
+              onLoad={() => {
+                console.log('✅ [POSScreen] Image loaded successfully for', item.name);
+              }}
+            />
           ) : (
             <View style={styles.productImagePlaceholder}>
               <Ionicons name="cube-outline" size={32} color="#6b7280" />
@@ -386,11 +404,7 @@ const POSScreen = ({ navigation, route }) => {
 
       {getItemCount() > 0 && (
         <View style={styles.cartSummary}>
-          <TouchableOpacity
-            style={styles.cartSummaryContent}
-            onPress={() => navigation.navigate('Cart')}
-            activeOpacity={0.9}
-          >
+          <View style={styles.cartSummaryContent}>
             <View style={styles.cartInfo}>
               <ResponsiveText variant="caption" style={styles.cartItems}>
                 {getItemCount()} items
@@ -399,6 +413,7 @@ const POSScreen = ({ navigation, route }) => {
                 ₹{getTotal()}
               </ResponsiveText>
             </View>
+            <View style={styles.cartSpacer} />
             <View style={styles.cartActions}>
               <TouchableOpacity
                 style={styles.clearCartButton}
@@ -407,13 +422,17 @@ const POSScreen = ({ navigation, route }) => {
               >
                 <Ionicons name="trash-outline" size={24} color={colors.error.main} />
               </TouchableOpacity>
-              <View style={styles.cartButton}>
+              <TouchableOpacity
+                style={styles.cartButton}
+                onPress={() => navigation.navigate('Cart')}
+                activeOpacity={0.8}
+              >
                 <ResponsiveText variant="button" style={styles.cartButtonText}>
                   Complete Order
                 </ResponsiveText>
-              </View>
+              </TouchableOpacity>
             </View>
-          </TouchableOpacity>
+          </View>
         </View>
       )}
 
@@ -600,10 +619,10 @@ const styles = StyleSheet.create({
   productImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: colors.background.primary,
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
-    borderRadius: 12,
+    borderRadius: 8,
   },
   productImagePlaceholderText: {
     fontSize: 48, // Larger icon for bigger image area
@@ -701,8 +720,13 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 16,
+    minHeight: 56,
   },
   cartInfo: {
+    paddingRight: 12,
+    // Remove any flex properties to prevent taking extra space
+  },
+  cartSpacer: {
     flex: 1,
   },
   cartItems: {

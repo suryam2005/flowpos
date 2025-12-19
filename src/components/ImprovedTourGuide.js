@@ -139,6 +139,68 @@ const ImprovedTourGuide = ({ visible, onComplete, currentScreen }) => {
         cardPosition: 'center',
       },
     ],
+    Settings: [
+      {
+        title: 'App Settings ⚙️',
+        description: 'Configure your app preferences, business settings, and integrations. Customize FlowPOS to work best for your business.',
+        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 80 },
+        cardPosition: 'bottom',
+      },
+      {
+        title: 'Business Configuration 🏪',
+        description: 'Set up WhatsApp integration, invoice settings, payment methods, and other business-specific configurations.',
+        highlight: { top: statusBarHeight + 80, left: 20, width: width - 40, height: Math.max(400, height * 0.6) },
+        cardPosition: 'center',
+      },
+    ],
+    WhatsAppSetup: [
+      {
+        title: 'WhatsApp Business Integration 📱',
+        description: 'Set up WhatsApp to automatically send professional invoices to your customers. This uses Twilio\'s WhatsApp Business API.',
+        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 80 },
+        cardPosition: 'bottom',
+      },
+      {
+        title: 'Twilio Configuration 🔧',
+        description: 'Enter your Twilio credentials to connect WhatsApp. You\'ll need Account SID, Auth Token, and WhatsApp number from your Twilio console.',
+        highlight: { top: statusBarHeight + 120, left: 20, width: width - 40, height: Math.max(300, height * 0.4) },
+        cardPosition: 'center',
+      },
+      {
+        title: 'Test & Save 💾',
+        description: 'Always test your configuration first to ensure it works properly, then save it. Your customers will receive professional invoices via WhatsApp.',
+        highlight: { top: height - 100, left: 0, width: '100%', height: 100 },
+        cardPosition: 'top',
+      },
+    ],
+    PerformanceInsights: [
+      {
+        title: 'Performance Analytics 📊',
+        description: 'Monitor your business performance with advanced insights, health scores, and optimization recommendations.',
+        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 80 },
+        cardPosition: 'bottom',
+      },
+      {
+        title: 'Business Health Score 💪',
+        description: 'View your overall business health score and get actionable insights to improve performance and efficiency.',
+        highlight: { top: statusBarHeight + 80, left: 20, width: width - 40, height: Math.max(400, height * 0.6) },
+        cardPosition: 'center',
+      },
+    ],
+    StorageManagement: [
+      {
+        title: 'Cloud Storage Management ☁️',
+        description: 'Monitor your cloud storage usage, manage data efficiently, and optimize storage costs across your FlowPOS account.',
+        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 80 },
+        cardPosition: 'bottom',
+      },
+      {
+        title: 'Storage Analytics 📈',
+        description: 'View detailed storage breakdowns by data type, track usage trends, and get recommendations for optimization.',
+        highlight: { top: statusBarHeight + 80, left: 20, width: width - 40, height: Math.max(400, height * 0.6) },
+        cardPosition: 'center',
+      },
+    ],
   };
 
   useEffect(() => {
@@ -158,13 +220,38 @@ const ImprovedTourGuide = ({ visible, onComplete, currentScreen }) => {
     }
   };
 
-  const handleSkip = () => {
+  const handleSkip = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-    handleComplete();
+    
+    try {
+      console.log(`🎯 [${currentScreen}] Skip button pressed - skipping all tours`);
+      
+      // Mark overall app tour as seen
+      await AsyncStorage.setItem('hasSeenAppTour', 'true');
+      
+      // Mark all screen tours as completed
+      const allScreens = ['POS', 'Cart', 'Manage', 'Orders', 'Analytics', 'Settings', 'WhatsAppSetup', 'PerformanceInsights', 'StorageManagement'];
+      const tours = {};
+      allScreens.forEach(screen => {
+        tours[screen] = true;
+      });
+      await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
+      
+      console.log(`🎯 [${currentScreen}] All tours skipped successfully`);
+      
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      onComplete();
+    } catch (error) {
+      console.error('Error skipping all tours:', error);
+      // Still complete the current tour even if skip all fails
+      handleComplete();
+    }
   };
 
   const handleComplete = async () => {
     try {
+      console.log(`🎯 [${currentScreen}] Tour completed - saving completion status`);
+      
       // Mark tour as completed for this screen
       const completedTours = await AsyncStorage.getItem('completedTours');
       const tours = completedTours ? JSON.parse(completedTours) : {};
@@ -173,6 +260,8 @@ const ImprovedTourGuide = ({ visible, onComplete, currentScreen }) => {
       
       // Mark overall tour as seen
       await AsyncStorage.setItem('hasSeenAppTour', 'true');
+      
+      console.log(`🎯 [${currentScreen}] Tour completion saved successfully`);
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       onComplete();

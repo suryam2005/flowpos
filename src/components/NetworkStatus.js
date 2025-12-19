@@ -67,7 +67,7 @@ const NetworkStatus = ({ visible = true }) => {
   const handleDirectTest = async () => {
     try {
       // Test the local backend URL directly
-      const testUrl = 'http://192.168.1.3:3000/api/store';
+      const testUrl = 'http://192.168.1.2:3000/api/store';
       console.log(`🧪 Direct test: ${testUrl}`);
       
       const response = await fetch(testUrl, {

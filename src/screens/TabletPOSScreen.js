@@ -22,6 +22,8 @@ import TabletLayout from '../components/TabletLayout';
 import TabletCartSidebar from '../components/TabletCartSidebar';
 import { getDeviceInfo, getGridColumns, getTabletLayoutConfig } from '../utils/deviceUtils';
 import { webScrollFix, webContainerFix, webScrollableContainer } from '../styles/webStyles';
+import { getProductImageUrl } from '../utils/imageUtils';
+import { colors } from '../styles/colors';
 
 const TabletPOSScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
@@ -165,13 +167,24 @@ const TabletPOSScreen = ({ navigation }) => {
         activeOpacity={0.8}
       >
         <View style={[styles.productImage, isTablet && styles.tabletProductImage]}>
-          {item.image ? (
-            <Image source={{ uri: item.image }} style={styles.productImageStyle} />
-          ) : (
-            <View style={styles.productImagePlaceholder}>
-              <Ionicons name="cube-outline" size={isTablet ? 40 : 32} color="#6b7280" />
-            </View>
-          )}
+          {(() => {
+            // Get image URL using utility function
+            const displayImageUrl = getProductImageUrl(item);
+            
+            return displayImageUrl ? (
+              <Image 
+                source={{ uri: displayImageUrl }} 
+                style={styles.productImageStyle}
+                onError={(error) => {
+                  console.log('❌ [TabletPOSScreen] Image load error:', error.nativeEvent.error);
+                }}
+              />
+            ) : (
+              <View style={styles.productImagePlaceholder}>
+                <Ionicons name="cube-outline" size={isTablet ? 40 : 32} color="#6b7280" />
+              </View>
+            );
+          })()}
         </View>
         <Text style={[styles.productName, isTablet && styles.tabletProductName]}>{item.name}</Text>
         <Text style={[styles.productPrice, isTablet && styles.tabletProductPrice]}>₹{item.price}</Text>
@@ -466,7 +479,7 @@ const styles = StyleSheet.create({
   productImagePlaceholder: {
     width: '100%',
     height: '100%',
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
     borderRadius: 12,

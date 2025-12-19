@@ -47,21 +47,27 @@ export const generateInvoiceHTML = (invoiceData) => {
       <meta name="viewport" content="width=device-width, initial-scale=1">
       <title>Invoice ${invoiceNumber}</title>
       <style>
+        @page {
+          margin: 60px 40px;
+        }
+        
         body {
           font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
           margin: 0;
-          padding: 20px;
+          padding: 0;
           background-color: #ffffff;
           color: #1f2937;
           line-height: 1.5;
         }
         .invoice-container {
-          max-width: 800px;
+          max-width: 700px;
           margin: 0 auto;
+          padding: 40px;
           background: white;
           border: 1px solid #e5e7eb;
           border-radius: 8px;
           overflow: hidden;
+          box-sizing: border-box;
         }
         .header {
           background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
@@ -283,6 +289,12 @@ export const generateInvoicePDF = async (invoiceData) => {
       base64: false,
       width: 612, // A4 width in points
       height: 792, // A4 height in points
+      margins: {
+        left: 40,
+        top: 40,
+        right: 40,
+        bottom: 40,
+      },
     });
 
     if (!uri) {

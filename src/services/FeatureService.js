@@ -371,10 +371,6 @@ class FeatureService {
   getAvailablePaymentMethods() {
     const methods = ['Cash']; // Always available
 
-    if (this.canUseFeature('card_payments')) {
-      methods.push('Card');
-    }
-
     if (this.canUseFeature('upi_payments')) {
       methods.push('QR Pay');
     }

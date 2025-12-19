@@ -18,7 +18,9 @@ import TagInput from '../../components/TagInput';
 import ProductImagePicker from '../../components/ProductImagePicker';
 import { generateProductTags } from '../../utils/tagGenerator';
 import { colors } from '../../styles/colors';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import productsService from '../../services/ProductsService';
+import NetworkService from '../../services/NetworkService';
 
 const ProductOnboardingScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
@@ -35,32 +37,214 @@ const ProductOnboardingScreen = ({ navigation }) => {
     tags: [],
     image: null,
   });
+  const [isCreating, setIsCreating] = useState(false);
+  const [isAddingSamples, setIsAddingSamples] = useState(false);
 
-  // Sample products to help users get started quickly
+  // Sample products to help users get started quickly with high-quality images
   const sampleProducts = {
     'Restaurant/Cafe': [
-      { name: 'Coffee', price: '80', emoji: '☕', category: 'Beverages', tags: ['Beverages', 'Hot Drinks'] },
-      { name: 'Sandwich', price: '120', emoji: '🥪', category: 'Food', tags: ['Food', 'Snacks'] },
-      { name: 'Burger', price: '150', emoji: '🍔', category: 'Food', tags: ['Food', 'Main Course'] },
-      { name: 'Tea', price: '50', emoji: '🍵', category: 'Beverages', tags: ['Beverages', 'Hot Drinks'] },
+      { 
+        name: 'Coffee', 
+        price: '80', 
+        emoji: '☕', 
+        category: 'Beverages', 
+        tags: ['Beverages', 'Hot Drinks'],
+        image_url: 'https://images.unsplash.com/photo-1509042239860-f550ce710b93?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Sandwich', 
+        price: '120', 
+        emoji: '🥪', 
+        category: 'Food', 
+        tags: ['Food', 'Snacks'],
+        image_url: 'https://images.unsplash.com/photo-1553909489-cd47e0ef937f?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Burger', 
+        price: '150', 
+        emoji: '🍔', 
+        category: 'Food', 
+        tags: ['Food', 'Main Course'],
+        image_url: 'https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Tea', 
+        price: '50', 
+        emoji: '🍵', 
+        category: 'Beverages', 
+        tags: ['Beverages', 'Hot Drinks'],
+        image_url: 'https://images.unsplash.com/photo-1556679343-c7306c1976bc?w=400&h=400&fit=crop&auto=format'
+      },
     ],
     'Retail Store': [
-      { name: 'T-Shirt', price: '500', emoji: '👕', category: 'Clothing', tags: ['Clothing', 'Casual Wear'] },
-      { name: 'Jeans', price: '1200', emoji: '👖', category: 'Clothing', tags: ['Clothing', 'Bottom Wear'] },
-      { name: 'Shoes', price: '2000', emoji: '👟', category: 'Footwear', tags: ['Footwear', 'Sports'] },
-      { name: 'Cap', price: '300', emoji: '🧢', category: 'Accessories', tags: ['Accessories', 'Headwear'] },
+      { 
+        name: 'T-Shirt', 
+        price: '500', 
+        emoji: '👕', 
+        category: 'Clothing', 
+        tags: ['Clothing', 'Casual Wear'],
+        image_url: 'https://images.unsplash.com/photo-1521572163474-6864f9cf17ab?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Jeans', 
+        price: '1200', 
+        emoji: '👖', 
+        category: 'Clothing', 
+        tags: ['Clothing', 'Bottom Wear'],
+        image_url: 'https://images.unsplash.com/photo-1542272604-787c3835535d?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Shoes', 
+        price: '2000', 
+        emoji: '👟', 
+        category: 'Footwear', 
+        tags: ['Footwear', 'Sports'],
+        image_url: 'https://images.unsplash.com/photo-1549298916-b41d501d3772?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Cap', 
+        price: '300', 
+        emoji: '🧢', 
+        category: 'Accessories', 
+        tags: ['Accessories', 'Headwear'],
+        image_url: 'https://images.unsplash.com/photo-1588850561407-ed78c282e89b?w=400&h=400&fit=crop&auto=format'
+      },
     ],
     'Grocery Store': [
-      { name: 'Rice (1kg)', price: '80', emoji: '🍚', category: 'Grains', tags: ['Grains', 'Staples'] },
-      { name: 'Milk (1L)', price: '60', emoji: '🥛', category: 'Dairy', tags: ['Dairy', 'Fresh'] },
-      { name: 'Bread', price: '40', emoji: '🍞', category: 'Bakery', tags: ['Bakery', 'Fresh'] },
-      { name: 'Eggs (12pc)', price: '120', emoji: '🥚', category: 'Dairy', tags: ['Dairy', 'Fresh'] },
+      { 
+        name: 'Rice (1kg)', 
+        price: '80', 
+        emoji: '🍚', 
+        category: 'Grains', 
+        tags: ['Grains', 'Staples'],
+        image_url: 'https://images.unsplash.com/photo-1586201375761-83865001e31c?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Milk (1L)', 
+        price: '60', 
+        emoji: '🥛', 
+        category: 'Dairy', 
+        tags: ['Dairy', 'Fresh'],
+        image_url: 'https://images.unsplash.com/photo-1550583724-b2692b85b150?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Bread', 
+        price: '40', 
+        emoji: '🍞', 
+        category: 'Bakery', 
+        tags: ['Bakery', 'Fresh'],
+        image_url: 'https://images.unsplash.com/photo-1509440159596-0249088772ff?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Eggs (12pc)', 
+        price: '120', 
+        emoji: '🥚', 
+        category: 'Dairy', 
+        tags: ['Dairy', 'Fresh'],
+        image_url: 'https://images.unsplash.com/photo-1582722872445-44dc5f7e3c8f?w=400&h=400&fit=crop&auto=format'
+      },
+    ],
+    'Fashion & Apparel': [
+      { 
+        name: 'Dress', 
+        price: '800', 
+        emoji: '👗', 
+        category: 'Clothing', 
+        tags: ['Clothing', 'Women'],
+        image_url: 'https://images.unsplash.com/photo-1595777457583-95e059d581b8?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Handbag', 
+        price: '1500', 
+        emoji: '👜', 
+        category: 'Accessories', 
+        tags: ['Accessories', 'Bags'],
+        image_url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Sunglasses', 
+        price: '600', 
+        emoji: '🕶️', 
+        category: 'Accessories', 
+        tags: ['Accessories', 'Eyewear'],
+        image_url: 'https://images.unsplash.com/photo-1572635196237-14b3f281503f?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Watch', 
+        price: '2500', 
+        emoji: '⌚', 
+        category: 'Accessories', 
+        tags: ['Accessories', 'Jewelry'],
+        image_url: 'https://images.unsplash.com/photo-1524592094714-0f0654e20314?w=400&h=400&fit=crop&auto=format'
+      },
+    ],
+    'Electronics': [
+      { 
+        name: 'Smartphone', 
+        price: '15000', 
+        emoji: '📱', 
+        category: 'Mobile', 
+        tags: ['Mobile', 'Electronics'],
+        image_url: 'https://images.unsplash.com/photo-1511707171634-5f897ff02aa9?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Headphones', 
+        price: '2000', 
+        emoji: '🎧', 
+        category: 'Audio', 
+        tags: ['Audio', 'Electronics'],
+        image_url: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Laptop', 
+        price: '45000', 
+        emoji: '💻', 
+        category: 'Computers', 
+        tags: ['Computers', 'Electronics'],
+        image_url: 'https://images.unsplash.com/photo-1496181133206-80ce9b88a853?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Power Bank', 
+        price: '1200', 
+        emoji: '🔋', 
+        category: 'Accessories', 
+        tags: ['Accessories', 'Electronics'],
+        image_url: 'https://images.unsplash.com/photo-1609592806787-3d9c1b8e5e8e?w=400&h=400&fit=crop&auto=format'
+      },
     ],
     'default': [
-      { name: 'Product 1', price: '100', emoji: '📦', category: 'General', tags: ['General'] },
-      { name: 'Product 2', price: '200', emoji: '📦', category: 'General', tags: ['General'] },
-      { name: 'Product 3', price: '150', emoji: '📦', category: 'General', tags: ['General'] },
-      { name: 'Product 4', price: '250', emoji: '📦', category: 'General', tags: ['General'] },
+      { 
+        name: 'Product 1', 
+        price: '100', 
+        emoji: '📦', 
+        category: 'General', 
+        tags: ['General'],
+        image_url: 'https://images.unsplash.com/photo-1553062407-98eeb64c6a62?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Product 2', 
+        price: '200', 
+        emoji: '📦', 
+        category: 'General', 
+        tags: ['General'],
+        image_url: 'https://images.unsplash.com/photo-1560472354-b33ff0c44a43?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Product 3', 
+        price: '150', 
+        emoji: '📦', 
+        category: 'General', 
+        tags: ['General'],
+        image_url: 'https://images.unsplash.com/photo-1586953208448-b95a79798f07?w=400&h=400&fit=crop&auto=format'
+      },
+      { 
+        name: 'Product 4', 
+        price: '250', 
+        emoji: '📦', 
+        category: 'General', 
+        tags: ['General'],
+        image_url: 'https://images.unsplash.com/photo-1542838132-92c53300491e?w=400&h=400&fit=crop&auto=format'
+      },
     ]
   };
 
@@ -94,7 +278,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
       const storeData = await AsyncStorage.getItem('storeInfo');
       if (storeData) {
         const store = JSON.parse(storeData);
-        setBusinessType(store.businessType || 'restaurant');
+        setBusinessType(store.business_type || store.businessType || 'Restaurant/Cafe');
       }
     } catch (error) {
       console.error('Error loading business type:', error);
@@ -102,31 +286,181 @@ const ProductOnboardingScreen = ({ navigation }) => {
   };
 
   const getSampleProducts = () => {
-    return sampleProducts[businessType] || sampleProducts['default'];
+    // Map business types to sample product keys
+    const businessTypeMap = {
+      'Restaurant': 'Restaurant/Cafe',
+      'Cafe': 'Restaurant/Cafe',
+      'Restaurant/Cafe': 'Restaurant/Cafe',
+      'Retail Store': 'Retail Store',
+      'Grocery Store': 'Grocery Store',
+      'Fashion & Apparel': 'Fashion & Apparel',
+      'Electronics': 'Electronics',
+      'Beauty & Wellness': 'default',
+      'Pharmacy': 'default',
+      'Bookstore': 'default',
+      'Professional Services': 'default',
+      'Cafe & Bakery': 'Restaurant/Cafe',
+      'Automotive': 'default',
+      'Other': 'default'
+    };
+    
+    const mappedType = businessTypeMap[businessType] || 'default';
+    return sampleProducts[mappedType] || sampleProducts['default'];
   };
 
   const handleAddSampleProducts = async () => {
+    if (isAddingSamples) {
+      console.log('⚠️ Sample products already being added, ignoring duplicate request');
+      return;
+    }
+
+    setIsAddingSamples(true);
+    
     try {
-      const samples = getSampleProducts();
+      console.log('🚨 Adding sample products via backend API...');
+      console.log('📊 Business Type:', businessType);
       
-      // Create products in Supabase using ProductsService
-      for (const sample of samples) {
-        const productData = {
-          name: sample.name,
-          price: parseInt(sample.price),
-          stock_quantity: 50,
-          track_stock: true, // Enable stock tracking for sample products
-          category: sample.category,
-          tags: sample.tags, // Include tags in backend call
-          description: `Sample ${sample.category.toLowerCase()} product`,
-        };
-        
-        console.log('🚨 Creating sample product in Supabase:', productData);
-        await productsService.createProduct(productData);
+      // Call backend API to add sample products
+      const response = await NetworkService.apiCall('/store/sample-products', {
+        method: 'POST',
+        body: JSON.stringify({
+          business_type: businessType
+        }),
+      });
+
+      // Check if response is a Response object and parse it
+      let parsedResponse;
+      if (response && typeof response.json === 'function') {
+        parsedResponse = await response.json();
+      } else {
+        parsedResponse = response;
       }
 
-      // Refresh products list from Supabase
+      console.log('📡 API Response:', parsedResponse);
+
+      if (parsedResponse && parsedResponse.success) {
+        console.log(`✅ Sample products added via API: ${parsedResponse.created}/${parsedResponse.total}`);
+        
+        // Refresh products list from Supabase
+        await refreshProductsList();
+
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        setAlertConfig({
+          title: 'Sample Products Added! 🎉',
+          message: `Added ${parsedResponse.created} sample products with images to get you started. You can edit or delete these later.`,
+          type: 'success',
+          buttons: [{ text: 'Great!', style: 'default' }],
+        });
+        setShowAlert(true);
+      } else {
+        // If API fails, try fallback local sample products
+        console.log('⚠️ API failed, trying local fallback...');
+        await addLocalSampleProducts();
+      }
+      
+    } catch (error) {
+      console.error('❌ Error adding sample products:', error);
+      
+      // Enhanced error handling with specific error messages
+      let errorMessage = 'Failed to add sample products. Please try again.';
+      let showRetry = true;
+      
+      if (error.message.includes('Cannot connect to server') || 
+          error.message.includes('Network request failed') ||
+          error.message.includes('Cannot connect to backend server')) {
+        errorMessage = 'Cannot connect to server. Please check your internet connection and try again.';
+      } else if (error.message.includes('apiCall is not a function') || 
+                 error.message.includes('NetworkService') ||
+                 typeof NetworkService.apiCall !== 'function') {
+        errorMessage = 'Network service not available. Please restart the app and try again.';
+        showRetry = false;
+      } else if (error.message.includes('401') || error.message.includes('Unauthorized')) {
+        errorMessage = 'Authentication expired. Please log out and log back in.';
+        showRetry = false;
+      } else if (error.message.includes('500') || error.message.includes('Internal Server Error')) {
+        errorMessage = 'Server error. Please try again in a few moments.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      const alertButtons = showRetry ? [
+        { text: 'Retry', onPress: () => handleAddSampleProducts() },
+        { 
+          text: 'Add Locally', 
+          onPress: async () => {
+            setIsAddingSamples(true);
+            try {
+              await addLocalSampleProducts();
+            } catch (localError) {
+              Alert.alert('Error', 'Failed to add sample products. Please try adding products manually.');
+            } finally {
+              setIsAddingSamples(false);
+            }
+          }
+        },
+        { text: 'Cancel', style: 'cancel' }
+      ] : [
+        { text: 'OK', style: 'default' }
+      ];
+      
+      Alert.alert('Error Adding Sample Products', errorMessage, alertButtons);
+    } finally {
+      setIsAddingSamples(false);
+    }
+  };
+
+  const addLocalSampleProducts = async () => {
+    try {
+      console.log('🔄 Adding sample products locally as fallback...');
+      const sampleProductsToAdd = getSampleProducts();
+      
+      let addedCount = 0;
+      for (const sampleProduct of sampleProductsToAdd) {
+        try {
+          const productData = {
+            name: sampleProduct.name,
+            price: parseInt(sampleProduct.price),
+            stock_quantity: 50, // Default stock
+            track_stock: true,
+            category: sampleProduct.category || 'General',
+            tags: sampleProduct.tags || ['Sample'],
+            description: `Sample ${sampleProduct.category || 'product'} for ${businessType}`,
+            image_url: sampleProduct.image_url || '',
+          };
+
+          await productsService.createProduct(productData);
+          addedCount++;
+        } catch (productError) {
+          console.error('❌ Failed to add sample product:', sampleProduct.name, productError);
+        }
+      }
+
+      if (addedCount > 0) {
+        await refreshProductsList();
+        
+        setAlertConfig({
+          title: 'Sample Products Added! 🎉',
+          message: `Added ${addedCount} sample products to get you started. You can edit or delete these later.`,
+          type: 'success',
+          buttons: [{ text: 'Great!', style: 'default' }],
+        });
+        setShowAlert(true);
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      } else {
+        throw new Error('Failed to add any sample products');
+      }
+    } catch (error) {
+      console.error('❌ Local sample products fallback failed:', error);
+      throw error;
+    }
+  };
+
+  const refreshProductsList = async () => {
+    try {
       const updatedProducts = await productsService.getProducts();
+      console.log(`✅ Refreshed products list: ${updatedProducts.length} products`);
       setProducts(updatedProducts);
       
       // Also save to AsyncStorage for onboarding completion tracking
@@ -134,21 +468,14 @@ const ProductOnboardingScreen = ({ navigation }) => {
       if (updatedProducts.length >= 4) {
         await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
         await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+        console.log('✅ Onboarding marked as completed');
       }
-
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       
-      setAlertConfig({
-        title: 'Sample Products Added! 🎉',
-        message: `Added ${samples.length} sample products to get you started. You can edit or delete these later.`,
-        type: 'success',
-        buttons: [{ text: 'Great!', style: 'default' }],
-      });
-      setShowAlert(true);
-      
-    } catch (error) {
-      console.error('❌ Error adding sample products:', error);
-      Alert.alert('Error', 'Failed to add sample products. Please try again.');
+      return updatedProducts;
+    } catch (refreshError) {
+      console.error('❌ Failed to refresh products list:', refreshError);
+      // Return existing products if refresh fails
+      return products;
     }
   };
 
@@ -180,6 +507,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
       return;
     }
 
+    setIsCreating(true);
     try {
       let finalTags = formData.tags;
       if (finalTags.length === 0) {
@@ -200,16 +528,8 @@ const ProductOnboardingScreen = ({ navigation }) => {
       console.log('🚨 Creating custom product in Supabase:', productData);
       await productsService.createProduct(productData);
 
-      // Refresh products list from Supabase
-      const updatedProducts = await productsService.getProducts();
-      setProducts(updatedProducts);
-      
-      // Also save to AsyncStorage for onboarding completion tracking
-      await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
-      if (updatedProducts.length >= 4) {
-        await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
-        await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
-      }
+      // Refresh products list
+      await refreshProductsList();
 
       setModalVisible(false);
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
@@ -217,6 +537,8 @@ const ProductOnboardingScreen = ({ navigation }) => {
     } catch (error) {
       console.error('❌ Error creating custom product:', error);
       Alert.alert('Error', 'Failed to create product. Please try again.');
+    } finally {
+      setIsCreating(false);
     }
   };
 
@@ -240,12 +562,10 @@ const ProductOnboardingScreen = ({ navigation }) => {
       console.log('🚨 Deleting product from Supabase:', productId);
       await productsService.deleteProduct(productId);
       
-      // Refresh products list from Supabase
-      const updatedProducts = await productsService.getProducts();
-      setProducts(updatedProducts);
+      // Refresh products list
+      await refreshProductsList();
       
-      // Update AsyncStorage for onboarding tracking
-      await saveProducts(updatedProducts);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
       
     } catch (error) {
       console.error('❌ Error deleting product:', error);
@@ -253,7 +573,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
     }
   };
 
-  const handleContinue = () => {
+  const handleContinue = async () => {
     if (products.length < 4) {
       setAlertConfig({
         title: 'Add More Products',
@@ -265,11 +585,47 @@ const ProductOnboardingScreen = ({ navigation }) => {
       return;
     }
 
-    // Navigate to POS screen with tour enabled
-    navigation.replace('Main', { 
-      screen: 'POS',
-      params: { startTour: true }
-    });
+    try {
+      // Mark onboarding as completed
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+      console.log('✅ Onboarding marked as completed');
+      
+      // Navigate to POS screen with tour enabled
+      navigation.replace('Main', { 
+        screen: 'POS',
+        params: { startTour: true }
+      });
+    } catch (error) {
+      console.error('❌ Error during continue:', error);
+      // Still navigate even if AsyncStorage fails
+      navigation.replace('Main', { 
+        screen: 'POS',
+        params: { startTour: true }
+      });
+    }
+  };
+
+  const handleSkip = async () => {
+    try {
+      // Mark onboarding as completed even with fewer products
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+      console.log('✅ Onboarding marked as completed (skipped)');
+      
+      // Allow skipping with fewer than 4 products
+      navigation.replace('Main', { 
+        screen: 'POS',
+        params: { startTour: true }
+      });
+    } catch (error) {
+      console.error('❌ Error during skip:', error);
+      // Still navigate even if AsyncStorage fails
+      navigation.replace('Main', { 
+        screen: 'POS',
+        params: { startTour: true }
+      });
+    }
   };
 
   const renderProduct = ({ item, index }) => (
@@ -334,11 +690,20 @@ const ProductOnboardingScreen = ({ navigation }) => {
 
         <View style={styles.actionsContainer}>
           <TouchableOpacity
-            style={styles.sampleButton}
+            style={[
+              styles.sampleButton,
+              isAddingSamples && styles.sampleButtonDisabled
+            ]}
             onPress={handleAddSampleProducts}
             activeOpacity={0.8}
+            disabled={isAddingSamples}
           >
-            <Text style={styles.sampleButtonText}>✨ Add Sample Products</Text>
+            <Text style={[
+              styles.sampleButtonText,
+              isAddingSamples && styles.sampleButtonTextDisabled
+            ]}>
+              {isAddingSamples ? '⏳ Adding Products...' : '✨ Add Sample Products'}
+            </Text>
           </TouchableOpacity>
 
           <TouchableOpacity
@@ -352,22 +717,39 @@ const ProductOnboardingScreen = ({ navigation }) => {
       </ScrollView>
 
       <View style={styles.footer}>
-        <TouchableOpacity
-          style={[
-            styles.continueButton,
-            products.length < 4 && styles.continueButtonDisabled
-          ]}
-          onPress={handleContinue}
-          disabled={products.length < 4}
-          activeOpacity={0.8}
-        >
-          <Text style={[
-            styles.continueButtonText,
-            products.length < 4 && styles.continueButtonTextDisabled
-          ]}>
-            {products.length >= 4 ? 'Start POS Tour' : `Add ${4 - products.length} More Products`}
-          </Text>
-        </TouchableOpacity>
+        {products.length >= 4 ? (
+          <TouchableOpacity
+            style={styles.continueButton}
+            onPress={handleContinue}
+            activeOpacity={0.8}
+          >
+            <Text style={styles.continueButtonText}>
+              Start POS Tour
+            </Text>
+          </TouchableOpacity>
+        ) : (
+          <View style={styles.footerButtons}>
+            <TouchableOpacity
+              style={styles.skipButton}
+              onPress={handleSkip}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.skipButtonText}>
+                Skip for Now
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.continueButtonDisabled}
+              onPress={handleContinue}
+              disabled={true}
+              activeOpacity={0.8}
+            >
+              <Text style={styles.continueButtonTextDisabled}>
+                Add {4 - products.length} More Products
+              </Text>
+            </TouchableOpacity>
+          </View>
+        )}
       </View>
 
       {/* Add Product Modal */}
@@ -450,6 +832,12 @@ const ProductOnboardingScreen = ({ navigation }) => {
         type={alertConfig.type}
         buttons={alertConfig.buttons}
         onClose={() => setShowAlert(false)}
+      />
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isCreating || isAddingSamples} 
+        message={isCreating ? "Creating product..." : "Adding sample products..."} 
       />
     </SafeAreaView>
   );
@@ -590,9 +978,15 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     alignItems: 'center',
   },
+  sampleButtonDisabled: {
+    backgroundColor: colors.gray[400],
+  },
   sampleButtonText: {
     fontSize: 16,
     fontWeight: '600',
+    color: colors.background.surface,
+  },
+  sampleButtonTextDisabled: {
     color: colors.background.surface,
   },
   customButton: {
@@ -615,6 +1009,10 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: '#e5e7eb',
   },
+  footerButtons: {
+    flexDirection: 'row',
+    gap: 12,
+  },
   continueButton: {
     backgroundColor: colors.success.main,
     paddingVertical: 16,
@@ -622,7 +1020,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   continueButtonDisabled: {
+    flex: 1,
     backgroundColor: colors.gray[400],
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
   },
   continueButtonText: {
     fontSize: 16,
@@ -630,7 +1032,23 @@ const styles = StyleSheet.create({
     color: colors.background.surface,
   },
   continueButtonTextDisabled: {
+    fontSize: 16,
+    fontWeight: '600',
     color: colors.background.surface,
+  },
+  skipButton: {
+    flex: 1,
+    backgroundColor: colors.background.surface,
+    borderWidth: 2,
+    borderColor: colors.primary.main,
+    paddingVertical: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  skipButtonText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.primary.main,
   },
   modalOverlay: {
     flex: 1,

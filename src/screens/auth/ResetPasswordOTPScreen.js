@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
 
 const ResetPasswordOTPScreen = ({ navigation, route }) => {
@@ -182,11 +182,7 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
             onPress={() => handleVerifyOTP()}
             disabled={otp.join('').length !== 6 || isLoading}
           >
-            {isLoading ? (
-              <LoadingSpinner size="small" color="#fff" />
-            ) : (
-              <Text style={styles.verifyButtonText}>Verify Code</Text>
-            )}
+            <Text style={styles.verifyButtonText}>Verify Code</Text>
           </TouchableOpacity>
 
           {/* Resend Section */}
@@ -206,6 +202,12 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
           </View>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Loading Overlay */}
+      <LoadingOverlay 
+        visible={isLoading} 
+        message="Verifying code..." 
+      />
     </SafeAreaView>
   );
 };
