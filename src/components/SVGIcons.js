@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text } from 'react-native';
+import { SmartIcon, CreditCardIcon, QRCodeIcon, HourglassIcon, CashIcon } from './StandardizedIcons';
 
 // Simple SVG-like icons using React Native Views and Text
 const SVGIcons = {
@@ -812,10 +813,11 @@ const Icon = ({ name, size = 20, color = '#000', style }) => {
     'calendar-outline': SVGIcons.CalendarIcon,
     'currency-outline': SVGIcons.CurrencyIcon,
     'users-outline': SVGIcons.UsersIcon,
-    'cash-outline': () => <Text style={{ fontSize: size * 0.8, color }}>$</Text>,
-    'card-outline': () => <Text style={{ fontSize: size * 0.8, color }}>💳</Text>,
-    'qr-code-outline': () => <Text style={{ fontSize: size * 0.8, color }}>⚏</Text>,
-    'hourglass-outline': () => <Text style={{ fontSize: size * 0.8, color }}>⧗</Text>,
+    // Updated icons using standardized SVG components
+    'cash-outline': ({ size, color, style }) => <CashIcon size={size} color={color} style={style} />,
+    'card-outline': ({ size, color, style }) => <CreditCardIcon size={size} color={color} style={style} />,
+    'qr-code-outline': ({ size, color, style }) => <QRCodeIcon size={size} color={color} style={style} />,
+    'hourglass-outline': ({ size, color, style }) => <HourglassIcon size={size} color={color} style={style} />,
     'logo-whatsapp': () => <Text style={{ fontSize: size * 0.8, color }}>W</Text>
   };
 

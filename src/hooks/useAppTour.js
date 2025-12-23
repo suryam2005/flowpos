@@ -11,6 +11,13 @@ export const useAppTour = (screenName) => {
 
   const checkTourStatus = async () => {
     try {
+      // Check if user has globally skipped all tours
+      const tourSkippedGlobally = await AsyncStorage.getItem('tourSkippedGlobally');
+      if (tourSkippedGlobally) {
+        console.log(`🎯 [${screenName}] Tours globally skipped - not showing tour`);
+        return;
+      }
+
       // Check if user has completed onboarding
       const hasCompletedOnboarding = await AsyncStorage.getItem('hasCompletedOnboarding');
       console.log(`🎯 [${screenName}] Tour check - hasCompletedOnboarding:`, hasCompletedOnboarding);
@@ -18,6 +25,19 @@ export const useAppTour = (screenName) => {
       if (!hasCompletedOnboarding) {
         console.log(`🎯 [${screenName}] Tour blocked - onboarding not completed`);
         return; // Don't show tour until onboarding is complete
+      }
+
+      // Check if we're continuing a tour from another screen
+      const continueTourTo = await AsyncStorage.getItem('continueTourTo');
+      if (continueTourTo === screenName) {
+        console.log(`🎯 [${screenName}] Continuing tour from previous screen`);
+        await AsyncStorage.removeItem('continueTourTo');
+        setIsFirstTime(false);
+        setTimeout(() => {
+          console.log(`🎯 [${screenName}] Starting continued tour now!`);
+          setShowTour(true);
+        }, 800);
+        return;
       }
 
       // Check if user has seen the overall app tour
@@ -82,13 +102,20 @@ export const useAppTour = (screenName) => {
       // Mark overall app tour as seen
       await AsyncStorage.setItem('hasSeenAppTour', 'true');
       
-      // Mark all screen tours as completed
-      const allScreens = ['POS', 'Cart', 'Manage', 'Orders', 'Analytics', 'Settings', 'WhatsAppSetup', 'PerformanceInsights', 'StorageManagement'];
+      // Mark all screen tours as completed (core features only)
+      const allScreens = [
+        'POS', 'Cart', 'Manage', 'Orders', 'Analytics', 'Settings', 
+        'WhatsAppSetup', 'PerformanceInsights', 'StorageManagement',
+        'AdvancedAnalytics', 'DataExport', 'PDFReports', 'Subscription'
+      ];
       const tours = {};
       allScreens.forEach(screen => {
         tours[screen] = true;
       });
       await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
+      
+      // Also set a global skip flag
+      await AsyncStorage.setItem('tourSkippedGlobally', 'true');
       
       // Hide current tour
       setShowTour(false);
@@ -99,11 +126,28 @@ export const useAppTour = (screenName) => {
     }
   };
 
+  const resetTours = async () => {
+    try {
+      console.log(`🎯 [${screenName}] resetTours called - clearing all tour data`);
+      
+      await AsyncStorage.multiRemove([
+        'hasSeenAppTour',
+        'completedTours', 
+        'tourSkippedGlobally'
+      ]);
+      
+      console.log(`🎯 [${screenName}] All tour data cleared`);
+    } catch (error) {
+      console.error('Error resetting tours:', error);
+    }
+  };
+
   return {
     showTour,
     isFirstTime,
     startTour,
     completeTour,
     skipAllTours,
+    resetTours,
   };
 };

@@ -49,6 +49,44 @@ class ProductsService {
     return `${cleanName.substring(0, 6)}-${timestamp}`;
   }
 
+  // Get user and store IDs from storage (same as OrdersService)
+  async getUserAndStoreIds() {
+    try {
+      let [userId, storeId, userData] = await Promise.all([
+        AsyncStorage.getItem('userId'),
+        AsyncStorage.getItem('storeId'),
+        AsyncStorage.getItem('userData')
+      ]);
+
+      console.log('📦 [ProductsService] Retrieved IDs from storage:', { userId, storeId, hasUserData: !!userData });
+
+      // AUTO-RECOVERY: If userId is missing but userData exists, extract it
+      if (!userId && userData) {
+        try {
+          const user = JSON.parse(userData);
+          if (user.id) {
+            console.log('🔧 [ProductsService] Auto-recovery: Extracting userId from userData');
+            userId = user.id;
+            // Save it for future use
+            await AsyncStorage.setItem('userId', userId);
+            console.log('✅ [ProductsService] userId recovered and saved:', userId);
+          }
+        } catch (parseError) {
+          console.error('Failed to parse userData:', parseError);
+        }
+      }
+
+      if (!userId) {
+        throw new Error('User ID not found. Please log in again.');
+      }
+
+      return { userId, storeId };
+    } catch (error) {
+      console.error('Error getting user and store IDs:', error);
+      throw error;
+    }
+  }
+
   // Create product (DIRECT TO SUPABASE - NO LOCAL STORAGE)
   async createProduct(productData) {
     try {
@@ -381,10 +419,26 @@ class ProductsService {
         throw new Error('NetworkService not properly initialized');
       }
 
-      console.log('📦 [MOBILE DEBUG] Calling networkService.apiCall...');
+      // SECURITY FIX: Get user and store IDs for filtering (same as OrdersService)
+      const { userId, storeId } = await this.getUserAndStoreIds();
+      
+      const queryParams = new URLSearchParams();
+      
+      // CRITICAL: Add user/store filtering to prevent data leaks
+      queryParams.append('user_id', userId);
+      if (storeId) queryParams.append('store_id', storeId);
+      
+      // Add other options
+      if (options.limit) queryParams.append('limit', options.limit);
+      if (options.offset) queryParams.append('offset', options.offset);
+      if (options.category) queryParams.append('category', options.category);
+      if (options.search) queryParams.append('search', options.search);
+
+      const endpoint = `/products?${queryParams}`;
+      console.log('📦 [MOBILE DEBUG] Calling networkService.apiCall with user filtering:', endpoint);
       
       // Don't use abortController signal to prevent premature cancellation
-      const response = await networkService.apiCall('/products', {
+      const response = await networkService.apiCall(endpoint, {
         method: 'GET'
         // Removed: signal: this.abortController?.signal
       });
@@ -407,7 +461,7 @@ class ProductsService {
       console.log('📦 [MOBILE DEBUG] Parsed result:', result);
       
       const products = result.data || [];
-      console.log('📦 [MOBILE DEBUG] Returning products count:', products.length);
+      console.log('📦 [MOBILE DEBUG] Returning products count:', products.length, 'for user:', userId, 'store:', storeId);
       
       return products;
 

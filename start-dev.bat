@@ -13,7 +13,7 @@ start "FlowPOS Frontend" cmd /k "cd /d %~dp0 && npx expo start --clear"
 
 echo.
 echo ✅ Both servers are starting!
-echo 📡 Backend: http://192.168.1.4:3000
+echo 📡 Backend: http://192.168.1.8:3000
 echo 📱 Frontend: Check the Expo QR code
 echo.
 echo Press any key to close this window...

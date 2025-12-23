@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../styles/colors';
+import { typography } from '../styles/typographyStyles';
 
 const ThemeContext = createContext();
 
@@ -53,7 +54,7 @@ export const ThemeProvider = ({ children }) => {
     }
   };
 
-  // Get current theme colors
+  // Get current theme colors and typography
   const theme = isDarkMode ? {
     // Dark theme colors
     background: {
@@ -124,6 +125,8 @@ export const ThemeProvider = ({ children }) => {
       lg: 'rgba(0, 0, 0, 0.5)',
       xl: 'rgba(0, 0, 0, 0.6)',
     },
+    // Typography system (same for both themes)
+    typography: typography,
   } : {
     // Light theme colors (default)
     background: colors.background,
@@ -136,6 +139,8 @@ export const ThemeProvider = ({ children }) => {
     border: colors.border,
     gray: colors.gray,
     shadow: colors.shadow,
+    // Typography system (same for both themes)
+    typography: typography,
   };
 
   const value = {

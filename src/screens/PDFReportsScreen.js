@@ -6,20 +6,26 @@ import {
   TouchableOpacity,
   ScrollView,
   Alert,
-  ActivityIndicator
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../styles/colors';
-import LoadingOverlay from '../components/LoadingOverlay';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { safeGoBack } from '../utils/navigationUtils';
+
 import pdfReportsService from '../services/PDFReportsService';
-import Icon from '../components/SVGIcons';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
 
 const PDFReportsScreen = ({ navigation }) => {
   const [reportTypes, setReportTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generatingType, setGeneratingType] = useState(null);
+
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('PDFReports');
 
   useEffect(() => {
     loadReportTypes();
@@ -41,6 +47,53 @@ const PDFReportsScreen = ({ navigation }) => {
     try {
       setGenerating(true);
       setGeneratingType(reportType.id);
+      
+      // Debug: Check if store info exists before generation
+      console.log('🔍 [PDF Reports] Checking store information before generation...');
+      try {
+        const storeData = await AsyncStorage.getItem('storeInfo');
+        if (!storeData) {
+          Alert.alert(
+            'Store Setup Required',
+            'Please complete your store setup in Settings before generating reports.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+            ]
+          );
+          return;
+        }
+        
+        const store = JSON.parse(storeData);
+        const hasRequiredInfo = (store.store_name || store.name) && 
+                               (store.store_address || store.address) && 
+                               (store.store_phone || store.phone);
+        
+        if (!hasRequiredInfo) {
+          Alert.alert(
+            'Incomplete Store Information',
+            'Please complete your store name, address, and phone number in Settings before generating reports.',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+            ]
+          );
+          return;
+        }
+        
+        console.log('✅ [PDF Reports] Store information validated');
+      } catch (storeError) {
+        console.error('❌ [PDF Reports] Store validation error:', storeError);
+        Alert.alert(
+          'Store Setup Error',
+          'There was an error checking your store information. Please check your store settings.',
+          [
+            { text: 'Cancel', style: 'cancel' },
+            { text: 'Go to Settings', onPress: () => navigation.navigate('Settings') }
+          ]
+        );
+        return;
+      }
       
       Alert.alert(
         'Generate PDF Report',
@@ -177,10 +230,7 @@ const PDFReportsScreen = ({ navigation }) => {
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary.main} />
-          <Text style={styles.loadingText}>Loading report options...</Text>
-        </View>
+        <LoadingSpinner />
       </SafeAreaView>
     );
   }
@@ -190,7 +240,7 @@ const PDFReportsScreen = ({ navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Settings')}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
@@ -243,9 +293,13 @@ const PDFReportsScreen = ({ navigation }) => {
       </ScrollView>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isGenerating} 
-        message="Generating PDF report..." 
+      {generating && <LoadingSpinner />}
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        onComplete={completeTour}
+        currentScreen="PDFReports"
       />
     </SafeAreaView>
   );

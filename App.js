@@ -39,6 +39,7 @@ import SimpleInvoicePreviewScreen from './src/screens/SimpleInvoicePreviewScreen
 import { CartProvider } from './src/context/CartContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { DataSyncProvider } from './src/context/DataSyncContext';
+import { ThemeProvider } from './src/context/ThemeContext';
 import { hasOldDummyData, clearAllAppData } from './src/utils/dataUtils';
 import PinAuthScreen from './src/screens/auth/PinAuthScreen';
 
@@ -246,58 +247,60 @@ export default function App() {
   };
 
   return (
-    <AuthProvider>
-      <DataSyncProvider>
-        <CartProvider>
-          <NavigationContainer>
-            <StatusBar style="dark" />
-            <Stack.Navigator 
-              screenOptions={{ headerShown: false }}
-              initialRouteName={getInitialRoute()}
-            >
-              <Stack.Screen name="Welcome" component={WelcomeScreen} />
-              <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
-              <Stack.Screen name="Main" component={MainTabs} />
-              <Stack.Screen 
-                name="Cart" 
-                component={isTablet ? TabletCartScreen : CartScreen} 
-              />
-              <Stack.Screen name="Invoice" component={InvoiceScreen} />
-              <Stack.Screen name="SimpleInvoicePreview" component={SimpleInvoicePreviewScreen} />
-              <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
-              <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
-              <Stack.Screen name="Settings" component={SettingsScreen} />
-              <Stack.Screen name="Profile" component={ProfileScreen} />
-              <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-              <Stack.Screen name="StoreInformation" component={StoreInformationScreen} />
-              <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-              <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTPScreen} />
-              <Stack.Screen name="Notifications" component={NotificationsScreen} />
-              <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
-              <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
-              <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-              <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
-              <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-              <Stack.Screen name="DataExport" component={DataExportScreen} />
-              <Stack.Screen name="PDFReports" component={PDFReportsScreen} />
-              <Stack.Screen name="StorageManagement" component={StorageManagementScreen} />
-              <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
-              
-              {/* Auth Screens */}
-              <Stack.Screen name="Signup" component={SignupScreen} />
-              <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-              <Stack.Screen name="PasswordSetup" component={PasswordSetupScreen} />
-              <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
-              <Stack.Screen name="Login" component={LoginScreen} />
-              
-              {/* Forgot Password Screens */}
-              <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-              <Stack.Screen name="ResetPasswordOTP" component={ResetPasswordOTPScreen} />
-              <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
-            </Stack.Navigator>
-          </NavigationContainer>
-        </CartProvider>
-      </DataSyncProvider>
-    </AuthProvider>
+    <ThemeProvider>
+      <AuthProvider>
+        <DataSyncProvider>
+          <CartProvider>
+            <NavigationContainer>
+              <StatusBar style="dark" />
+              <Stack.Navigator 
+                screenOptions={{ headerShown: false }}
+                initialRouteName={getInitialRoute()}
+              >
+                <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
+                <Stack.Screen name="Main" component={MainTabs} />
+                <Stack.Screen 
+                  name="Cart" 
+                  component={isTablet ? TabletCartScreen : CartScreen} 
+                />
+                <Stack.Screen name="Invoice" component={InvoiceScreen} />
+                <Stack.Screen name="SimpleInvoicePreview" component={SimpleInvoicePreviewScreen} />
+                <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+                <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
+                <Stack.Screen name="Settings" component={SettingsScreen} />
+                <Stack.Screen name="Profile" component={ProfileScreen} />
+                <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                <Stack.Screen name="StoreInformation" component={StoreInformationScreen} />
+                <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+                <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTPScreen} />
+                <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+                <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
+                <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+                <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
+                <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+                <Stack.Screen name="DataExport" component={DataExportScreen} />
+                <Stack.Screen name="PDFReports" component={PDFReportsScreen} />
+                <Stack.Screen name="StorageManagement" component={StorageManagementScreen} />
+                <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
+                
+                {/* Auth Screens */}
+                <Stack.Screen name="Signup" component={SignupScreen} />
+                <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+                <Stack.Screen name="PasswordSetup" component={PasswordSetupScreen} />
+                <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
+                <Stack.Screen name="Login" component={LoginScreen} />
+                
+                {/* Forgot Password Screens */}
+                <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+                <Stack.Screen name="ResetPasswordOTP" component={ResetPasswordOTPScreen} />
+                <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
+              </Stack.Navigator>
+            </NavigationContainer>
+          </CartProvider>
+        </DataSyncProvider>
+      </AuthProvider>
+    </ThemeProvider>
   );
 }

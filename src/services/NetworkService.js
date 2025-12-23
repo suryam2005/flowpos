@@ -30,7 +30,8 @@ class NetworkService {
       clearTimeout(timeoutId);
       
       if (response.ok) {
-        console.log(`✅ [NetworkService] Connected: ${url}`);
+        const healthData = await response.json();
+        console.log(`✅ [NetworkService] Connected: ${url} (${healthData.status})`);
         this.baseURL = url;
         this.lastSuccessfulURL = url;
         this.isConnected = true;
@@ -40,7 +41,11 @@ class NetworkService {
         return false;
       }
     } catch (error) {
-      console.log(`❌ [NetworkService] Failed: ${url} - ${error.message}`);
+      if (error.name === 'AbortError') {
+        console.log(`❌ [NetworkService] Failed: ${url} - Connection timeout (${timeout}ms)`);
+      } else {
+        console.log(`❌ [NetworkService] Failed: ${url} - ${error.message}`);
+      }
       return false;
     }
   }
@@ -67,6 +72,11 @@ class NetworkService {
     
     console.log('❌ [NetworkService] No working server found');
     console.log('❌ [NetworkService] Tried URLs:', this.fallbackURLs);
+    console.log('💡 [NetworkService] Troubleshooting tips:');
+    console.log('   1. Check if backend server is running');
+    console.log('   2. Verify IP address matches current machine');
+    console.log('   3. Check firewall settings');
+    console.log('   4. Ensure devices are on same network');
     this.isConnected = false;
     return null;
   }

@@ -44,6 +44,11 @@ class WhatsAppService {
   // Check if FlowPOS backend service is ready
   async isFlowPOSReady() {
     try {
+      // TWILIO INTEGRATION TEMPORARILY DISABLED
+      // Always return false until Twilio is configured
+      return false;
+      
+      /*
       const token = await AsyncStorage.getItem('userToken');
       if (!token) return false;
 
@@ -57,6 +62,7 @@ class WhatsAppService {
 
       const result = await response.json();
       return result.success && result.data.ready;
+      */
     } catch (error) {
       console.error('Error checking FlowPOS WhatsApp status:', error);
       return false;
@@ -71,9 +77,12 @@ class WhatsAppService {
     return true; // Device WhatsApp is always available
   }
 
-  // Send invoice via FlowPOS backend (Twilio)
+  // Send invoice via FlowPOS backend (Twilio) - COMMENTED OUT UNTIL CONFIGURED
   async sendViaFlowPOS(phoneNumber, invoiceData) {
     try {
+      // TWILIO INTEGRATION TEMPORARILY DISABLED
+      // Uncomment and configure when Twilio is ready
+      /*
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
         throw new Error('User not authenticated');
@@ -104,6 +113,11 @@ class WhatsAppService {
         userSettings
       });
 
+      // TWILIO INTEGRATION TEMPORARILY DISABLED
+      // Return error to fallback to device WhatsApp
+      throw new Error('Twilio WhatsApp integration not configured yet');
+      
+      /*
       const response = await fetch(`${API_BASE_URL}/whatsapp/send-invoice`, {
         method: 'POST',
         headers: {
@@ -128,6 +142,7 @@ class WhatsAppService {
         messageId: result.data.messageId,
         method: 'flowpos'
       };
+      */
     } catch (error) {
       console.error('Error sending via FlowPOS WhatsApp:', error);
       throw error;

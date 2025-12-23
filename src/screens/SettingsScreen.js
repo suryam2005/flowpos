@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
@@ -16,6 +17,7 @@ import { clearAllAppData } from '../utils/dataUtils';
 import { safeGoBack } from '../utils/navigationUtils';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import { spacing } from '../styles/spacingStyles';
 import featureService from '../services/FeatureService';
 import { useAuth } from '../context/AuthContext';
 
@@ -27,6 +29,15 @@ const SettingsScreen = ({ navigation }) => {
   
   // Invoice Settings
   const [showStoreNameOnInvoice, setShowStoreNameOnInvoice] = useState(true);
+  
+  // Receipt Settings (moved from Store Settings)
+  const [receiptSettings, setReceiptSettings] = useState({
+    showAddress: true,
+    showPhone: true,
+    showEmail: false,
+    showGST: true,
+    footerMessage: 'Thank you for your business!',
+  });
   
   // WhatsApp Settings
   const [whatsappMethod, setWhatsappMethod] = useState('flowpos');
@@ -40,6 +51,13 @@ const SettingsScreen = ({ navigation }) => {
     initializeFeatureService();
   }, []);
 
+  // Reload settings when screen comes into focus to prevent UI flash
+  useFocusEffect(
+    useCallback(() => {
+      loadSettings(); // Reload all settings when screen comes into focus
+    }, [])
+  );
+
   const initializeFeatureService = async () => {
     try {
       await featureService.initialize();
@@ -50,13 +68,14 @@ const SettingsScreen = ({ navigation }) => {
 
   const loadSettings = async () => {
     try {
-      const [autoDetection, notificationsValue, customerDetailsRequired, invoiceStoreName, whatsappMethodValue, sendInvoiceValue] = await Promise.all([
+      const [autoDetection, notificationsValue, customerDetailsRequired, invoiceStoreName, whatsappMethodValue, sendInvoiceValue, receiptSettingsValue] = await Promise.all([
         AsyncStorage.getItem('autoPaymentDetection'),
         AsyncStorage.getItem('notifications'),
         AsyncStorage.getItem('requireCustomerDetails'),
         AsyncStorage.getItem('showStoreNameOnInvoice'),
         AsyncStorage.getItem('whatsappMethod'),
-        AsyncStorage.getItem('sendInvoiceEnabled')
+        AsyncStorage.getItem('sendInvoiceEnabled'),
+        AsyncStorage.getItem('receiptSettings')
       ]);
       
       if (autoDetection !== null) {
@@ -76,6 +95,9 @@ const SettingsScreen = ({ navigation }) => {
       }
       if (sendInvoiceValue !== null) {
         setSendInvoiceEnabled(JSON.parse(sendInvoiceValue));
+      }
+      if (receiptSettingsValue !== null) {
+        setReceiptSettings(JSON.parse(receiptSettingsValue));
       }
     } catch (error) {
       console.error('Error loading settings:', error);
@@ -130,6 +152,20 @@ const SettingsScreen = ({ navigation }) => {
     // Also update the WhatsApp service
     const WhatsAppService = require('../services/WhatsAppService').default;
     await WhatsAppService.setSendInvoiceEnabled(value);
+  };
+
+  // Handle receipt setting changes with immediate save
+  const handleReceiptSettingChange = async (settingKey, value) => {
+    const newReceiptSettings = { ...receiptSettings, [settingKey]: value };
+    setReceiptSettings(newReceiptSettings);
+    
+    try {
+      // Save immediately to AsyncStorage
+      await AsyncStorage.setItem('receiptSettings', JSON.stringify(newReceiptSettings));
+      console.log(`✅ Receipt setting ${settingKey} updated to ${value}`);
+    } catch (error) {
+      console.error('Error saving receipt setting:', error);
+    }
   };
 
 
@@ -400,18 +436,6 @@ const SettingsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           )}
-          
-          {/* WhatsApp Setup - Only show when Send Invoice is enabled */}
-          {sendInvoiceEnabled && (
-            <TouchableOpacity 
-              style={styles.actionButton}
-              onPress={() => navigation.navigate('WhatsAppSetup')}
-              activeOpacity={0.8}
-            >
-              <Ionicons name="logo-whatsapp" size={20} color="#25D366" style={{ marginRight: 8 }} />
-              <Text style={styles.actionButtonText}>WhatsApp Setup</Text>
-            </TouchableOpacity>
-          )}
         </View>
 
         <View style={styles.section}>
@@ -422,6 +446,27 @@ const SettingsScreen = ({ navigation }) => {
             description="Display your store name on all invoices"
             value={showStoreNameOnInvoice}
             onToggle={handleShowStoreNameToggle}
+          />
+
+          <SettingItem
+            title="Show Store Address"
+            description="Display store address on invoices and receipts"
+            value={receiptSettings.showAddress}
+            onToggle={(value) => handleReceiptSettingChange('showAddress', value)}
+          />
+
+          <SettingItem
+            title="Show Email"
+            description="Display store email on invoices and receipts"
+            value={receiptSettings.showEmail}
+            onToggle={(value) => handleReceiptSettingChange('showEmail', value)}
+          />
+
+          <SettingItem
+            title="Show GST Number"
+            description="Display GST number on invoices and receipts"
+            value={receiptSettings.showGST}
+            onToggle={(value) => handleReceiptSettingChange('showGST', value)}
           />
         </View>
 
@@ -435,7 +480,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('DataExport')}
             activeOpacity={0.8}
           >
-            <Ionicons name="download-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="download-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Export Data (CSV)</Text>
           </TouchableOpacity>
           
@@ -444,7 +489,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('PDFReports')}
             activeOpacity={0.8}
           >
-            <Ionicons name="document-text-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="document-text-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>PDF Reports</Text>
           </TouchableOpacity>
           
@@ -453,7 +498,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('PerformanceInsights')}
             activeOpacity={0.8}
           >
-            <Ionicons name="analytics-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="analytics-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Performance Insights</Text>
           </TouchableOpacity>
           
@@ -462,7 +507,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={() => navigation.navigate('StorageManagement')}
             activeOpacity={0.8}
           >
-            <Ionicons name="cloud-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="cloud-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Storage Management</Text>
           </TouchableOpacity>
           
@@ -471,7 +516,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={handleResetAllData}
             activeOpacity={0.8}
           >
-            <Ionicons name="log-out-outline" size={20} color={colors.background.surface} style={{ marginRight: 8 }} />
+            <Ionicons name="log-out-outline" size={20} color={colors.background.surface} style={styles.iconStyle} />
             <Text style={styles.dangerButtonText}>Logout</Text>
           </TouchableOpacity>
           
@@ -488,7 +533,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={handleContactSupport}
             activeOpacity={0.8}
           >
-            <Ionicons name="mail-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="mail-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Contact Support</Text>
           </TouchableOpacity>
           
@@ -497,7 +542,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={handleViewHelp}
             activeOpacity={0.8}
           >
-            <Ionicons name="help-circle-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="help-circle-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Help & FAQ</Text>
           </TouchableOpacity>
           
@@ -506,7 +551,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={handleShowAppTour}
             activeOpacity={0.8}
           >
-            <Ionicons name="compass-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="compass-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Show App Tour</Text>
           </TouchableOpacity>
           
@@ -515,7 +560,7 @@ const SettingsScreen = ({ navigation }) => {
             onPress={handleRateApp}
             activeOpacity={0.8}
           >
-            <Ionicons name="star-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="star-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Rate FlowPOS</Text>
           </TouchableOpacity>
         </View>
@@ -556,7 +601,7 @@ const SettingsScreen = ({ navigation }) => {
             )}
             activeOpacity={0.8}
           >
-            <Ionicons name="information-circle-outline" size={20} color={colors.primary.main} style={{ marginRight: 8 }} />
+            <Ionicons name="information-circle-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>App Information</Text>
           </TouchableOpacity>
         </View>
@@ -582,7 +627,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.light,
   },
   backButton: {
-    padding: 8,
+    padding: 12,
   },
   title: {
     fontSize: 24,
@@ -796,6 +841,9 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#B8860B',
     letterSpacing: 0.5,
+  },
+  iconStyle: {
+    marginRight: spacing.sm, // 8px - standardized
   },
   whatsappMethodSection: {
     marginBottom: 20,

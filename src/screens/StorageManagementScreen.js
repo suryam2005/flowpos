@@ -6,16 +6,16 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  RefreshControl,
-  Dimensions
+  Dimensions,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import CloudStorageService from '../services/CloudStorageService';
 import { useAuth } from '../context/AuthContext';
-import Icon from '../components/SVGIcons';
 import { colors } from '../styles/colors';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
+import LoadingSpinner from '../components/LoadingSpinner';
+import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
+import networkService from '../services/NetworkService';
 
 const { width } = Dimensions.get('window');
 
@@ -24,10 +24,10 @@ const StorageManagementScreen = ({ navigation }) => {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const { user } = useAuth();
-  
+
   // Get current plan from user data or default to trial
   const currentPlan = user?.subscription_plan || 'trial';
-  
+
   // App tour guide
   const { showTour, completeTour } = useAppTour('StorageManagement');
 
@@ -38,8 +38,40 @@ const StorageManagementScreen = ({ navigation }) => {
   const loadStorageData = async () => {
     try {
       setLoading(true);
-      const summary = await CloudStorageService.getStorageSummary(currentPlan || 'trial');
-      setStorageSummary(summary);
+      console.log('📊 Fetching storage data from API...');
+
+      const response = await networkService.apiCall('/subscription/storage', {
+        method: 'GET',
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          console.log('✅ Storage data received:', result.data);
+
+          // Transform API data to match expected format
+          const apiData = result.data;
+          setStorageSummary({
+            usage: {
+              used: apiData.totalStorage,
+              quota: apiData.quotaStorage,
+              remaining: apiData.remainingStorage,
+              percentage: apiData.usedPercentage?.toFixed(1) || '0',
+            },
+            status: {
+              withinQuota: !apiData.isOverLimit,
+              isNearLimit: apiData.isNearLimit,
+              isOverLimit: apiData.isOverLimit,
+            },
+            breakdown: apiData.breakdown,
+            planName: apiData.subscription?.planName || 'Free Trial',
+            lastCalculated: apiData.lastCalculated,
+          });
+        }
+      } else {
+        console.log('⚠️ Failed to fetch storage from API');
+        Alert.alert('Error', 'Failed to load storage information');
+      }
     } catch (error) {
       console.error('Error loading storage data:', error);
       Alert.alert('Error', 'Failed to load storage information');
@@ -50,46 +82,42 @@ const StorageManagementScreen = ({ navigation }) => {
 
   const handleRefresh = async () => {
     setRefreshing(true);
-    await CloudStorageService.calculateStorageUsage(); // Force recalculation
     await loadStorageData();
     setRefreshing(false);
   };
 
   const handleCleanup = async (type) => {
     Alert.alert(
-      'Confirm Cleanup',
-      `Are you sure you want to clean up old ${type}? This action cannot be undone.`,
+      'Clear Cache',
+      'This will clear locally cached data. Your cloud data will not be affected.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
-          text: 'Clean Up',
+          text: 'Clear',
           style: 'destructive',
           onPress: async () => {
             try {
-              const result = await CloudStorageService.cleanupOldData(type, 30);
-              if (result.success) {
-                Alert.alert(
-                  'Cleanup Complete',
-                  `Freed up ${result.freedMB} MB of storage space.`
-                );
-                await loadStorageData(); // Refresh data
-              } else {
-                Alert.alert('Error', 'Failed to clean up data');
-              }
+              // Clear local AsyncStorage cache
+              const AsyncStorage =
+                require('@react-native-async-storage/async-storage').default;
+              await AsyncStorage.removeItem('products_cache');
+              await AsyncStorage.removeItem('orders_cache');
+              Alert.alert('Success', 'Local cache cleared successfully');
+              await loadStorageData();
             } catch (error) {
-              Alert.alert('Error', 'Failed to clean up data');
+              Alert.alert('Error', 'Failed to clear cache');
             }
-          }
-        }
+          },
+        },
       ]
     );
   };
 
   const getStatusColor = () => {
-    if (!storageSummary) return '#4CAF50';
-    if (storageSummary.status.isOverLimit) return '#F44336';
-    if (storageSummary.status.isNearLimit) return '#FF9800';
-    return '#4CAF50';
+    if (!storageSummary) return colors.success.main;
+    if (storageSummary.status.isOverLimit) return colors.error.main;
+    if (storageSummary.status.isNearLimit) return colors.warning.main;
+    return colors.success.main;
   };
 
   const getStatusText = () => {
@@ -124,35 +152,71 @@ const StorageManagementScreen = ({ navigation }) => {
     if (!storageSummary?.breakdown) return null;
 
     const breakdown = storageSummary.breakdown;
+
+    // Format bytes helper
+    const formatBytes = (bytes) => {
+      if (!bytes || bytes === 0) return '0 B';
+      const k = 1024;
+      const sizes = ['B', 'KB', 'MB', 'GB'];
+      const i = Math.floor(Math.log(bytes) / Math.log(k));
+      return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+    };
+
+    // Simplified breakdown - Products (includes images), Orders, Store
     const items = [
-      { key: 'products', label: 'Products', icon: 'cube-outline' },
-      { key: 'orders', label: 'Orders', icon: 'receipt-outline' },
-      { key: 'storeInfo', label: 'Store Info', icon: 'storefront-outline' },
-      { key: 'invoices', label: 'Invoices', icon: 'document-text-outline' },
-      { key: 'reports', label: 'Reports', icon: 'analytics-outline' },
-      { key: 'exports', label: 'Exports', icon: 'download-outline' }
+      {
+        key: 'products',
+        label: 'Products',
+        sublabel: 'Includes product images',
+        icon: 'cube-outline',
+        color: colors.primary.main,
+      },
+      {
+        key: 'orders',
+        label: 'Orders',
+        sublabel: 'Order history & items',
+        icon: 'receipt-outline',
+        color: colors.success.main,
+      },
+      {
+        key: 'store',
+        label: 'Store Info',
+        sublabel: 'Store settings & config',
+        icon: 'storefront-outline',
+        color: colors.text.secondary,
+      },
     ];
 
     return (
       <View style={styles.breakdownContainer}>
         <Text style={styles.sectionTitle}>Storage Breakdown</Text>
-        {items.map(item => {
+        {items.map((item) => {
           const data = breakdown[item.key];
           if (!data) return null;
 
           return (
             <View key={item.key} style={styles.breakdownItem}>
               <View style={styles.breakdownLeft}>
-                <Icon name={item.icon} size={20} color={colors.text.secondary} />
-                <Text style={styles.breakdownLabel}>{item.label}</Text>
+                <View
+                  style={[styles.iconContainer, { backgroundColor: item.color + '20' }]}
+                >
+                  <Ionicons name={item.icon} size={18} color={item.color} />
+                </View>
+                <View style={styles.breakdownLabelContainer}>
+                  <Text style={styles.breakdownLabel}>{item.label}</Text>
+                  <Text style={styles.breakdownSublabel}>{item.sublabel}</Text>
+                </View>
               </View>
               <View style={styles.breakdownRight}>
                 <Text style={styles.breakdownSize}>
-                  {CloudStorageService.formatBytes(data.size)}
+                  {data.size || formatBytes(data.sizeBytes)}
                 </Text>
-                {data.count && (
-                  <Text style={styles.breakdownCount}>
-                    {data.count} items
+                {data.count !== undefined && (
+                  <Text style={styles.breakdownCount}>{data.count} items</Text>
+                )}
+                {data.percentage > 0 && (
+                  <Text style={styles.breakdownPercentageRight}>
+                    {data.percentage}%
                   </Text>
                 )}
               </View>
@@ -164,27 +228,54 @@ const StorageManagementScreen = ({ navigation }) => {
   };
 
   const renderOptimizationSuggestions = () => {
-    if (!storageSummary?.suggestions?.length) return null;
+    // Show suggestions based on storage status
+    if (!storageSummary) return null;
+
+    const suggestions = [];
+
+    if (storageSummary.status.isNearLimit) {
+      suggestions.push({
+        message: 'You are approaching your storage limit',
+        action: 'Consider upgrading your plan for more storage',
+        type: 'warning',
+      });
+    }
+
+    if (storageSummary.status.isOverLimit) {
+      suggestions.push({
+        message: 'You have exceeded your storage limit',
+        action: 'Upgrade your plan or remove some data',
+        type: 'error',
+      });
+    }
+
+    if (suggestions.length === 0) return null;
 
     return (
       <View style={styles.suggestionsContainer}>
-        <Text style={styles.sectionTitle}>Optimization Suggestions</Text>
-        {storageSummary.suggestions.map((suggestion, index) => (
+        <Text style={styles.sectionTitle}>Recommendations</Text>
+        {suggestions.map((suggestion, index) => (
           <View key={index} style={styles.suggestionItem}>
             <View style={styles.suggestionContent}>
-              <Ionicons name="bulb-outline" size={20} color="#FF9800" />
+              <Ionicons
+                name={suggestion.type === 'error' ? 'warning' : 'bulb-outline'}
+                size={20}
+                color={
+                  suggestion.type === 'error'
+                    ? colors.error.main
+                    : colors.warning.main
+                }
+              />
               <View style={styles.suggestionText}>
                 <Text style={styles.suggestionMessage}>{suggestion.message}</Text>
-                <Text style={styles.suggestionSavings}>
-                  Potential savings: {suggestion.potentialSavings}
-                </Text>
+                <Text style={styles.suggestionSavings}>{suggestion.action}</Text>
               </View>
             </View>
             <TouchableOpacity
-              style={styles.cleanupButton}
-              onPress={() => handleCleanup(suggestion.type)}
+              style={styles.upgradeSmallButton}
+              onPress={() => safeNavigate(navigation, 'Subscription')}
             >
-              <Text style={styles.cleanupButtonText}>Clean Up</Text>
+              <Text style={styles.upgradeSmallButtonText}>Upgrade</Text>
             </TouchableOpacity>
           </View>
         ))}
@@ -193,23 +284,7 @@ const StorageManagementScreen = ({ navigation }) => {
   };
 
   if (loading) {
-    return (
-      <View style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Storage Management</Text>
-          <View style={styles.placeholder} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text>Loading storage information...</Text>
-        </View>
-      </View>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -217,21 +292,26 @@ const StorageManagementScreen = ({ navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => navigation.goBack()}
+          onPress={() => safeGoBack(navigation, 'Settings')}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.title}>Storage Management</Text>
-        <TouchableOpacity onPress={handleRefresh}>
-          <Ionicons name="refresh" size={24} color={colors.primary.main} />
+        <TouchableOpacity
+          style={styles.refreshHeaderButton}
+          onPress={handleRefresh}
+          disabled={refreshing}
+        >
+          <Ionicons
+            name="refresh-outline"
+            size={24}
+            color={refreshing ? colors.text.tertiary : colors.primary.main}
+          />
         </TouchableOpacity>
       </View>
 
       <ScrollView
         style={styles.content}
-        refreshControl={
-          <RefreshControl refreshing={refreshing} onRefresh={handleRefresh} />
-        }
       >
         {/* Storage Overview */}
         <View style={styles.overviewCard}>
@@ -259,7 +339,7 @@ const StorageManagementScreen = ({ navigation }) => {
             </Text>
             <TouchableOpacity
               style={styles.upgradeButton}
-              onPress={() => navigation.navigate('Subscription')}
+              onPress={() => safeNavigate(navigation, 'Subscription')}
             >
               <Text style={styles.upgradeButtonText}>Upgrade Plan</Text>
             </TouchableOpacity>
@@ -295,7 +375,7 @@ const StorageManagementScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -311,23 +391,19 @@ const styles = StyleSheet.create({
   backButton: {
     padding: 8,
   },
+  refreshHeaderButton: {
+    padding: 8,
+  },
   title: {
     fontSize: 24,
     fontWeight: '700',
     color: colors.text.primary,
   },
-  placeholder: {
-    width: 36,
-  },
   content: {
     flex: 1,
     padding: 20,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
+
   overviewCard: {
     backgroundColor: '#fff',
     borderRadius: 12,
@@ -378,7 +454,7 @@ const styles = StyleSheet.create({
   },
   progressBar: {
     height: 8,
-    backgroundColor: '#e0e0e0',
+    backgroundColor: colors.gray[200],
     borderRadius: 4,
     marginBottom: 8,
   },
@@ -397,21 +473,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingTop: 15,
     borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopColor: colors.gray[200],
   },
   planText: {
     fontSize: 14,
     color: '#666',
   },
   upgradeButton: {
-    backgroundColor: '#2196F3',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 6,
+    paddingVertical: 12,
+    borderRadius: 8,
   },
   upgradeButtonText: {
-    color: '#fff',
-    fontSize: 12,
+    color: colors.background.surface,
+    fontSize: 14,
     fontWeight: '600',
   },
   breakdownContainer: {
@@ -437,29 +513,54 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.gray[100],
   },
   breakdownLeft: {
     flexDirection: 'row',
     alignItems: 'center',
     flex: 1,
   },
+  iconContainer: {
+    width: 36,
+    height: 36,
+    borderRadius: 8,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  breakdownLabelContainer: {
+    marginLeft: 12,
+  },
   breakdownLabel: {
     fontSize: 14,
     color: '#333',
-    marginLeft: 12,
+    fontWeight: '500',
+  },
+  breakdownSublabel: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 2,
+  },
+  breakdownPercentage: {
+    fontSize: 11,
+    color: '#999',
+    marginTop: 2,
   },
   breakdownRight: {
     alignItems: 'flex-end',
   },
   breakdownSize: {
     fontSize: 14,
-    fontWeight: '500',
+    fontWeight: '600',
     color: '#333',
   },
   breakdownCount: {
     fontSize: 12,
     color: '#666',
+    marginTop: 2,
+  },
+  breakdownPercentageRight: {
+    fontSize: 11,
+    color: colors.primary.main,
     marginTop: 2,
   },
   suggestionsContainer: {
@@ -479,7 +580,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomColor: colors.gray[100],
   },
   suggestionContent: {
     flexDirection: 'row',
@@ -500,14 +601,25 @@ const styles = StyleSheet.create({
     color: '#666',
   },
   cleanupButton: {
-    backgroundColor: '#FF9800',
+    backgroundColor: colors.warning.main,
     paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
+    paddingVertical: 8,
+    borderRadius: 8,
   },
   cleanupButtonText: {
-    color: '#fff',
-    fontSize: 12,
+    color: colors.background.surface,
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  upgradeSmallButton: {
+    backgroundColor: colors.primary.main,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+  },
+  upgradeSmallButtonText: {
+    color: colors.background.surface,
+    fontSize: 14,
     fontWeight: '600',
   },
   lastUpdated: {

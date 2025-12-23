@@ -22,30 +22,12 @@ const PrivacySecurityScreen = ({ navigation }) => {
   const { user } = useAuth();
   
   const [settings, setSettings] = useState({
-    // Data Privacy
-    dataCollection: true,
-    analyticsSharing: false,
-    crashReporting: true,
-    usageStatistics: false,
-    personalizedAds: false,
-    
-    // Security
-    encryptLocalData: true,
-    
-    // Permissions
-    locationAccess: false,
-    cameraAccess: true,
-    contactsAccess: false,
-    storageAccess: true,
-    
-    // Communication
+    // Communication Preferences (these work without backend)
     marketingEmails: false,
     productUpdates: true,
     securityAlerts: true,
     surveyInvitations: false,
   });
-
-
 
   useEffect(() => {
     loadPrivacySettings();
@@ -62,8 +44,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
     }
   };
 
-
-
   const handleExportData = async () => {
     try {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
@@ -72,13 +52,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
         user_id: user?.id,
         email: user?.email,
         privacy_settings: settings,
-        data_usage: dataUsage,
-        permissions_granted: {
-          camera: settings.cameraAccess,
-          location: settings.locationAccess,
-          contacts: settings.contactsAccess,
-          storage: settings.storageAccess,
-        },
         export_date: new Date().toISOString(),
       };
 
@@ -95,24 +68,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
   };
 
   const handleViewPrivacyPolicy = () => {
-    Alert.alert(
-      'Privacy Policy',
-      'Would you like to view our privacy policy?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'View Online',
-          onPress: () => Linking.openURL('https://flowpos.com/privacy-policy'),
-        },
-        {
-          text: 'View Summary',
-          onPress: () => showPrivacyPolicySummary(),
-        },
-      ]
-    );
-  };
-
-  const showPrivacyPolicySummary = () => {
     Alert.alert(
       'Privacy Policy Summary',
       '• We collect minimal data necessary for app functionality\n' +
@@ -139,41 +94,11 @@ const PrivacySecurityScreen = ({ navigation }) => {
     );
   };
 
-  const handleSecurityAudit = () => {
-    Alert.alert(
-      'Security Audit',
-      'Running security check...',
-      [{ text: 'OK' }]
-    );
-    
-    setTimeout(() => {
-      const auditResults = [
-        '✅ Password strength: Strong',
-        '✅ Two-factor authentication: Enabled',
-        '✅ Data encryption: Active',
-        '✅ Secure connections: Verified',
-        '⚠️ Last password change: 90 days ago',
-        '✅ No suspicious login attempts',
-      ];
-      
-      Alert.alert(
-        'Security Audit Results',
-        auditResults.join('\n\n'),
-        [
-          { text: 'OK' },
-          {
-            text: 'Update Password',
-            onPress: () => navigation.navigate('ChangePassword'),
-          },
-        ]
-      );
-    }, 2000);
-  };
-
   const saveSettings = async (newSettings) => {
     try {
       await AsyncStorage.setItem('privacySettings', JSON.stringify(newSettings));
       setSettings(newSettings);
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     } catch (error) {
       console.error('Error saving privacy settings:', error);
       Alert.alert('Error', 'Failed to save privacy settings');
@@ -182,27 +107,29 @@ const PrivacySecurityScreen = ({ navigation }) => {
 
   const updateSetting = (key, value) => {
     const newSettings = { ...settings, [key]: value };
-    
-    // Handle dependent settings
-    if (key === 'dataCollection' && !value) {
-      newSettings.analyticsSharing = false;
-      newSettings.usageStatistics = false;
-      newSettings.personalizedAds = false;
-    }
-    
     saveSettings(newSettings);
   };
 
-  const renderSettingItem = (title, subtitle, settingKey, disabled = false, onPress = null) => (
+  // Coming Soon Badge Component
+  const ComingSoonBadge = () => (
+    <View style={styles.comingSoonBadge}>
+      <Text style={styles.comingSoonText}>Coming Soon</Text>
+    </View>
+  );
+
+  const renderSettingItem = (title, subtitle, settingKey, disabled = false, onPress = null, comingSoon = false) => (
     <TouchableOpacity
       style={[styles.settingItem, disabled && styles.settingItemDisabled]}
       onPress={onPress}
-      disabled={!onPress}
+      disabled={!onPress || comingSoon}
     >
       <View style={styles.settingContent}>
-        <Text style={[styles.settingTitle, disabled && styles.settingTitleDisabled]}>
-          {title}
-        </Text>
+        <View style={styles.settingTitleRow}>
+          <Text style={[styles.settingTitle, disabled && styles.settingTitleDisabled]}>
+            {title}
+          </Text>
+          {comingSoon && <ComingSoonBadge />}
+        </View>
         {subtitle && (
           <Text style={[styles.settingSubtitle, disabled && styles.settingSubtitleDisabled]}>
             {subtitle}
@@ -210,17 +137,32 @@ const PrivacySecurityScreen = ({ navigation }) => {
         )}
       </View>
       {onPress ? (
-        <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
+        <Ionicons name="chevron-forward" size={20} color={comingSoon ? colors.text.tertiary : colors.text.secondary} />
       ) : (
         <Switch
           value={settings[settingKey]}
           onValueChange={(value) => updateSetting(settingKey, value)}
-          disabled={disabled}
+          disabled={disabled || comingSoon}
           trackColor={{ false: colors.border.medium, true: colors.primary.background }}
           thumbColor={settings[settingKey] ? colors.primary.main : colors.text.tertiary}
         />
       )}
     </TouchableOpacity>
+  );
+
+  const renderComingSoonItem = (title, subtitle, icon) => (
+    <View style={[styles.settingItem, styles.settingItemDisabled]}>
+      <View style={styles.settingContent}>
+        <View style={styles.settingTitleRow}>
+          <Text style={styles.settingTitle}>{title}</Text>
+          <ComingSoonBadge />
+        </View>
+        {subtitle && (
+          <Text style={styles.settingSubtitle}>{subtitle}</Text>
+        )}
+      </View>
+      <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+    </View>
   );
 
   const renderSection = (title, subtitle, children) => (
@@ -239,7 +181,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => safeGoBack(navigation)}
+          onPress={() => safeGoBack(navigation, 'Profile')}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
@@ -248,88 +190,9 @@ const PrivacySecurityScreen = ({ navigation }) => {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Data Privacy */}
+        {/* Communication Preferences - These work */}
         {renderSection(
-          'Data Privacy',
-          'Control how your data is collected and used',
-          <>
-            {renderSettingItem(
-              'Data Collection',
-              'Allow FlowPOS to collect usage data to improve the app',
-              'dataCollection'
-            )}
-            {renderSettingItem(
-              'Analytics Sharing',
-              'Share anonymous analytics to help improve features',
-              'analyticsSharing',
-              !settings.dataCollection
-            )}
-            {renderSettingItem(
-              'Crash Reporting',
-              'Automatically send crash reports to help fix issues',
-              'crashReporting'
-            )}
-            {renderSettingItem(
-              'Usage Statistics',
-              'Share how you use the app to improve user experience',
-              'usageStatistics',
-              !settings.dataCollection
-            )}
-            {renderSettingItem(
-              'Personalized Ads',
-              'Show ads based on your app usage and preferences',
-              'personalizedAds',
-              !settings.dataCollection
-            )}
-          </>
-        )}
-
-        {/* Security */}
-        {renderSection(
-          'Security',
-          'Protect your data and account',
-          <>
-            {renderSettingItem(
-              'Encrypt Local Data',
-              'Encrypt all data stored on your device',
-              'encryptLocalData'
-            )}
-
-          </>
-        )}
-
-        {/* App Permissions */}
-        {renderSection(
-          'App Permissions',
-          'Manage what the app can access on your device',
-          <>
-            {renderSettingItem(
-              'Location Access',
-              'Allow app to access your location for store features',
-              'locationAccess'
-            )}
-            {renderSettingItem(
-              'Camera Access',
-              'Allow app to use camera for product photos and QR codes',
-              'cameraAccess'
-            )}
-
-            {renderSettingItem(
-              'Contacts Access',
-              'Allow app to access contacts for customer management',
-              'contactsAccess'
-            )}
-            {renderSettingItem(
-              'Storage Access',
-              'Allow app to save files and export data',
-              'storageAccess'
-            )}
-          </>
-        )}
-
-        {/* Communication Preferences */}
-        {renderSection(
-          'Communication',
+          'Communication Preferences',
           'Choose what communications you want to receive',
           <>
             {renderSettingItem(
@@ -355,22 +218,11 @@ const PrivacySecurityScreen = ({ navigation }) => {
           </>
         )}
 
-
-
-        {/* Security Tools */}
+        {/* App Permissions - Opens device settings */}
         {renderSection(
-          'Security Tools',
-          'Advanced security features and monitoring',
+          'App Permissions',
+          'Manage device permissions for FlowPOS',
           <>
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleSecurityAudit}
-            >
-              <Ionicons name="shield-checkmark-outline" size={20} color={colors.text.primary} />
-              <Text style={styles.actionButtonText}>Run Security Audit</Text>
-              <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-            </TouchableOpacity>
-
             <TouchableOpacity
               style={styles.actionButton}
               onPress={handleManagePermissions}
@@ -379,19 +231,10 @@ const PrivacySecurityScreen = ({ navigation }) => {
               <Text style={styles.actionButtonText}>Manage App Permissions</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={styles.actionButton}
-              onPress={handleExportData}
-            >
-              <Ionicons name="document-text-outline" size={20} color={colors.text.primary} />
-              <Text style={styles.actionButtonText}>Export Privacy Report</Text>
-              <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-            </TouchableOpacity>
           </>
         )}
 
-        {/* Privacy Tools */}
+        {/* Privacy Tools - Working features */}
         {renderSection(
           'Privacy Tools',
           'Tools to manage your privacy and data',
@@ -404,75 +247,41 @@ const PrivacySecurityScreen = ({ navigation }) => {
               <Text style={styles.actionButtonText}>Privacy Policy</Text>
               <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
             </TouchableOpacity>
-            {renderSettingItem(
-              'Data Export',
-              'Download a copy of all your data',
-              null,
-              false,
-              () => Alert.alert('Data Export', 'Data export feature coming soon!')
-            )}
-            {renderSettingItem(
-              'Data Deletion',
-              'Request deletion of all your data',
-              null,
-              false,
-              () => {
-                Alert.alert(
-                  'Data Deletion',
-                  'This will permanently delete all your data. This action cannot be undone.',
-                  [
-                    { text: 'Cancel', style: 'cancel' },
-                    {
-                      text: 'Request Deletion',
-                      style: 'destructive',
-                      onPress: () => Alert.alert('Data Deletion', 'Data deletion request feature coming soon!')
-                    }
-                  ]
-                );
-              }
-            )}
-            {renderSettingItem(
-              'Cookie Settings',
-              'Manage cookies and tracking preferences',
-              null,
-              false,
-              () => Alert.alert('Cookie Settings', 'Cookie settings feature coming soon!')
-            )}
+
+            <TouchableOpacity
+              style={styles.actionButton}
+              onPress={handleExportData}
+            >
+              <Ionicons name="download-outline" size={20} color={colors.text.primary} />
+              <Text style={styles.actionButtonText}>Export Privacy Report</Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
+            </TouchableOpacity>
           </>
         )}
 
-        {/* Security Audit */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Security Audit</Text>
-          
-          <TouchableOpacity
-            style={styles.auditButton}
-            onPress={() => Alert.alert('Security Scan', 'Security scan feature coming soon!')}
-          >
-            <View style={styles.auditContent}>
-              <Ionicons name="shield-checkmark" size={24} color={colors.success.main} />
-              <View style={styles.auditText}>
-                <Text style={styles.auditTitle}>Run Security Scan</Text>
-                <Text style={styles.auditSubtitle}>Check your account security status</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.auditButton}
-            onPress={() => Alert.alert('Privacy Checkup', 'Privacy checkup feature coming soon!')}
-          >
-            <View style={styles.auditContent}>
-              <Ionicons name="eye" size={24} color={colors.primary.main} />
-              <View style={styles.auditText}>
-                <Text style={styles.auditTitle}>Privacy Checkup</Text>
-                <Text style={styles.auditSubtitle}>Review and update your privacy settings</Text>
-              </View>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-        </View>
+        {/* Coming Soon Features */}
+        {renderSection(
+          'Advanced Security',
+          'Enhanced security features',
+          <>
+            {renderComingSoonItem(
+              'Data Encryption',
+              'End-to-end encryption for all your data'
+            )}
+            {renderComingSoonItem(
+              'Two-Factor Authentication',
+              'Add extra security to your account'
+            )}
+            {renderComingSoonItem(
+              'Security Audit',
+              'Run comprehensive security checks'
+            )}
+            {renderComingSoonItem(
+              'Data Deletion Request',
+              'Request permanent deletion of your data'
+            )}
+          </>
+        )}
 
         {/* Reset Settings */}
         <View style={styles.section}>
@@ -481,7 +290,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
             onPress={() => {
               Alert.alert(
                 'Reset Privacy Settings',
-                'This will reset all privacy and security settings to default. Are you sure?',
+                'This will reset all communication preferences to default. Are you sure?',
                 [
                   { text: 'Cancel', style: 'cancel' },
                   {
@@ -489,23 +298,13 @@ const PrivacySecurityScreen = ({ navigation }) => {
                     style: 'destructive',
                     onPress: () => {
                       const defaultSettings = {
-                        dataCollection: true,
-                        analyticsSharing: false,
-                        crashReporting: true,
-                        usageStatistics: false,
-                        personalizedAds: false,
-                        encryptLocalData: true,
-                        locationAccess: false,
-                        cameraAccess: true,
-                        contactsAccess: false,
-                        storageAccess: true,
                         marketingEmails: false,
                         productUpdates: true,
                         securityAlerts: true,
                         surveyInvitations: false,
                       };
                       saveSettings(defaultSettings);
-                      Alert.alert('Success', 'Privacy settings reset to default');
+                      Alert.alert('Success', 'Settings reset to default');
                     }
                   }
                 ]
@@ -517,6 +316,8 @@ const PrivacySecurityScreen = ({ navigation }) => {
             <Ionicons name="chevron-forward" size={20} color={colors.error.main} />
           </TouchableOpacity>
         </View>
+
+        <View style={styles.bottomPadding} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -557,6 +358,7 @@ const styles = StyleSheet.create({
   sectionHeader: {
     marginBottom: 12,
     marginHorizontal: 20,
+    marginTop: 16,
   },
   sectionTitle: {
     fontSize: 16,
@@ -578,10 +380,15 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.light,
   },
   settingItemDisabled: {
-    opacity: 0.5,
+    opacity: 0.6,
   },
   settingContent: {
     flex: 1,
+  },
+  settingTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   settingTitle: {
     fontSize: 16,
@@ -595,37 +402,23 @@ const styles = StyleSheet.create({
   settingSubtitle: {
     fontSize: 14,
     color: colors.text.secondary,
+    marginTop: 2,
   },
   settingSubtitleDisabled: {
     color: colors.text.tertiary,
   },
-  auditButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.background.surface,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderBottomWidth: 1,
-    borderBottomColor: colors.border.light,
+  comingSoonBadge: {
+    backgroundColor: colors.warning.background,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.warning.border,
   },
-  auditContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  auditText: {
-    marginLeft: 12,
-    flex: 1,
-  },
-  auditTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: colors.text.primary,
-    marginBottom: 2,
-  },
-  auditSubtitle: {
-    fontSize: 14,
-    color: colors.text.secondary,
+  comingSoonText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.warning.main,
   },
   actionButton: {
     flexDirection: 'row',
@@ -649,7 +442,9 @@ const styles = StyleSheet.create({
   dangerText: {
     color: colors.error.main,
   },
-
+  bottomPadding: {
+    height: 40,
+  },
 });
 
 export default PrivacySecurityScreen;

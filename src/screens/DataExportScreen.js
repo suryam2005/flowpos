@@ -11,14 +11,19 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../styles/colors';
-import LoadingOverlay from '../components/LoadingOverlay';
+import LoadingSpinner from '../components/LoadingSpinner';
 import csvExportService from '../services/CSVExportService';
 import Icon from '../components/SVGIcons';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
 
 const DataExportScreen = ({ navigation }) => {
   const [exportTypes, setExportTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
+
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('DataExport');
 
   useEffect(() => {
     loadExportTypes();
@@ -190,14 +195,7 @@ const DataExportScreen = ({ navigation }) => {
   };
 
   if (loading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color={colors.primary.main} />
-          <Text style={styles.loadingText}>Loading export options...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -221,49 +219,6 @@ const DataExportScreen = ({ navigation }) => {
           </Text>
         </View>
 
-        <TouchableOpacity 
-          style={styles.refreshButton}
-          onPress={async () => {
-            try {
-              setLoading(true);
-              console.log('🔄 [DataExport] Refreshing data from backend...');
-              
-              // Import the data sync services
-              const productsService = require('../services/ProductsService').default;
-              const ordersService = require('../services/OrdersService').default;
-              
-              // Force refresh both products and orders
-              const [products, orders] = await Promise.all([
-                productsService.getProducts(),
-                ordersService.getOrders()
-              ]);
-              
-              console.log('✅ [DataExport] Refreshed products:', products.length);
-              console.log('✅ [DataExport] Refreshed orders:', orders.length);
-              
-              Alert.alert(
-                'Data Refreshed!',
-                `Successfully refreshed data from backend:\n\n• Products: ${products.length}\n• Orders: ${orders.length}\n\nYou can now export the latest data.`,
-                [{ text: 'OK' }]
-              );
-            } catch (error) {
-              console.error('❌ [DataExport] Refresh error:', error);
-              Alert.alert(
-                'Refresh Failed', 
-                `Could not refresh data from backend.\n\nError: ${error.message}\n\nPlease check your internet connection and try again.`
-              );
-            } finally {
-              setLoading(false);
-            }
-          }}
-          disabled={loading}
-        >
-          <View style={styles.refreshButtonContent}>
-            <Ionicons name="refresh-outline" size={20} color={colors.primary.main} />
-            <Text style={styles.refreshButtonText}>Refresh Data</Text>
-          </View>
-        </TouchableOpacity>
-
         {exportTypes.map(renderExportType)}
 
         <View style={styles.helpSection}>
@@ -278,9 +233,13 @@ const DataExportScreen = ({ navigation }) => {
       </ScrollView>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={exporting} 
-        message="Exporting data..." 
+      {exporting && <LoadingSpinner />}
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        onComplete={completeTour}
+        currentScreen="DataExport"
       />
     </SafeAreaView>
   );
@@ -317,16 +276,7 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 20,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    marginTop: 16,
-    fontSize: 16,
-    color: colors.text.secondary,
-  },
+
   infoSection: {
     flexDirection: 'row',
     alignItems: 'flex-start',

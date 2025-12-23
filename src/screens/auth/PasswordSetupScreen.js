@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 
 const PasswordSetupScreen = ({ navigation, route }) => {
@@ -96,15 +96,16 @@ const PasswordSetupScreen = ({ navigation, route }) => {
     }
   };
 
-  const updateField = (field, value) => {
+  const updateField = useCallback((field, value) => {
     setFormData(prev => ({ ...prev, [field]: value }));
     // Clear error when user starts typing
     if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: null }));
     }
-  };
+  }, [errors]);
 
-  const getPasswordStrength = () => {
+  // Memoize password strength calculation to prevent recalculation on every render
+  const passwordStrength = useMemo(() => {
     const password = formData.password;
     if (!password) return { strength: 0, text: '', color: colors.textSecondary };
     
@@ -124,9 +125,18 @@ const PasswordSetupScreen = ({ navigation, route }) => {
     ];
 
     return { strength, ...levels[Math.min(strength, 4)] };
-  };
+  }, [formData.password]);
 
-  const passwordStrength = getPasswordStrength();
+  // Memoize password requirements check to prevent recalculation on every render
+  const passwordRequirements = useMemo(() => {
+    const password = formData.password;
+    return {
+      hasMinLength: password.length >= 8,
+      hasUppercase: /[A-Z]/.test(password),
+      hasLowercase: /[a-z]/.test(password),
+      hasNumber: /\d/.test(password),
+    };
+  }, [formData.password]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -249,33 +259,33 @@ const PasswordSetupScreen = ({ navigation, route }) => {
             <Text style={styles.requirementsTitle}>Password Requirements:</Text>
             <View style={styles.requirement}>
               <Ionicons 
-                name={formData.password.length >= 8 ? "checkmark-circle" : "ellipse-outline"} 
+                name={passwordRequirements.hasMinLength ? "checkmark-circle" : "ellipse-outline"} 
                 size={16} 
-                color={formData.password.length >= 8 ? colors.success : colors.textSecondary} 
+                color={passwordRequirements.hasMinLength ? colors.success : colors.textSecondary} 
               />
               <Text style={styles.requirementText}>At least 8 characters</Text>
             </View>
             <View style={styles.requirement}>
               <Ionicons 
-                name={/[A-Z]/.test(formData.password) ? "checkmark-circle" : "ellipse-outline"} 
+                name={passwordRequirements.hasUppercase ? "checkmark-circle" : "ellipse-outline"} 
                 size={16} 
-                color={/[A-Z]/.test(formData.password) ? colors.success : colors.textSecondary} 
+                color={passwordRequirements.hasUppercase ? colors.success : colors.textSecondary} 
               />
               <Text style={styles.requirementText}>One uppercase letter</Text>
             </View>
             <View style={styles.requirement}>
               <Ionicons 
-                name={/[a-z]/.test(formData.password) ? "checkmark-circle" : "ellipse-outline"} 
+                name={passwordRequirements.hasLowercase ? "checkmark-circle" : "ellipse-outline"} 
                 size={16} 
-                color={/[a-z]/.test(formData.password) ? colors.success : colors.textSecondary} 
+                color={passwordRequirements.hasLowercase ? colors.success : colors.textSecondary} 
               />
               <Text style={styles.requirementText}>One lowercase letter</Text>
             </View>
             <View style={styles.requirement}>
               <Ionicons 
-                name={/\d/.test(formData.password) ? "checkmark-circle" : "ellipse-outline"} 
+                name={passwordRequirements.hasNumber ? "checkmark-circle" : "ellipse-outline"} 
                 size={16} 
-                color={/\d/.test(formData.password) ? colors.success : colors.textSecondary} 
+                color={passwordRequirements.hasNumber ? colors.success : colors.textSecondary} 
               />
               <Text style={styles.requirementText}>One number</Text>
             </View>
@@ -294,10 +304,7 @@ const PasswordSetupScreen = ({ navigation, route }) => {
       </KeyboardAvoidingView>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isLoading} 
-        message="Creating your account..." 
-      />
+      {isLoading && <LoadingSpinner />}
     </SafeAreaView>
   );
 };

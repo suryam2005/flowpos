@@ -14,8 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
-import { PageLoader } from '../components/LoadingSpinner';
-import { usePageLoading } from '../hooks/usePageLoading';
+import LoadingSpinner from '../components/LoadingSpinner';
 
 import CustomAlert from '../components/CustomAlert';
 import TabletLayout from '../components/TabletLayout';
@@ -38,8 +37,7 @@ const TabletPOSScreen = ({ navigation }) => {
   const layoutConfig = getTabletLayoutConfig();
   const gridColumns = getGridColumns();
   
-  // Page loading hook - no animations
-  const { isLoading, finishLoading, contentStyle } = usePageLoading();
+  const [isLoading, setIsLoading] = useState(true);
 
   // Generate available tags from products
   const availableTags = React.useMemo(() => {
@@ -90,7 +88,7 @@ const TabletPOSScreen = ({ navigation }) => {
       }
       
       if (!isRefresh) {
-        finishLoading();
+        setIsLoading(false);
       }
       
       const cartData = await AsyncStorage.getItem('cart');
@@ -181,7 +179,7 @@ const TabletPOSScreen = ({ navigation }) => {
               />
             ) : (
               <View style={styles.productImagePlaceholder}>
-                <Ionicons name="cube-outline" size={isTablet ? 40 : 32} color="#6b7280" />
+                <Ionicons name="cube-outline" size={isTablet ? 40 : 32} color={colors.text.secondary} />
               </View>
             );
           })()}
@@ -230,7 +228,7 @@ const TabletPOSScreen = ({ navigation }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="cube-outline" size={isTablet ? 80 : 64} color="#6b7280" />
+      <Ionicons name="cube-outline" size={isTablet ? 80 : 64} color={colors.text.secondary} />
       <Text style={[styles.emptyTitle, isTablet && styles.tabletEmptyTitle]}>No Products Yet</Text>
       <Text style={[styles.emptyText, isTablet && styles.tabletEmptyText]}>
         Start by adding your first products to begin selling
@@ -247,9 +245,9 @@ const TabletPOSScreen = ({ navigation }) => {
 
   const renderMainContent = () => (
     <SafeAreaView style={[styles.container, webContainerFix]}>
-      <PageLoader visible={isLoading} text="Loading products..." />
+      {isLoading && <LoadingSpinner />}
       
-      <View style={[styles.content, contentStyle]}>
+      <View style={styles.content}>
         <View style={[styles.header, isTablet && styles.tabletHeader]}>
           <Text style={[styles.title, isTablet && styles.tabletTitle]}>{storeName}</Text>
         </View>
@@ -289,9 +287,9 @@ const TabletPOSScreen = ({ navigation }) => {
                   onRefresh={onRefresh}
                   tintColor={colors.primary.main}
                   colors={[colors.primary.main]}
-                  progressBackgroundColor="#ffffff"
+                  progressBackgroundColor={colors.background.surface}
                   title="Pull to refresh products..."
-                  titleColor="#6b7280"
+                  titleColor={colors.text.secondary}
                 />
               }
             />
@@ -347,7 +345,7 @@ const TabletPOSScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   content: {
     flex: 1,
@@ -359,9 +357,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     paddingTop: 60,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   tabletHeader: {
     paddingHorizontal: 32,
@@ -371,16 +369,16 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 24,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   tabletTitle: {
     fontSize: 32,
   },
   categorySection: {
     height: 68,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   tabletCategorySection: {
     height: 80,
@@ -395,34 +393,34 @@ const styles = StyleSheet.create({
   },
   categoryButton: {
     paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingVertical: 12,
     marginRight: 8,
-    borderRadius: 16,
-    backgroundColor: '#f3f4f6',
+    borderRadius: 12,
+    backgroundColor: colors.gray[100],
     minWidth: 80,
     alignItems: 'center',
   },
   tabletCategoryButton: {
     paddingHorizontal: 24,
-    paddingVertical: 12,
+    paddingVertical: 16,
     marginRight: 12,
-    borderRadius: 20,
+    borderRadius: 16,
     minWidth: 120,
   },
   categoryButtonActive: {
-    backgroundColor: '#1f2937',
+    backgroundColor: colors.primary.main,
   },
   categoryText: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   tabletCategoryText: {
     fontSize: 16,
     fontWeight: '600',
   },
   categoryTextActive: {
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   productGrid: {
     padding: 20,
@@ -437,7 +435,7 @@ const styles = StyleSheet.create({
   },
   productCard: {
     flex: 1,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 16,
     margin: 6,
@@ -448,7 +446,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 1,
-    borderColor: '#f3f4f6',
+    borderColor: colors.border.light,
     position: 'relative',
   },
   tabletProductCard: {
@@ -493,7 +491,7 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     textAlign: 'center',
     marginBottom: 4,
   },
@@ -505,15 +503,15 @@ const styles = StyleSheet.create({
   productPrice: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.primary.main,
     marginBottom: 4,
   },
   tabletProductPrice: {
-    fontSize: 22,
+    fontSize: 20,
     marginBottom: 8,
   },
   stockContainer: {
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -521,7 +519,7 @@ const styles = StyleSheet.create({
   },
   productStock: {
     fontSize: 12,
-    color: '#6b7280',
+    color: colors.text.secondary,
     fontWeight: '500',
     textAlign: 'center',
   },
@@ -529,21 +527,21 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 8,
     left: 8,
-    backgroundColor: '#fef3c7',
+    backgroundColor: colors.warning.background,
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 8,
   },
   lowStockText: {
-    fontSize: 10,
-    color: '#d97706',
+    fontSize: 12,
+    color: colors.warning.main,
     fontWeight: '500',
   },
   quantityBadge: {
     position: 'absolute',
     top: 8,
     right: 8,
-    backgroundColor: '#ef4444',
+    backgroundColor: colors.error.main,
     width: 24,
     height: 24,
     borderRadius: 12,
@@ -557,7 +555,7 @@ const styles = StyleSheet.create({
   },
   quantityText: {
     fontSize: 12,
-    color: '#ffffff',
+    color: colors.background.surface,
     fontWeight: '700',
   },
   cartSummary: {
@@ -572,7 +570,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   cartSummaryContent: {
-    backgroundColor: '#1f2937',
+    backgroundColor: colors.gray[800],
     borderRadius: 16,
     flexDirection: 'row',
     alignItems: 'center',
@@ -585,24 +583,24 @@ const styles = StyleSheet.create({
   },
   cartItems: {
     fontSize: 14,
-    color: '#9ca3af',
+    color: colors.gray[400],
     marginBottom: 2,
   },
   cartTotal: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   cartButton: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     paddingHorizontal: 20,
     paddingVertical: 12,
     borderRadius: 12,
   },
   cartButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   emptyState: {
     flex: 1,
@@ -618,7 +616,7 @@ const styles = StyleSheet.create({
   emptyTitle: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -628,7 +626,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     lineHeight: 24,
     marginBottom: 32,
@@ -639,25 +637,25 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   addProductButton: {
-    backgroundColor: '#2563eb',
-    paddingHorizontal: 32,
+    backgroundColor: colors.primary.main,
+    paddingHorizontal: 20,
     paddingVertical: 16,
     borderRadius: 12,
-    shadowColor: '#2563eb',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.3,
     shadowRadius: 8,
     elevation: 8,
   },
   tabletAddProductButton: {
-    paddingHorizontal: 40,
+    paddingHorizontal: 32,
     paddingVertical: 20,
     borderRadius: 16,
   },
   addProductButtonText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   tabletAddProductButtonText: {
     fontSize: 18,

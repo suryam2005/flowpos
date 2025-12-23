@@ -5,54 +5,32 @@ import {
   StyleSheet,
   Alert,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import SimpleInvoicePreview from '../components/SimpleInvoicePreview';
-import { generateInvoiceNumber } from '../utils/invoiceGenerator';
+import InvoiceService from '../services/InvoiceService'; // CONSOLIDATED: Use unified service
 import { colors } from '../styles/colors';
 
 const InvoiceScreen = ({ route, navigation }) => {
   const [invoiceData, setInvoiceData] = useState(null);
   const [refreshTrigger, setRefreshTrigger] = useState(0);
-  const { orderData, autoRedirect = false, autoRedirectToHome = false } = route.params || {};
+  const { orderData, autoRedirect = false, autoRedirectToHome = false, sourceScreen } = route.params || {};
 
   useEffect(() => {
-    console.log('InvoiceScreen received orderData:', orderData);
+    console.log('📄 [InvoiceScreen] Received orderData:', orderData?.orderNumber || 'Unknown');
     if (orderData) {
       generateInvoiceData();
       
-      // Auto-redirect after 5 seconds only if explicitly requested (new orders)
-      if (autoRedirect) {
-        const timer = setTimeout(() => {
-          navigation.navigate('Main', { screen: 'POS' });
-        }, 5000);
-        
-        return () => clearTimeout(timer);
-      } else if (autoRedirectToHome) {
-        const timer = setTimeout(() => {
-          navigation.navigate('TabletHome');
-        }, 5000);
-        
-        return () => clearTimeout(timer);
-      }
+      // Remove automatic redirects - let user control navigation
+      console.log('📄 [InvoiceScreen] Invoice generated, user can navigate manually');
     } else {
-      console.error('No orderData received in InvoiceScreen');
+      console.error('❌ [InvoiceScreen] No orderData received');
     }
   }, [orderData]);
 
-  // Prevent back navigation to customer details screen
+  // Allow normal back navigation - removed automatic POS redirect
   useEffect(() => {
-    if (autoRedirect || autoRedirectToHome) {
-      const unsubscribe = navigation.addListener('beforeRemove', (e) => {
-        // Prevent default back behavior
-        e.preventDefault();
-        // Navigate to POS instead
-        navigation.navigate('Main', { screen: 'POS' });
-      });
-      
-      return unsubscribe;
-    }
-  }, [navigation, autoRedirect, autoRedirectToHome]);
+    console.log('📄 [InvoiceScreen] Navigation setup - allowing normal back behavior');
+  }, [navigation]);
 
   // Refresh WhatsApp status when screen comes into focus
   useFocusEffect(
@@ -69,128 +47,49 @@ const InvoiceScreen = ({ route, navigation }) => {
     return diffMinutes < 5; // Consider orders from last 5 minutes as "recent"
   };
 
+  // CONSOLIDATED: Use InvoiceService for all invoice data generation
   const generateInvoiceData = async () => {
     try {
-      // Load store information
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
+      console.log('📄 [InvoiceScreen] Generating invoice data using InvoiceService...');
       
-
-
-      // Check if store name should be shown on invoice
-      const showStoreNameSetting = await AsyncStorage.getItem('showStoreNameOnInvoice');
-      const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
+      // CONSOLIDATED: Single method call replaces all the complex logic
+      const invoice = await InvoiceService.generateInvoiceData(orderData);
       
-      console.log('🏪 Store name setting check:', {
-        showStoreNameSetting,
-        showStoreName,
-        storeInfo: parsedStoreInfo
+      console.log('✅ [InvoiceScreen] Invoice data generated successfully:', {
+        invoiceNumber: invoice.invoiceNumber,
+        storeName: invoice.storeName,
+        customerName: invoice.customerName,
+        grandTotal: invoice.grandTotal
       });
-
-      console.log('👤 [InvoiceScreen] Customer data debug:', {
-        originalCustomerName: orderData.customerName,
-        originalPhoneNumber: orderData.phoneNumber,
-        hasCustomerName: !!(orderData.customerName && orderData.customerName.trim() !== ''),
-        hasPhoneNumber: !!(orderData.phoneNumber && orderData.phoneNumber.trim() !== ''),
-        customerNameLength: orderData.customerName?.length,
-        customerNameTrimmed: orderData.customerName?.trim(),
-        willShowWalkIn: !(orderData.customerName && orderData.customerName.trim() !== '')
-      });
-
-      // Ensure orderData and items exist
-      if (!orderData || !orderData.items || !Array.isArray(orderData.items)) {
-        console.error('Invalid order data structure:', orderData);
-        throw new Error('Invalid order data');
-      }
-
-      // Load GST settings to determine if tax should be applied
-      const storeSetupData = await AsyncStorage.getItem('storeInfo');
-      const storeSetup = storeSetupData ? JSON.parse(storeSetupData) : {};
-      const hasGSTNumber = storeSetup.gstNumber && storeSetup.gstNumber.trim() !== '';
-      
-      // Use existing totals from order or calculate if not available
-      const subtotal = orderData.subtotal || orderData.items.reduce((sum, item) => {
-        const price = parseFloat(item.price) || 0;
-        const quantity = parseInt(item.quantity) || 0;
-        return sum + (price * quantity);
-      }, 0);
-      
-      // Only include tax if GST is enabled and order has tax
-      const tax = hasGSTNumber ? (orderData.gst || orderData.tax || 0) : 0;
-      const gstPercentage = storeSetup.gstPercentage || 18;
-      const grandTotal = orderData.total || orderData.grandTotal || (subtotal + tax);
-
-      console.log('Tax calculation debug:', {
-        hasGSTNumber,
-        orderDataGst: orderData.gst,
-        orderDataTax: orderData.tax,
-        calculatedTax: tax,
-        subtotal,
-        grandTotal
-      });
-
-      // Get store name from store info
-      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name;
-      
-      // FIXED: Apply store name setting to invoice display
-      const displayStoreName = showStoreName && actualStoreName ? actualStoreName : 'FlowPOS Store';
-      
-      console.log('🏪 [InvoiceScreen] Store name processing:', {
-        showStoreName,
-        actualStoreName,
-        displayStoreName,
-        willShowCustomName: displayStoreName !== 'FlowPOS Store'
-      });
-
-      const invoice = {
-        // Store details with setting applied - use displayStoreName for invoice display
-        storeName: displayStoreName,
-        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
-        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
-        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
-        storeContact: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '+91 XXXXXXXXXX', // Keep for backward compatibility
-        storeGSTIN: parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '',
-        
-        // Invoice details
-        invoiceNumber: orderData.orderNumber || generateInvoiceNumber(),
-        date: new Date().toLocaleDateString('en-IN', {
-          day: '2-digit',
-          month: '2-digit',
-          year: 'numeric'
-        }),
-        time: new Date().toLocaleTimeString('en-IN', {
-          hour: '2-digit',
-          minute: '2-digit',
-          hour12: true
-        }),
-        customerName: orderData.customerName && orderData.customerName.trim() !== '' ? orderData.customerName : 'Walk-in Customer',
-        phoneNumber: orderData.phoneNumber && orderData.phoneNumber.trim() !== '' ? orderData.phoneNumber : '',
-        
-        // Items and totals
-        items: orderData.items.map(item => ({
-          name: item.name,
-          quantity: item.quantity,
-          price: item.price,
-          total: item.price * item.quantity
-        })),
-        subtotal,
-        ...(tax > 0 && { tax, gst: tax, gstPercentage }), // Only include tax fields if tax > 0
-        grandTotal,
-        paymentMethod: orderData.paymentMethod || 'Cash', // Add payment method
-      };
-
-
 
       setInvoiceData(invoice);
     } catch (error) {
-      console.error('Error generating invoice data:', error);
-      Alert.alert('Error', 'Failed to generate invoice data');
+      console.error('❌ [InvoiceScreen] Error generating invoice data:', error);
+      Alert.alert('Error', 'Failed to generate invoice data. Please try again.');
     }
   };
 
   const handleClose = () => {
-    // Navigate back to POS screen after invoice is closed
-    navigation.navigate('Main', { screen: 'POS' });
+    // Check source screen parameter first, then navigation state
+    if (sourceScreen === 'Orders') {
+      navigation.navigate('Orders');
+      return;
+    }
+    
+    // Check if we came from Orders screen by looking at navigation state
+    const routes = navigation.getState()?.routes || [];
+    const previousRoute = routes[routes.length - 2];
+    
+    if (previousRoute?.name === 'Orders') {
+      // Navigate back to Orders screen
+      navigation.navigate('Orders');
+    } else if (navigation.canGoBack()) {
+      // Go back to previous screen if possible
+      navigation.goBack();
+    } else {
+      // Only fallback to POS if no other option
+      navigation.navigate('Main', { screen: 'POS' });
+    }
   };
 
   const handleSendWhatsApp = (pdfUri) => {

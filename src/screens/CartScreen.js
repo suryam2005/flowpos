@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,10 +12,12 @@ import {
   Image,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import Icon from '../components/SVGIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
+import { getProductImageUrl } from '../utils/imageUtils';
 
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
@@ -23,15 +25,20 @@ import { useOrders } from '../hooks/useOrders';
 
 import CustomAlert from '../components/CustomAlert';
 import DynamicQRGenerator from '../components/DynamicQRGenerator';
-import LoadingOverlay from '../components/LoadingOverlay';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { useQRPayment } from '../hooks/useQRPayment';
 import featureService from '../services/FeatureService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import { buttonStyles } from '../styles/buttonStyles';
+import { typography } from '../styles/typographyStyles';
+import { useTheme } from '../context/ThemeContext';
+import { useBackPrevention } from '../hooks/useBackPrevention';
 import WhatsAppService from '../services/WhatsAppService';
 
 const CartScreen = ({ navigation }) => {
+  const { theme } = useTheme();
   const { items, updateQuantity, removeItem, clearCart, getTotal } = useCart();
   const { createOrder, loading: orderLoading } = useOrders();
   const [customerName, setCustomerName] = useState('');
@@ -55,15 +62,19 @@ const CartScreen = ({ navigation }) => {
     loadCustomerDetailsRequirement();
   }, []);
 
+  // Reload settings when screen comes into focus to prevent UI flash
+  useFocusEffect(
+    useCallback(() => {
+      loadCustomerDetailsRequirement();
+      loadAvailablePaymentMethods();
+    }, [])
+  );
+
   // Auto-close cart when empty and navigate back to POS (but not during order completion)
   useEffect(() => {
     if (items.length === 0 && !completingOrder && !orderCompleted) {
-      // Small delay to allow for smooth transition
-      const timer = setTimeout(() => {
-        safeGoBack(navigation);
-      }, 500);
-      
-      return () => clearTimeout(timer);
+      // Immediate navigation without delay to prevent flash
+      safeGoBack(navigation, 'Main', { screen: 'POS' });
     }
   }, [items.length, navigation, completingOrder, orderCompleted]);
 
@@ -87,6 +98,13 @@ const CartScreen = ({ navigation }) => {
 
   // App tour guide
   const { showTour, completeTour } = useAppTour('Cart');
+
+  // Prevent back navigation during order completion
+  useBackPrevention(completingOrder, {
+    message: 'Order is being processed. Please wait for completion to avoid data loss.',
+    title: 'Processing Order',
+    hardBlock: true // No cancellation allowed during order processing
+  });
 
   const loadAvailablePaymentMethods = async () => {
     try {
@@ -340,65 +358,74 @@ const CartScreen = ({ navigation }) => {
 
   const sendAutoWhatsAppInvoice = async (orderData) => {
     try {
-      // Check if WhatsApp service is configured
+      // Check if WhatsApp service is configured and auto-send is appropriate
+      const whatsappMethod = await AsyncStorage.getItem('whatsappMethod');
+      const currentMethod = whatsappMethod || 'flowpos';
+      
+      // Only auto-send for FlowPOS method (backend), not device WhatsApp
+      if (currentMethod !== 'flowpos') {
+        console.log('Auto-send only works with FlowPOS WhatsApp method, skipping');
+        return;
+      }
+
       if (!WhatsAppService.isReady()) {
         console.log('WhatsApp service not configured, skipping auto-send');
         return;
       }
 
-      // Prepare invoice data for WhatsApp
+      // Load store information for proper invoice data
+      const storeInfo = await AsyncStorage.getItem('storeInfo');
+      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
+      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+
+      // Prepare complete invoice data for WhatsApp service
       const invoiceData = {
         invoiceNumber: orderData.orderNumber || orderData.id,
-        storeName: 'FlowPOS Store', // You can get this from store settings
-        customerName: orderData.customerName,
+        orderNumber: orderData.orderNumber || orderData.id,
+        storeName: actualStoreName,
+        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
+        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
+        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
+        customerName: orderData.customerName || 'Walk-in Customer',
         phoneNumber: orderData.phoneNumber,
-        date: new Date(orderData.timestamp).toLocaleDateString(),
-        time: new Date(orderData.timestamp).toLocaleTimeString(),
-        items: orderData.items,
-        subtotal: orderData.subtotal,
-        tax: orderData.gst,
-        grandTotal: orderData.total,
-        paymentMethod: orderData.paymentMethod,
+        date: new Date(orderData.timestamp).toLocaleDateString('en-IN'),
+        time: new Date(orderData.timestamp).toLocaleTimeString('en-IN'),
+        items: orderData.items || [],
+        subtotal: orderData.subtotal || 0,
+        tax: orderData.gst || 0,
+        grandTotal: orderData.total || orderData.grandTotal || 0,
+        paymentMethod: orderData.paymentMethod || 'Cash',
       };
 
-      // Send WhatsApp message with invoice details (text-based for auto-send)
-      const message = `🧾 *Invoice from ${invoiceData.storeName}*
+      console.log('📱 [CartScreen] Auto-sending WhatsApp invoice with proper data:', {
+        method: currentMethod,
+        customerName: invoiceData.customerName,
+        phoneNumber: invoiceData.phoneNumber,
+        storeName: invoiceData.storeName,
+        total: invoiceData.grandTotal
+      });
 
-📄 Invoice: ${invoiceData.invoiceNumber}
-👤 Customer: ${invoiceData.customerName}
-📅 Date: ${invoiceData.date} ${invoiceData.time}
-
-📦 *Items:*
-${invoiceData.items.map(item => 
-  `• ${item.name} x${item.quantity} - ₹${(item.price * item.quantity).toFixed(2)}`
-).join('\n')}
-
-💰 *Total: ₹${invoiceData.grandTotal}*
-💳 Payment: ${invoiceData.paymentMethod}
-
-Thank you for your business! 🙏
-
-_Powered by FlowPOS_`;
-
-      // Send via WhatsApp
-      const result = await WhatsAppService.sendTextMessage(
+      // Use the proper sendInvoiceMessage method instead of sendTextMessage
+      const result = await WhatsAppService.sendInvoiceMessage(
         invoiceData.phoneNumber,
-        message
+        invoiceData
       );
 
       if (result.success) {
-        console.log('Auto WhatsApp invoice sent successfully');
+        console.log('✅ Auto WhatsApp invoice sent successfully via FlowPOS backend');
         // Show success notification
         setAlertConfig({
-          title: 'Invoice Sent!',
+          title: 'Invoice Sent! ✅',
           message: `Invoice has been automatically sent to ${invoiceData.customerName} via WhatsApp.`,
           type: 'success',
           buttons: [{ text: 'Great!', style: 'default' }],
         });
         setShowAlert(true);
+      } else {
+        console.log('❌ Auto WhatsApp invoice failed:', result.error);
       }
     } catch (error) {
-      console.error('Error sending auto WhatsApp invoice:', error);
+      console.error('❌ Error sending auto WhatsApp invoice:', error);
       // Don't show error to user for auto-send, just log it
     }
   };
@@ -550,6 +577,10 @@ _Powered by FlowPOS_`;
       
       console.log('✅ [CartScreen] Order saved successfully:', savedOrder);
 
+      // Set order completed flag to prevent auto-close BEFORE clearing cart
+      console.log('✅ [CartScreen] Setting order completed flag...');
+      setOrderCompleted(true);
+      
       // Clear cart immediately after order creation
       console.log('🧹 [CartScreen] Clearing cart...');
       clearCart();
@@ -585,6 +616,11 @@ _Powered by FlowPOS_`;
       }
 
       // Navigate to SimpleInvoicePreview instead of direct Invoice screen
+      // Load store info for complete invoice data
+      const storeInfoData = await AsyncStorage.getItem('storeInfo');
+      const parsedStoreInfo = storeInfoData ? JSON.parse(storeInfoData) : {};
+      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      
       const invoiceOrderData = {
         id: savedOrder.id,
         invoiceNumber: savedOrder.orderNumber,
@@ -601,6 +637,12 @@ _Powered by FlowPOS_`;
         date: new Date(savedOrder.timestamp).toLocaleDateString(),
         time: new Date(savedOrder.timestamp).toLocaleTimeString(),
         status: 'completed',
+        // FIXED: Include store information for invoice display (Issue 1 & 2)
+        storeName: actualStoreName,
+        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
+        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
+        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
+        gstNumber: parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '',
         ...(paymentDetails && {
           paymentDetails: {
             transactionId: paymentDetails.transactionId,
@@ -613,26 +655,27 @@ _Powered by FlowPOS_`;
       console.log('Navigating to SimpleInvoicePreview with data:', invoiceOrderData);
       
       // Auto-send WhatsApp invoice if enabled and phone number is provided
+      // Only for FlowPOS method to avoid interrupting user flow with device WhatsApp
       if (phoneNumber && phoneNumber.trim()) {
         const autoWhatsAppEnabled = await AsyncStorage.getItem('autoWhatsAppInvoice');
-        if (autoWhatsAppEnabled === null || JSON.parse(autoWhatsAppEnabled)) {
+        const whatsappMethod = await AsyncStorage.getItem('whatsappMethod');
+        const currentMethod = whatsappMethod || 'flowpos';
+        
+        if ((autoWhatsAppEnabled === null || JSON.parse(autoWhatsAppEnabled)) && currentMethod === 'flowpos') {
           await sendAutoWhatsAppInvoice(invoiceOrderData);
+        } else if (currentMethod === 'device') {
+          console.log('📱 [CartScreen] Skipping auto-send for device WhatsApp to avoid flow interruption');
         }
       }
-      
-      // Set order completed flag to prevent auto-close
-      console.log('✅ [CartScreen] Setting order completed flag...');
-      setOrderCompleted(true);
       
       // Navigate to SimpleInvoicePreview for better user experience
       console.log('🚀 [CartScreen] Navigating to SimpleInvoicePreview...');
       
-      // Small delay to ensure all state updates are complete
-      setTimeout(() => {
-        navigation.navigate('SimpleInvoicePreview', { 
-          invoiceData: invoiceOrderData
-        });
-      }, 100);
+      // Immediate navigation without delay to prevent cart flash
+      navigation.navigate('SimpleInvoicePreview', { 
+        invoiceData: invoiceOrderData,
+        fromOrderCompletion: true
+      });
       
       // Loading state will be reset in finally block
 
@@ -651,6 +694,11 @@ _Powered by FlowPOS_`;
       const finalCustomerName = (customerName && customerName.trim() !== '') ? customerName.trim() : 'Walk-in Customer';
       const finalPhoneNumber = (phoneNumber && phoneNumber.trim() !== '') ? phoneNumber.trim() : '';
       
+      // Load store info for error case too
+      const storeInfoData = await AsyncStorage.getItem('storeInfo');
+      const parsedStoreInfo = storeInfoData ? JSON.parse(storeInfoData) : {};
+      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      
       const invoiceOrderData = {
         id: orderId,
         orderNumber: `ORD-${orderId}`,
@@ -660,19 +708,29 @@ _Powered by FlowPOS_`;
         subtotal,
         gst,
         total,
+        grandTotal: total,
         paymentMethod,
         timestamp: new Date().toISOString(),
-        status: 'completed'
+        date: new Date().toLocaleDateString(),
+        time: new Date().toLocaleTimeString(),
+        status: 'completed',
+        // FIXED: Include store information for invoice display (Issue 1 & 2)
+        storeName: actualStoreName,
+        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
+        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
+        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
+        gstNumber: parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '',
       };
       
       clearCart();
       
-      // Set order completed flag to prevent auto-close
+      // Set order completed flag to prevent auto-close BEFORE navigation
       setOrderCompleted(true);
       
       console.log('🚀 [CartScreen] Error case - Navigating to SimpleInvoicePreview...');
       navigation.navigate('SimpleInvoicePreview', { 
-        invoiceData: invoiceOrderData
+        invoiceData: invoiceOrderData,
+        fromOrderCompletion: true
       });
     } finally {
       setCompletingOrder(false);
@@ -703,14 +761,17 @@ _Powered by FlowPOS_`;
       setShowAlert(true);
     };
 
+    // Get image URL using utility function (same as POSScreen)
+    const displayImageUrl = getProductImageUrl(item);
+
     return (
       <View style={styles.cartItem}>
         <View style={styles.itemImage}>
-          {item.image ? (
-            <Image source={{ uri: item.image }} style={styles.itemImageStyle} />
+          {displayImageUrl ? (
+            <Image source={{ uri: displayImageUrl }} style={styles.itemImageStyle} />
           ) : (
             <View style={styles.itemImagePlaceholder}>
-              <Icon name="cube-outline" size={24} color="#6b7280" />
+              <Icon name="cube-outline" size={24} color={colors.text.secondary} />
             </View>
           )}
         </View>
@@ -742,7 +803,7 @@ _Powered by FlowPOS_`;
             onPress={handleDeleteItem}
             activeOpacity={0.7}
           >
-            <Icon name="trash-outline" size={18} color="#ef4444" />
+            <Icon name="trash-outline" size={18} color={colors.error.main} />
           </TouchableOpacity>
         </View>
       </View>
@@ -895,13 +956,12 @@ _Powered by FlowPOS_`;
 
           <View style={styles.completeButtonContainer}>
             <TouchableOpacity
-              style={[styles.completeButton, (orderLoading || completingOrder) && { opacity: 0.6 }]}
+              style={[buttonStyles.success, (orderLoading || completingOrder) && buttonStyles.disabled]}
               onPress={handleCompleteOrder}
               disabled={orderLoading || completingOrder}
-              activeOpacity={0.7}
-              hitSlop={{ top: 0, bottom: 0, left: 0, right: 0 }}
+              activeOpacity={0.8}
             >
-              <Text style={styles.completeButtonText}>
+              <Text style={buttonStyles.successText}>
                 {(orderLoading || completingOrder)
                   ? 'Processing...'
                   : paymentMethod === 'QR Pay' 
@@ -917,7 +977,7 @@ _Powered by FlowPOS_`;
       </View>
 
       {/* Loading Overlay for Order Completion */}
-      <LoadingOverlay visible={completingOrder} message="Processing order..." />
+      {completingOrder && <LoadingSpinner />}
 
       <DynamicQRGenerator
         amount={paymentData.amount}
@@ -943,6 +1003,7 @@ _Powered by FlowPOS_`;
         visible={showTour}
         currentScreen="Cart"
         onComplete={completeTour}
+        navigation={navigation}
       />
     </SafeAreaView>
   );
@@ -971,8 +1032,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...typography.styles.h2,
     color: colors.text.primary,
   },
   placeholder: {
@@ -1039,19 +1099,18 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   itemImagePlaceholderText: {
-    fontSize: 20,
+    ...typography.styles.lg,
   },
   itemDetails: {
     flex: 1,
   },
   itemName: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.styles.bodySemibold,
     color: colors.text.primary,
     marginBottom: 2,
   },
   itemPrice: {
-    fontSize: 14,
+    ...typography.styles.bodySmall,
     color: colors.text.secondary,
   },
   quantityControls: {
@@ -1068,13 +1127,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   quantityButtonText: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...typography.styles.lg,
+    fontWeight: typography.fontWeights.semibold,
     color: colors.text.primary,
   },
   quantity: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.styles.bodySemibold,
     color: colors.text.primary,
     marginHorizontal: 12,
   },
@@ -1084,8 +1142,7 @@ const styles = StyleSheet.create({
     minHeight: 50,
   },
   itemTotal: {
-    fontSize: 16,
-    fontWeight: '700',
+    ...typography.styles.priceSmall,
     color: colors.text.primary,
     marginBottom: 8,
   },
@@ -1100,7 +1157,7 @@ const styles = StyleSheet.create({
     borderColor: colors.error.border,
   },
   deleteButtonText: {
-    fontSize: 16,
+    ...typography.styles.body,
   },
   summarySection: {
     backgroundColor: colors.background.surface,
@@ -1115,12 +1172,11 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   summaryLabel: {
-    fontSize: 16,
+    ...typography.styles.body,
     color: colors.text.secondary,
   },
   summaryValue: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.styles.bodySemibold,
     color: colors.text.primary,
   },
   divider: {
@@ -1129,13 +1185,11 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   totalLabel: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...typography.styles.price,
     color: colors.text.primary,
   },
   totalValue: {
-    fontSize: 18,
-    fontWeight: '700',
+    ...typography.styles.price,
     color: colors.primary.main,
   },
   customerSection: {
@@ -1147,24 +1201,22 @@ const styles = StyleSheet.create({
     marginTop: 10,
   },
   sectionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...typography.styles.h4,
     color: colors.text.primary,
     marginBottom: 16,
   },
   inputLabel: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...typography.styles.label,
     color: colors.text.primary,
     marginBottom: 8,
   },
   textInput: {
+    ...typography.styles.input,
     borderWidth: 1,
     borderColor: colors.border.medium,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,
-    fontSize: 16,
     marginBottom: 16,
     backgroundColor: colors.background.surface,
   },
@@ -1174,16 +1226,16 @@ const styles = StyleSheet.create({
   },
   requiredAsterisk: {
     color: colors.error.main,
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.styles.body,
+    fontWeight: typography.fontWeights.semibold,
   },
   errorInput: {
     borderColor: colors.error.main,
     borderWidth: 1.5,
   },
   errorText: {
+    ...typography.styles.caption,
     color: colors.error.main,
-    fontSize: 12,
     marginTop: -12,
     marginBottom: 12,
     marginLeft: 4,
@@ -1208,12 +1260,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary.background,
   },
   paymentIcon: {
-    fontSize: 24,
+    ...typography.styles.h2,
     marginBottom: 4,
   },
   paymentText: {
-    fontSize: 14,
-    fontWeight: '500',
+    ...typography.styles.bodySmallMedium,
     color: colors.text.secondary,
   },
   paymentTextActive: {
@@ -1224,21 +1275,7 @@ const styles = StyleSheet.create({
     paddingTop: 20,
     paddingBottom: 20,
   },
-  completeButton: {
-    backgroundColor: colors.success.main,
-    borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: 56,
-  },
-  completeButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.background.surface,
-    textAlign: 'center',
-  },
+  // Complete button styles removed - using standardized buttonStyles.success
 
 });
 

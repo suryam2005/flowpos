@@ -231,7 +231,7 @@ const EditProfileScreen = ({ navigation }) => {
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => safeGoBack(navigation)}
+            onPress={() => safeGoBack(navigation, 'Profile')}
           >
             <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </TouchableOpacity>

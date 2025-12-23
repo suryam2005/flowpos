@@ -12,8 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const ResetPasswordOTPScreen = ({ navigation, route }) => {
   const { email } = route.params;
@@ -25,6 +26,13 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
   const [countdown, setCountdown] = useState(0);
   
   const inputRefs = useRef([]);
+
+  // Prevent back navigation during OTP verification
+  useBackPrevention(isLoading, {
+    message: 'OTP verification is in progress. Please wait for completion.',
+    title: 'Verifying OTP',
+    hardBlock: true
+  });
 
   useEffect(() => {
     // Start countdown for resend
@@ -204,10 +212,7 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
       </KeyboardAvoidingView>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isLoading} 
-        message="Verifying code..." 
-      />
+      {isLoading && <LoadingSpinner />}
     </SafeAreaView>
   );
 };

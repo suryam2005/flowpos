@@ -17,8 +17,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOrders } from '../hooks/useOrders';
 import * as Haptics from 'expo-haptics';
 import { fadeIn } from '../utils/animations';
-import { PageLoader } from '../components/LoadingSpinner';
-import { usePageLoading } from '../hooks/usePageLoading';
+import LoadingSpinner from '../components/LoadingSpinner';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
@@ -40,7 +39,9 @@ const OrdersScreen = ({ navigation }) => {
   const [whatsappStatus, setWhatsappStatus] = useState(null);
 
   // Page loading state
-  const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 800);
+  const [isLoading, setIsLoading] = useState(true);
+  // API operation loading state
+  const [isLoadingData, setIsLoadingData] = useState(false);
   
   // App tour guide
   const { showTour, completeTour } = useAppTour('Orders');
@@ -50,7 +51,7 @@ const OrdersScreen = ({ navigation }) => {
 
   useEffect(() => {
     // Orders are loaded automatically by useOrders hook
-    finishLoading();
+    setIsLoading(false);
     initialLoadDone.current = true;
     
     // Check WhatsApp status
@@ -82,9 +83,11 @@ const OrdersScreen = ({ navigation }) => {
 
   const onRefresh = async () => {
     setRefreshing(true);
+    setIsLoadingData(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     await refreshOrders();
     setRefreshing(false);
+    setIsLoadingData(false);
   };
 
   const formatDate = (timestamp) => {
@@ -139,7 +142,10 @@ const OrdersScreen = ({ navigation }) => {
       orderNumber: invoiceOrderData.orderNumber
     });
     
-    navigation.navigate('Invoice', { orderData: invoiceOrderData });
+    navigation.navigate('Invoice', { 
+      orderData: invoiceOrderData,
+      sourceScreen: 'Orders' // Add source context
+    });
   };
 
   const handleSendInvoice = async (order) => {
@@ -183,8 +189,8 @@ const OrdersScreen = ({ navigation }) => {
 
     try {
       // Show loading state
-      Alert.alert('Sending Invoice', 'Generating invoice and sending via WhatsApp...');
-
+      setIsLoadingData(true);
+      
       // Load store information for WhatsApp message
       const storeInfo = await AsyncStorage.getItem('storeInfo');
       const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
@@ -257,6 +263,8 @@ const OrdersScreen = ({ navigation }) => {
           }
         ]
       );
+    } finally {
+      setIsLoadingData(false);
     }
   };
 
@@ -404,7 +412,7 @@ const OrdersScreen = ({ navigation }) => {
                 }}
                 activeOpacity={0.7}
               >
-                <Icon name="send-outline" size={16} color="#ffffff" style={{ marginRight: 4 }} />
+                <Icon name="send-outline" size={16} color={colors.background.surface} style={{ marginRight: 4 }} />
                 <Text style={styles.sendButtonText}>Send</Text>
               </TouchableOpacity>
             )}
@@ -416,7 +424,7 @@ const OrdersScreen = ({ navigation }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Icon name="receipt-outline" size={64} color="#6b7280" />
+      <Icon name="receipt-outline" size={64} color={colors.text.secondary} />
       <Text style={styles.emptyTitle}>No Orders Yet</Text>
       <Text style={styles.emptyText}>
         Orders will appear here once you complete your first sale.
@@ -426,9 +434,9 @@ const OrdersScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PageLoader visible={isLoading} text="Loading orders..." />
+      {(isLoading || isLoadingData) && <LoadingSpinner />}
 
-      <View style={[styles.content, contentStyle]}>
+      <View style={styles.content}>
         <View style={styles.header}>
           <Text style={styles.title}>Orders</Text>
           <Text style={styles.subtitle}>

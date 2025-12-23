@@ -1,30 +1,26 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
   StyleSheet,
-  TextInput,
   TouchableOpacity,
   ScrollView,
   Alert,
-  Linking,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../styles/colors';
-import LoadingOverlay from '../components/LoadingOverlay';
+import { buttonStyles } from '../styles/buttonStyles';
+import LoadingSpinner from '../components/LoadingSpinner';
 import WhatsAppService from '../services/WhatsAppService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 
 const WhatsAppSetupScreen = ({ navigation }) => {
-  const [credentials, setCredentials] = useState({
-    accountSid: '',
-    authToken: '',
-    whatsAppNumber: '',
-  });
+  const [whatsAppEnabled, setWhatsAppEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
   
@@ -32,70 +28,58 @@ const WhatsAppSetupScreen = ({ navigation }) => {
   const { showTour, completeTour } = useAppTour('WhatsAppSetup');
 
   useEffect(() => {
-    loadSavedCredentials();
+    loadWhatsAppSettings();
   }, []);
 
-  const loadSavedCredentials = async () => {
+  // Reload settings when screen comes into focus to prevent UI flash
+  useFocusEffect(
+    useCallback(() => {
+      loadWhatsAppSettings(); // Reload WhatsApp settings when screen comes into focus
+    }, [])
+  );
+
+  const loadWhatsAppSettings = async () => {
     try {
-      const savedCredentials = await AsyncStorage.getItem('twilioCredentials');
-      if (savedCredentials) {
-        const parsed = JSON.parse(savedCredentials);
-        setCredentials(parsed);
-        
-        // Initialize WhatsApp service with saved credentials
-        await WhatsAppService.initialize(
-          parsed.accountSid,
-          parsed.authToken,
-          parsed.whatsAppNumber
-        );
+      const whatsAppSetting = await AsyncStorage.getItem('whatsAppEnabled');
+      if (whatsAppSetting) {
+        setWhatsAppEnabled(JSON.parse(whatsAppSetting));
       }
     } catch (error) {
-      console.error('Error loading credentials:', error);
+      console.error('Error loading WhatsApp settings:', error);
     }
   };
 
-  const saveCredentials = async () => {
-    if (!credentials.accountSid || !credentials.authToken || !credentials.whatsAppNumber) {
-      Alert.alert('Validation Error', 'Please fill in all required fields.');
-      return;
-    }
-
+  const toggleWhatsApp = async () => {
     setIsLoading(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      // Save credentials securely
-      await AsyncStorage.setItem('twilioCredentials', JSON.stringify(credentials));
-      
-      // Initialize WhatsApp service
-      await WhatsAppService.initialize(
-        credentials.accountSid,
-        credentials.authToken,
-        credentials.whatsAppNumber
-      );
+      const newValue = !whatsAppEnabled;
+      await AsyncStorage.setItem('whatsAppEnabled', JSON.stringify(newValue));
+      setWhatsAppEnabled(newValue);
 
       Alert.alert(
-        'Success! 🎉',
-        'WhatsApp integration has been configured successfully. You can now send invoices directly to customers via WhatsApp.',
-        [
-          { text: 'Test Configuration', onPress: testConfiguration },
-          { text: 'Done', style: 'default' }
-        ]
+        newValue ? 'WhatsApp Enabled! 🎉' : 'WhatsApp Disabled',
+        newValue 
+          ? 'You can now send invoices directly to customers via WhatsApp using your device.'
+          : 'WhatsApp integration has been disabled.',
+        [{ text: 'OK', style: 'default' }]
       );
     } catch (error) {
-      console.error('Error saving credentials:', error);
-      Alert.alert('Error', 'Failed to save WhatsApp configuration. Please try again.');
+      console.error('Error saving WhatsApp settings:', error);
+      Alert.alert('Error', 'Failed to save WhatsApp settings. Please try again.');
     } finally {
       setIsLoading(false);
     }
   };
 
-  const testConfiguration = async () => {
+  const testWhatsApp = async () => {
     setIsTesting(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
 
     try {
-      const result = await WhatsAppService.testConfiguration();
+      // Test device WhatsApp availability
+      const result = await WhatsAppService.testDeviceWhatsApp();
       
       if (result.success) {
         Alert.alert(
@@ -121,13 +105,7 @@ const WhatsAppSetupScreen = ({ navigation }) => {
     }
   };
 
-  const openTwilioConsole = () => {
-    Linking.openURL('https://console.twilio.com/');
-  };
 
-  const openWhatsAppSandbox = () => {
-    Linking.openURL('https://console.twilio.com/us1/develop/sms/try-it-out/whatsapp-learn');
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -145,91 +123,64 @@ const WhatsAppSetupScreen = ({ navigation }) => {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.infoCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            <Ionicons name="logo-whatsapp" size={24} color="#25D366" />
+          <View style={styles.infoHeader}>
+            <Ionicons name="logo-whatsapp" size={24} color={colors.success.main} />
             <Text style={styles.infoTitle}>WhatsApp Business Integration</Text>
           </View>
           <Text style={styles.infoText}>
-            Send professional invoices directly to your customers via WhatsApp using Twilio's WhatsApp Business API.
+            Send professional invoices directly to your customers via WhatsApp using your device.
           </Text>
         </View>
 
         <View style={styles.setupCard}>
-          <Text style={styles.sectionTitle}>Twilio Configuration</Text>
+          <Text style={styles.sectionTitle}>WhatsApp Integration</Text>
           
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Account SID *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
-              value={credentials.accountSid}
-              onChangeText={(text) => setCredentials({ ...credentials, accountSid: text })}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.inputHint}>
-              Found in your Twilio Console dashboard
-            </Text>
+          <View style={styles.toggleContainer}>
+            <View style={styles.toggleInfo}>
+              <Text style={styles.toggleTitle}>Enable WhatsApp</Text>
+              <Text style={styles.toggleDescription}>
+                Send invoices and receipts directly to customers via WhatsApp
+              </Text>
+            </View>
+            <TouchableOpacity
+              style={[styles.toggleButton, whatsAppEnabled && styles.toggleButtonActive]}
+              onPress={toggleWhatsApp}
+              disabled={isLoading}
+            >
+              <View style={[styles.toggleSlider, whatsAppEnabled && styles.toggleSliderActive]} />
+            </TouchableOpacity>
           </View>
 
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>Auth Token *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Your Twilio Auth Token"
-              value={credentials.authToken}
-              onChangeText={(text) => setCredentials({ ...credentials, authToken: text })}
-              secureTextEntry={true}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.inputHint}>
-              Keep this secure - found in Twilio Console
-            </Text>
-          </View>
-
-          <View style={styles.inputGroup}>
-            <Text style={styles.inputLabel}>WhatsApp Number *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="whatsapp:+14155238886"
-              value={credentials.whatsAppNumber}
-              onChangeText={(text) => setCredentials({ ...credentials, whatsAppNumber: text })}
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.inputHint}>
-              Your Twilio WhatsApp sandbox number
-            </Text>
-          </View>
+          {whatsAppEnabled && (
+            <View style={styles.enabledInfo}>
+              <Ionicons name="checkmark-circle" size={20} color={colors.success.main} />
+              <Text style={styles.enabledText}>
+                WhatsApp integration is enabled. Invoices will be sent via your device's WhatsApp.
+              </Text>
+            </View>
+          )}
         </View>
 
         <View style={styles.instructionsCard}>
-          <Text style={styles.sectionTitle}>Setup Instructions</Text>
+          <Text style={styles.sectionTitle}>How It Works</Text>
           
           <View style={styles.step}>
             <Text style={styles.stepNumber}>1</Text>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Create Twilio Account</Text>
+              <Text style={styles.stepTitle}>Enable WhatsApp</Text>
               <Text style={styles.stepText}>
-                Sign up for a free Twilio account and get your Account SID and Auth Token
+                Toggle the WhatsApp integration above to start sending invoices via WhatsApp
               </Text>
-              <TouchableOpacity style={styles.linkButton} onPress={openTwilioConsole}>
-                <Text style={styles.linkButtonText}>Open Twilio Console →</Text>
-              </TouchableOpacity>
             </View>
           </View>
 
           <View style={styles.step}>
             <Text style={styles.stepNumber}>2</Text>
             <View style={styles.stepContent}>
-              <Text style={styles.stepTitle}>Enable WhatsApp Sandbox</Text>
+              <Text style={styles.stepTitle}>Send Invoices</Text>
               <Text style={styles.stepText}>
-                Activate WhatsApp sandbox in your Twilio console and get your WhatsApp number
+                When creating invoices, you'll see an option to send directly via WhatsApp
               </Text>
-              <TouchableOpacity style={styles.linkButton} onPress={openWhatsAppSandbox}>
-                <Text style={styles.linkButtonText}>WhatsApp Sandbox →</Text>
-              </TouchableOpacity>
             </View>
           </View>
 
@@ -245,50 +196,37 @@ const WhatsAppSetupScreen = ({ navigation }) => {
         </View>
 
         <View style={styles.warningCard}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-            <Ionicons name="warning-outline" size={20} color="#f59e0b" />
+          <View style={styles.warningHeader}>
+            <Ionicons name="information-circle-outline" size={20} color={colors.primary.main} />
             <Text style={styles.warningTitle}>Important Notes</Text>
           </View>
           <Text style={styles.warningText}>
-            • Twilio WhatsApp sandbox is free for testing but has limitations{'\n'}
-            • For production use, you'll need WhatsApp Business API approval{'\n'}
-            • Keep your Auth Token secure and never share it{'\n'}
-            • Test thoroughly before using with customers
+            • WhatsApp must be installed on your device{'\n'}
+            • Customers need to have WhatsApp to receive invoices{'\n'}
+            • Internet connection required for sending messages{'\n'}
+            • Test with a sample invoice before using with customers
           </Text>
         </View>
       </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity
-          style={[styles.testButton, !WhatsAppService.isReady() && styles.buttonDisabled]}
-          onPress={testConfiguration}
-          disabled={!WhatsAppService.isReady() || isTesting}
-          activeOpacity={0.8}
-        >
-          <Ionicons name={isTesting ? "sync-outline" : "flask-outline"} size={18} color="#ffffff" style={{ marginRight: 8 }} />
-          <Text style={[styles.testButtonText, !WhatsAppService.isReady() && styles.buttonTextDisabled]}>
-            {isTesting ? 'Testing...' : 'Test Configuration'}
-          </Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={[styles.saveButton, isLoading && styles.buttonDisabled]}
-          onPress={saveCredentials}
-          disabled={isLoading}
-          activeOpacity={0.8}
-        >
-          <Ionicons name="save-outline" size={18} color="#ffffff" style={{ marginRight: 8 }} />
-          <Text style={styles.saveButtonText}>
-            Save Configuration
-          </Text>
-        </TouchableOpacity>
-      </View>
+      {whatsAppEnabled && (
+        <View style={styles.footer}>
+          <TouchableOpacity
+            style={[styles.testButton, isTesting && styles.buttonDisabled]}
+            onPress={testWhatsApp}
+            disabled={isTesting}
+            activeOpacity={0.8}
+          >
+            <Ionicons name={isTesting ? "sync-outline" : "flask-outline"} size={18} color={colors.surface} style={styles.buttonIcon} />
+            <Text style={styles.testButtonText}>
+              {isTesting ? 'Testing...' : 'Test WhatsApp'}
+            </Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isLoading} 
-        message="Saving configuration..." 
-      />
+      {isLoading && <LoadingSpinner />}
 
       {/* App Tour Guide */}
       <ImprovedTourGuide
@@ -423,16 +361,18 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   stepText: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.text.secondary,
-    lineHeight: 18,
+    lineHeight: 20,
     marginBottom: 8,
   },
   linkButton: {
     alignSelf: 'flex-start',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   linkButtonText: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.primary.main,
     fontWeight: '500',
   },
@@ -451,9 +391,9 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   warningText: {
-    fontSize: 13,
+    fontSize: 14,
     color: colors.warning.main,
-    lineHeight: 18,
+    lineHeight: 20,
   },
   footer: {
     flexDirection: 'row',
@@ -474,7 +414,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   testButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.background.surface,
   },
@@ -488,7 +428,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   saveButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.background.surface,
   },
@@ -497,6 +437,82 @@ const styles = StyleSheet.create({
   },
   buttonTextDisabled: {
     color: colors.background.surface,
+  },
+  infoHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 12,
+  },
+  warningHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    marginBottom: 8,
+  },
+  buttonIcon: {
+    marginRight: 8,
+  },
+  // Toggle styles
+  toggleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: 16,
+  },
+  toggleInfo: {
+    flex: 1,
+    marginRight: 16,
+  },
+  toggleTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 4,
+  },
+  toggleDescription: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    lineHeight: 20,
+  },
+  toggleButton: {
+    width: 50,
+    height: 30,
+    borderRadius: 15,
+    backgroundColor: colors.border.light,
+    padding: 2,
+    justifyContent: 'center',
+  },
+  toggleButtonActive: {
+    backgroundColor: colors.primary.main,
+  },
+  toggleSlider: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: colors.surface,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 2,
+    elevation: 2,
+  },
+  toggleSliderActive: {
+    transform: [{ translateX: 20 }],
+  },
+  enabledInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.success.light,
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 16,
+  },
+  enabledText: {
+    fontSize: 14,
+    color: colors.success.dark,
+    marginLeft: 8,
+    flex: 1,
   },
 });
 

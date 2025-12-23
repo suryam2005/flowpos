@@ -67,24 +67,30 @@ class CSVExportService {
     return [...orders]; // Simple implementation for now
   }
 
-  // Export Products to CSV
+  // Export Products to CSV - FIXED: Use real store data
   async exportProducts(filters = {}) {
     try {
-      console.log('🔍 [CSV Export] Starting products export...');
+      console.log('🔍 [CSV Export] Starting products export with REAL store data...');
       console.log('🔍 [CSV Export] Filters applied:', filters);
       
-      // Check AsyncStorage contents
-      const productsData = await AsyncStorage.getItem('products');
-      console.log('�  [CSV Export] Raw products data from AsyncStorage:', productsData ? 'EXISTS' : 'NULL');
-      console.log('📦 [CSV Export] Data length:', productsData?.length || 0);
+      // Import service dynamically to avoid circular dependencies
+      const productsService = (await import('./ProductsService')).default;
       
-      let products = productsData ? JSON.parse(productsData) : [];
-      console.log('📊 [CSV Export] Parsed products:', products.length, 'items');
+      // Fetch REAL products from service (handles store filtering)
+      let products;
+      try {
+        products = await productsService.getProducts();
+        console.log('📊 [CSV Export] Fetched REAL products from service:', products.length, 'items');
+      } catch (serviceError) {
+        console.warn('📊 [CSV Export] Service failed, trying AsyncStorage fallback:', serviceError.message);
+        const productsData = await AsyncStorage.getItem('products');
+        products = productsData ? JSON.parse(productsData) : [];
+        console.log('📊 [CSV Export] Fallback products from AsyncStorage:', products.length, 'items');
+      }
       
       // Remove duplicates based on multiple criteria (ID, name, and creation time)
       const uniqueProducts = [];
       const seenIds = new Set();
-      const seenNames = new Set();
       
       for (const product of products) {
         const productId = product.id || product._id;
@@ -108,50 +114,12 @@ class CSVExportService {
           name: products[0].name,
           category: products[0].category,
           price: products[0].price,
-          hasStock: 'stock' in products[0]
+          hasStock: 'stock' in products[0] || 'stock_quantity' in products[0]
         });
       }
 
       if (products.length === 0) {
-        // Create sample data for testing if no products exist
-        console.log('⚠️ [CSV Export] No products found in AsyncStorage');
-        console.log('⚠️ [CSV Export] This could mean:');
-        console.log('   1. No products have been created yet');
-        console.log('   2. DataSyncContext hasn\'t loaded data from backend');
-        console.log('   3. Backend has no products for this user');
-        console.log('🧪 [CSV Export] Creating sample data for testing/demo purposes');
-        
-        products = [
-          {
-            name: 'Sample Product 1 - Demo Data',
-            category: 'Food & Beverages',
-            price: 25,
-            trackStock: true,
-            stock: 50,
-            tags: ['sample', 'test', 'demo'],
-            createdAt: new Date().toISOString()
-          },
-          {
-            name: 'Sample Product 2 - Demo Data', 
-            category: 'Electronics',
-            price: 100,
-            trackStock: false,
-            stock: 0,
-            tags: ['sample', 'demo'],
-            createdAt: new Date().toISOString()
-          },
-          {
-            name: 'Sample Product 3 - Demo Data',
-            category: 'Clothing',
-            price: 45,
-            trackStock: true,
-            stock: 25,
-            tags: ['sample', 'fashion', 'demo'],
-            createdAt: new Date().toISOString()
-          }
-        ];
-        
-        console.log('✅ [CSV Export] Generated', products.length, 'sample products for export');
+        throw new Error('No products found. Please add products to your store before exporting.');
       }
 
       // Apply filters
@@ -173,10 +141,10 @@ class CSVExportService {
         'Product Name': product.name || '',
         'Category': product.category || 'Uncategorized',
         'Price (₹)': product.price || 0,
-        'Stock Quantity': product.trackStock ? (product.stock || 0) : 'Not Tracked',
-        'Track Stock': product.trackStock ? 'Yes' : 'No',
+        'Stock Quantity': (product.trackStock || product.track_stock) ? (product.stock || product.stock_quantity || 0) : 'Not Tracked',
+        'Track Stock': (product.trackStock || product.track_stock) ? 'Yes' : 'No',
         'Tags': Array.isArray(product.tags) ? product.tags.join('; ') : '',
-        'Created Date': product.createdAt ? new Date(product.createdAt).toLocaleDateString() : ''
+        'Created Date': (product.createdAt || product.created_at) ? new Date(product.createdAt || product.created_at).toLocaleDateString() : ''
       }));
 
       const csvContent = this.arrayToCSV(csvData, headers);
@@ -185,8 +153,6 @@ class CSVExportService {
       console.log('✅ [CSV Export] Products export successful!');
       console.log('✅ [CSV Export] Filename:', filename);
       console.log('✅ [CSV Export] Records exported:', products.length);
-      console.log('✅ [CSV Export] CSV content length:', csvContent.length);
-      console.log('✅ [CSV Export] CSV preview (first 100 chars):', csvContent.substring(0, 100));
       
       return {
         content: csvContent,
@@ -394,7 +360,11 @@ class CSVExportService {
         totalRevenue: orders.reduce((sum, order) => sum + (order.total || 0), 0),
         avgOrderValue: 0,
         cashPayments: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('cash')).length,
-        upiPayments: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('upi')).length
+        cardPayments: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('card')).length,
+        upiPayments: orders.filter(o => {
+          const method = (o.paymentMethod || '').toLowerCase();
+          return method.includes('upi') || method.includes('qr');
+        }).length
       };
 
       summary.avgOrderValue = summary.totalOrders > 0 ? Math.round(summary.totalRevenue / summary.totalOrders) : 0;
@@ -405,7 +375,8 @@ class CSVExportService {
         { 'Metric': 'Total Revenue (₹)', 'Value': summary.totalRevenue },
         { 'Metric': 'Average Order Value (₹)', 'Value': summary.avgOrderValue },
         { 'Metric': 'Cash Payments', 'Value': summary.cashPayments },
-        { 'Metric': 'UPI Payments', 'Value': summary.upiPayments },
+        { 'Metric': 'Card Payments', 'Value': summary.cardPayments },
+        { 'Metric': 'UPI/QR Payments', 'Value': summary.upiPayments },
         { 'Metric': 'Period', 'Value': period.charAt(0).toUpperCase() + period.slice(1) },
         { 'Metric': 'Export Date', 'Value': new Date().toLocaleDateString() }
       ];
@@ -581,13 +552,16 @@ class CSVExportService {
       }
       
       // Calculate inventory metrics
-      const trackedProducts = products.filter(p => p.trackStock);
+      const trackedProducts = products.filter(p => p.track_stock !== false);
       const totalProducts = products.length;
-      const totalStockValue = products.reduce((sum, p) => sum + ((p.stock || 0) * (p.price || 0)), 0);
-      const lowStockProducts = trackedProducts.filter(p => (p.stock || 0) <= 5);
-      const outOfStockProducts = trackedProducts.filter(p => (p.stock || 0) === 0);
+      const totalStockValue = products.reduce((sum, p) => {
+        const stock = p.stock || p.stock_quantity || 0;
+        return sum + (stock * (p.price || 0));
+      }, 0);
+      const lowStockProducts = trackedProducts.filter(p => (p.stock || p.stock_quantity || 0) <= 5);
+      const outOfStockProducts = trackedProducts.filter(p => (p.stock || p.stock_quantity || 0) === 0);
       const avgStockPerProduct = trackedProducts.length > 0 ? 
-        trackedProducts.reduce((sum, p) => sum + (p.stock || 0), 0) / trackedProducts.length : 0;
+        trackedProducts.reduce((sum, p) => sum + (p.stock || p.stock_quantity || 0), 0) / trackedProducts.length : 0;
       
       // Create inventory report data
       const csvData = [

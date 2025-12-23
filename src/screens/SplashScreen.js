@@ -9,6 +9,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { colors } from '../styles/colors';
 
 const { width, height } = Dimensions.get('window');
 
@@ -104,7 +105,7 @@ const SplashScreen = ({ navigation }) => {
           ]}
         >
           <View style={styles.logo}>
-            <Ionicons name="storefront" size={80} color="#2563EB" />
+            <Ionicons name="storefront" size={80} color={colors.primary.main} />
             <Text style={styles.logoText}>FlowPOS</Text>
             <Text style={styles.logoSubtext}>Point of Sale System</Text>
           </View>
@@ -139,7 +140,7 @@ const SplashScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1f2937',
+    backgroundColor: colors.gray[800],
   },
   content: {
     flex: 1,
@@ -161,13 +162,13 @@ const styles = StyleSheet.create({
   logoText: {
     fontSize: 36,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.background.surface,
     marginBottom: 8,
     letterSpacing: 1,
   },
   logoSubtext: {
     fontSize: 16,
-    color: '#9ca3af',
+    color: colors.text.tertiary,
     fontWeight: '500',
     letterSpacing: 0.5,
   },
@@ -178,25 +179,25 @@ const styles = StyleSheet.create({
   loadingBar: {
     width: '80%',
     height: 4,
-    backgroundColor: '#374151',
+    backgroundColor: colors.gray[700],
     borderRadius: 2,
     overflow: 'hidden',
     marginBottom: 20,
   },
   loadingProgress: {
     height: '100%',
-    backgroundColor: '#3b82f6',
+    backgroundColor: colors.primary.main,
     borderRadius: 2,
     width: '100%',
     // Add animation for loading bar
-    shadowColor: '#3b82f6',
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 0 },
     shadowOpacity: 0.5,
     shadowRadius: 4,
   },
   loadingText: {
     fontSize: 14,
-    color: '#d1d5db',
+    color: colors.gray[300],
     fontWeight: '500',
   },
   footer: {
@@ -206,12 +207,12 @@ const styles = StyleSheet.create({
   },
   versionText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: colors.text.secondary,
     marginBottom: 4,
   },
   copyrightText: {
     fontSize: 12,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
 });
 

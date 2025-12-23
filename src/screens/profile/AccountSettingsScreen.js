@@ -9,8 +9,8 @@ import {
   Alert,
   TextInput,
   Modal,
-  Share,
   Linking,
+  BackHandler,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -20,11 +20,11 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
 import { safeGoBack } from '../../utils/navigationUtils';
 import LoadingSpinner from '../../components/LoadingSpinner';
-import LoadingOverlay from '../../components/LoadingOverlay';
 import { useAuth } from '../../context/AuthContext';
+import networkService from '../../services/NetworkService';
 
 const AccountSettingsScreen = ({ navigation }) => {
-  const { user, logout, changePassword, deleteAccount } = useAuth();
+  const { changePassword, deleteAccount } = useAuth();
   
   const [settings, setSettings] = useState({
     autoLockEnabled: true,
@@ -46,18 +46,49 @@ const AccountSettingsScreen = ({ navigation }) => {
   });
   const [deletePassword, setDeletePassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingStorage, setIsLoadingStorage] = useState(true);
+  // Eye button states for password visibility
+  const [showCurrentPassword, setShowCurrentPassword] = useState(false);
+  const [showNewPassword, setShowNewPassword] = useState(false);
+  const [showConfirmPassword, setShowConfirmPassword] = useState(false);
+  const [showDeletePassword, setShowDeletePassword] = useState(false);
   const [dataUsage, setDataUsage] = useState({
-    totalStorage: '2.4 MB',
-    cacheSize: '1.1 MB',
-    documentsSize: '0.8 MB',
-    imagesSize: '0.5 MB',
-    lastBackup: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+    totalStorage: '0 B',
+    quotaStorage: '100 MB',
+    usedPercentage: 0,
+    breakdown: {
+      products: { size: '0 B', percentage: 0 },
+      orders: { size: '0 B', percentage: 0 },
+      images: { size: '0 B', percentage: 0 },
+    },
+    subscription: {
+      plan: 'trial',
+      planName: 'Free Trial'
+    }
   });
 
   useEffect(() => {
     loadAccountSettings();
-    calculateDataUsage();
+    fetchStorageUsage();
   }, []);
+
+  // FIXED: Back prevention during critical operations (password change, account deletion)
+  useEffect(() => {
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      if (isLoading) {
+        // Prevent back during loading operations
+        Alert.alert(
+          'Operation in Progress',
+          'Please wait for the current operation to complete.',
+          [{ text: 'OK', style: 'default' }]
+        );
+        return true; // Prevent default back behavior
+      }
+      return false; // Allow default back behavior
+    });
+
+    return () => backHandler.remove();
+  }, [isLoading]);
 
   const loadAccountSettings = async () => {
     try {
@@ -70,7 +101,37 @@ const AccountSettingsScreen = ({ navigation }) => {
     }
   };
 
-  const calculateDataUsage = async () => {
+  // Fetch real storage usage from backend API
+  const fetchStorageUsage = async () => {
+    try {
+      setIsLoadingStorage(true);
+      console.log('📊 Fetching storage usage from API...');
+      
+      const response = await networkService.apiCall('/subscription/storage', {
+        method: 'GET'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.data) {
+          console.log('✅ Storage data received:', result.data);
+          setDataUsage(result.data);
+        }
+      } else {
+        console.log('⚠️ Failed to fetch storage, using fallback calculation');
+        await calculateLocalStorageUsage();
+      }
+    } catch (error) {
+      console.error('Error fetching storage usage:', error);
+      // Fallback to local calculation
+      await calculateLocalStorageUsage();
+    } finally {
+      setIsLoadingStorage(false);
+    }
+  };
+
+  // Fallback: Calculate local storage usage if API fails
+  const calculateLocalStorageUsage = async () => {
     try {
       const keys = await AsyncStorage.getAllKeys();
       let totalSize = 0;
@@ -82,40 +143,34 @@ const AccountSettingsScreen = ({ navigation }) => {
         }
       }
       
+      // Format size
+      const formatBytes = (bytes) => {
+        if (bytes === 0) return '0 B';
+        const k = 1024;
+        const sizes = ['B', 'KB', 'MB', 'GB'];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+      };
+
       setDataUsage(prev => ({
         ...prev,
-        totalStorage: `${(totalSize / 1024 / 1024).toFixed(1)} MB`,
-        cacheSize: `${(totalSize * 0.4 / 1024 / 1024).toFixed(1)} MB`,
-        documentsSize: `${(totalSize * 0.35 / 1024 / 1024).toFixed(1)} MB`,
-        imagesSize: `${(totalSize * 0.25 / 1024 / 1024).toFixed(1)} MB`,
+        totalStorage: formatBytes(totalSize),
+        totalStorageBytes: totalSize,
+        quotaStorage: '100 MB',
+        quotaStorageBytes: 100 * 1024 * 1024,
+        usedPercentage: Math.round((totalSize / (100 * 1024 * 1024)) * 100),
+        breakdown: {
+          products: { size: formatBytes(totalSize * 0.3), percentage: 30 },
+          orders: { size: formatBytes(totalSize * 0.4), percentage: 40 },
+          images: { size: formatBytes(totalSize * 0.3), percentage: 30 },
+        }
       }));
     } catch (error) {
-      console.error('Error calculating data usage:', error);
+      console.error('Error calculating local data usage:', error);
     }
   };
 
-  const handleClearCache = () => {
-    Alert.alert(
-      'Clear Cache',
-      'This will clear temporary files and may improve app performance. Your data will not be affected.',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Clear Cache',
-          onPress: async () => {
-            try {
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              await new Promise(resolve => setTimeout(resolve, 1000));
-              setDataUsage(prev => ({ ...prev, cacheSize: '0.1 MB' }));
-              Alert.alert('Success', 'Cache cleared successfully');
-            } catch (error) {
-              Alert.alert('Error', 'Failed to clear cache');
-            }
-          },
-        },
-      ]
-    );
-  };
+
 
 
 
@@ -265,28 +320,6 @@ const AccountSettingsScreen = ({ navigation }) => {
     );
   };
 
-  const renderSettingItem = (title, subtitle, settingKey, onToggle = null, disabled = false) => (
-    <View style={[styles.settingItem, disabled && styles.settingItemDisabled]}>
-      <View style={styles.settingContent}>
-        <Text style={[styles.settingTitle, disabled && styles.settingTitleDisabled]}>
-          {title}
-        </Text>
-        {subtitle && (
-          <Text style={[styles.settingSubtitle, disabled && styles.settingSubtitleDisabled]}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      <Switch
-        value={settings[settingKey]}
-        onValueChange={onToggle || ((value) => updateSetting(settingKey, value))}
-        disabled={disabled}
-        trackColor={{ false: colors.border.medium, true: colors.primary.background }}
-        thumbColor={settings[settingKey] ? colors.primary.main : colors.text.tertiary}
-      />
-    </View>
-  );
-
   const renderSection = (title, children) => (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>{title}</Text>
@@ -300,7 +333,7 @@ const AccountSettingsScreen = ({ navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => safeGoBack(navigation)}
+          onPress={() => safeGoBack(navigation, 'Profile')}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
@@ -328,29 +361,88 @@ const AccountSettingsScreen = ({ navigation }) => {
           <>
             <View style={styles.dataUsageCard}>
               <View style={styles.dataUsageHeader}>
-                <Text style={styles.dataUsageTitle}>Storage Usage</Text>
-                <Text style={styles.dataUsageTotal}>{dataUsage.totalStorage}</Text>
+                <View>
+                  <Text style={styles.dataUsageTitle}>Storage Usage</Text>
+                  <Text style={styles.dataUsagePlan}>
+                    {dataUsage.subscription?.planName || 'Free Trial'}
+                  </Text>
+                </View>
+                <View style={styles.dataUsageTotalContainer}>
+                  <Text style={styles.dataUsageTotal}>{dataUsage.totalStorage}</Text>
+                  <Text style={styles.dataUsageQuota}>/ {dataUsage.quotaStorage}</Text>
+                </View>
               </View>
+              
+              {/* Progress Bar */}
+              <View style={styles.progressBarContainer}>
+                <View 
+                  style={[
+                    styles.progressBar, 
+                    { 
+                      width: `${Math.min(dataUsage.usedPercentage || 0, 100)}%`,
+                      backgroundColor: dataUsage.isOverLimit 
+                        ? colors.error.main 
+                        : dataUsage.isNearLimit 
+                          ? colors.warning.main 
+                          : colors.primary.main
+                    }
+                  ]} 
+                />
+              </View>
+              <Text style={styles.progressText}>
+                {dataUsage.usedPercentage?.toFixed(1) || 0}% used
+                {dataUsage.isNearLimit && !dataUsage.isOverLimit && ' - Near limit'}
+                {dataUsage.isOverLimit && ' - Over limit!'}
+              </Text>
+              
               <View style={styles.dataUsageBreakdown}>
                 <View style={styles.dataUsageItem}>
-                  <Text style={styles.dataUsageLabel}>Cache</Text>
-                  <Text style={styles.dataUsageValue}>{dataUsage.cacheSize}</Text>
+                  <View style={styles.dataUsageItemLeft}>
+                    <Ionicons name="cube-outline" size={16} color={colors.primary.main} />
+                    <Text style={styles.dataUsageLabel}>Products</Text>
+                  </View>
+                  <Text style={styles.dataUsageValue}>
+                    {dataUsage.breakdown?.products?.size || '0 B'}
+                    {dataUsage.breakdown?.products?.count !== undefined && 
+                      ` (${dataUsage.breakdown.products.count})`}
+                  </Text>
                 </View>
                 <View style={styles.dataUsageItem}>
-                  <Text style={styles.dataUsageLabel}>Documents</Text>
-                  <Text style={styles.dataUsageValue}>{dataUsage.documentsSize}</Text>
+                  <View style={styles.dataUsageItemLeft}>
+                    <Ionicons name="receipt-outline" size={16} color={colors.success.main} />
+                    <Text style={styles.dataUsageLabel}>Orders</Text>
+                  </View>
+                  <Text style={styles.dataUsageValue}>
+                    {dataUsage.breakdown?.orders?.size || '0 B'}
+                    {dataUsage.breakdown?.orders?.count !== undefined && 
+                      ` (${dataUsage.breakdown.orders.count})`}
+                  </Text>
                 </View>
                 <View style={styles.dataUsageItem}>
-                  <Text style={styles.dataUsageLabel}>Images</Text>
-                  <Text style={styles.dataUsageValue}>{dataUsage.imagesSize}</Text>
+                  <View style={styles.dataUsageItemLeft}>
+                    <Ionicons name="storefront-outline" size={16} color={colors.text.secondary} />
+                    <Text style={styles.dataUsageLabel}>Store Info</Text>
+                  </View>
+                  <Text style={styles.dataUsageValue}>
+                    {dataUsage.breakdown?.store?.size || '0 B'}
+                  </Text>
                 </View>
               </View>
-              <TouchableOpacity
-                style={styles.clearCacheButton}
-                onPress={handleClearCache}
+              
+              {/* Refresh Button */}
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={fetchStorageUsage}
+                disabled={isLoadingStorage}
               >
-                <Ionicons name="trash-outline" size={16} color={colors.primary.main} />
-                <Text style={styles.clearCacheText}>Clear Cache</Text>
+                {isLoadingStorage ? (
+                  <Text style={styles.refreshButtonText}>Loading...</Text>
+                ) : (
+                  <>
+                    <Ionicons name="refresh-outline" size={16} color={colors.primary.main} />
+                    <Text style={styles.refreshButtonText}>Refresh</Text>
+                  </>
+                )}
               </TouchableOpacity>
             </View>
           </>
@@ -390,55 +482,97 @@ const AccountSettingsScreen = ({ navigation }) => {
         animationType="slide"
         transparent={true}
         visible={changePasswordModal}
-        onRequestClose={() => setChangePasswordModal(false)}
+        onRequestClose={() => {
+          // FIXED: Prevent closing modal during loading
+          if (!isLoading) {
+            setChangePasswordModal(false);
+          }
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Change Password</Text>
               <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setChangePasswordModal(false)}
+                style={[styles.closeButton, isLoading && styles.closeButtonDisabled]}
+                onPress={() => !isLoading && setChangePasswordModal(false)}
+                disabled={isLoading}
               >
-                <Ionicons name="close" size={24} color={colors.text.primary} />
+                <Ionicons name="close" size={24} color={isLoading ? colors.text.tertiary : colors.text.primary} />
               </TouchableOpacity>
             </View>
 
             <View style={styles.modalContent}>
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Current Password</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter current password"
-                  value={passwordForm.currentPassword}
-                  onChangeText={(text) => setPasswordForm({...passwordForm, currentPassword: text})}
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="Enter current password"
+                    value={passwordForm.currentPassword}
+                    onChangeText={(text) => setPasswordForm({...passwordForm, currentPassword: text})}
+                    secureTextEntry={!showCurrentPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowCurrentPassword(!showCurrentPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons 
+                      name={showCurrentPassword ? "eye-off" : "eye"} 
+                      size={20} 
+                      color={colors.text.secondary} 
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>New Password</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Enter new password"
-                  value={passwordForm.newPassword}
-                  onChangeText={(text) => setPasswordForm({...passwordForm, newPassword: text})}
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="Enter new password"
+                    value={passwordForm.newPassword}
+                    onChangeText={(text) => setPasswordForm({...passwordForm, newPassword: text})}
+                    secureTextEntry={!showNewPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowNewPassword(!showNewPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons 
+                      name={showNewPassword ? "eye-off" : "eye"} 
+                      size={20} 
+                      color={colors.text.secondary} 
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Confirm New Password</Text>
-                <TextInput
-                  style={styles.input}
-                  placeholder="Confirm new password"
-                  value={passwordForm.confirmPassword}
-                  onChangeText={(text) => setPasswordForm({...passwordForm, confirmPassword: text})}
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    placeholder="Confirm new password"
+                    value={passwordForm.confirmPassword}
+                    onChangeText={(text) => setPasswordForm({...passwordForm, confirmPassword: text})}
+                    secureTextEntry={!showConfirmPassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowConfirmPassword(!showConfirmPassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons 
+                      name={showConfirmPassword ? "eye-off" : "eye"} 
+                      size={20} 
+                      color={colors.text.secondary} 
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <TouchableOpacity
@@ -458,17 +592,23 @@ const AccountSettingsScreen = ({ navigation }) => {
         animationType="slide"
         transparent={true}
         visible={deleteAccountModal}
-        onRequestClose={() => setDeleteAccountModal(false)}
+        onRequestClose={() => {
+          // FIXED: Prevent closing modal during loading
+          if (!isLoading) {
+            setDeleteAccountModal(false);
+          }
+        }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Delete Account</Text>
               <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setDeleteAccountModal(false)}
+                style={[styles.closeButton, isLoading && styles.closeButtonDisabled]}
+                onPress={() => !isLoading && setDeleteAccountModal(false)}
+                disabled={isLoading}
               >
-                <Ionicons name="close" size={24} color={colors.text.primary} />
+                <Ionicons name="close" size={24} color={isLoading ? colors.text.tertiary : colors.text.primary} />
               </TouchableOpacity>
             </View>
 
@@ -479,14 +619,26 @@ const AccountSettingsScreen = ({ navigation }) => {
               
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Enter your password to confirm</Text>
-                <TextInput
-                  style={styles.input}
-                  value={deletePassword}
-                  onChangeText={setDeletePassword}
-                  placeholder="Current password"
-                  secureTextEntry
-                  autoCapitalize="none"
-                />
+                <View style={styles.passwordInputContainer}>
+                  <TextInput
+                    style={styles.passwordInput}
+                    value={deletePassword}
+                    onChangeText={setDeletePassword}
+                    placeholder="Current password"
+                    secureTextEntry={!showDeletePassword}
+                    autoCapitalize="none"
+                  />
+                  <TouchableOpacity
+                    onPress={() => setShowDeletePassword(!showDeletePassword)}
+                    style={styles.eyeButton}
+                  >
+                    <Ionicons 
+                      name={showDeletePassword ? "eye-off" : "eye"} 
+                      size={20} 
+                      color={colors.text.secondary} 
+                    />
+                  </TouchableOpacity>
+                </View>
               </View>
 
               <TouchableOpacity
@@ -502,10 +654,7 @@ const AccountSettingsScreen = ({ navigation }) => {
       </Modal>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isLoading} 
-        message={deleteAccountModal ? "Deleting account..." : "Changing password..."} 
-      />
+      <LoadingSpinner visible={isLoading} />
     </SafeAreaView>
   );
 };
@@ -646,6 +795,9 @@ const styles = StyleSheet.create({
   closeButton: {
     padding: 4,
   },
+  closeButtonDisabled: {
+    opacity: 0.5,
+  },
   modalContent: {
     padding: 20,
   },
@@ -691,6 +843,24 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text.primary,
   },
+  passwordInputContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.background.primary,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 8,
+  },
+  passwordInput: {
+    flex: 1,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: colors.text.primary,
+  },
+  eyeButton: {
+    padding: 12,
+  },
   saveButton: {
     backgroundColor: colors.primary.main,
     borderRadius: 8,
@@ -717,21 +887,49 @@ const styles = StyleSheet.create({
   dataUsageHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+    alignItems: 'flex-start',
+    marginBottom: 12,
   },
   dataUsageTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text.primary,
   },
+  dataUsagePlan: {
+    fontSize: 12,
+    color: colors.text.secondary,
+    marginTop: 2,
+  },
+  dataUsageTotalContainer: {
+    alignItems: 'flex-end',
+  },
   dataUsageTotal: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.primary.main,
   },
-  dataUsageBreakdown: {
+  dataUsageQuota: {
+    fontSize: 12,
+    color: colors.text.secondary,
+  },
+  progressBarContainer: {
+    height: 8,
+    backgroundColor: colors.border.light,
+    borderRadius: 4,
+    marginBottom: 8,
+    overflow: 'hidden',
+  },
+  progressBar: {
+    height: '100%',
+    borderRadius: 4,
+  },
+  progressText: {
+    fontSize: 12,
+    color: colors.text.secondary,
     marginBottom: 16,
+  },
+  dataUsageBreakdown: {
+    marginBottom: 12,
   },
   dataUsageItem: {
     flexDirection: 'row',
@@ -740,6 +938,11 @@ const styles = StyleSheet.create({
     paddingVertical: 8,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
+  },
+  dataUsageItemLeft: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
   },
   dataUsageLabel: {
     fontSize: 14,
@@ -750,14 +953,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.text.primary,
   },
-  clearCacheButton: {
+  refreshButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
-    backgroundColor: colors.primary.light,
-    borderRadius: 8,
-    gap: 8,
+    gap: 6,
+    paddingVertical: 8,
+    marginTop: 4,
+  },
+  refreshButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.primary.main,
   },
   clearCacheText: {
     fontSize: 14,

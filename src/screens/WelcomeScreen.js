@@ -9,6 +9,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../styles/colors';
+import { spacing } from '../styles/spacingStyles';
 
 const WelcomeScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -91,7 +92,7 @@ const WelcomeScreen = ({ navigation }) => {
         {/* Step Content */}
         <View style={styles.stepContent}>
           <View style={styles.stepHeader}>
-            <Ionicons name={currentStepData.icon} size={80} color="#2563EB" style={{ marginBottom: 24 }} />
+            <Ionicons name={currentStepData.icon} size={80} color={colors.primary.main} style={styles.stepIcon} />
             <Text style={styles.title}>{currentStepData.title}</Text>
             <Text style={styles.subtitle}>{currentStepData.subtitle}</Text>
           </View>
@@ -162,18 +163,18 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingHorizontal: spacing.xl, // 20px - standardized
+    paddingVertical: spacing.lg,   // 16px - standardized
     backgroundColor: colors.background.primary,
   },
   headerSpacer: {
     flex: 1,
   },
   skipButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg,  // 16px - standardized
+    paddingVertical: spacing.md,    // 12px - standardized
     backgroundColor: colors.background.surface,
-    borderRadius: 20,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border.light,
   },
@@ -184,27 +185,27 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 24,
+    paddingHorizontal: spacing.xl, // 20px - standardized
   },
   stepContent: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 20,
+    paddingVertical: spacing.xl,   // 20px - standardized
   },
   stepHeader: {
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: spacing.huge,    // 40px - standardized
   },
   emoji: {
     fontSize: 80,
-    marginBottom: 24,
+    marginBottom: spacing.xxl,     // 24px - standardized
   },
   title: {
-    fontSize: 26,
+    fontSize: 28,
     fontWeight: '700',
     color: colors.text.primary,
-    marginBottom: 8,
+    marginBottom: spacing.sm,      // 8px - standardized
     textAlign: 'center',
   },
   subtitle: {
@@ -214,8 +215,8 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   description: {
-    paddingHorizontal: 20,
-    marginBottom: 40,
+    paddingHorizontal: spacing.xl, // 20px - standardized
+    marginBottom: spacing.huge,    // 40px - standardized
   },
   descriptionText: {
     fontSize: 16,
@@ -227,27 +228,27 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'center',
     alignItems: 'center',
-    marginBottom: 40,
+    marginBottom: spacing.huge,    // 40px - standardized
   },
   indicator: {
     width: 8,
     height: 8,
     borderRadius: 4,
     backgroundColor: colors.border.medium,
-    marginHorizontal: 4,
+    marginHorizontal: spacing.xs,  // 4px - standardized
   },
   indicatorActive: {
     backgroundColor: colors.primary.main,
     width: 24,
   },
   navigation: {
-    paddingBottom: 20,
+    paddingBottom: spacing.xl,     // 20px - standardized
   },
   nextButton: {
     backgroundColor: colors.primary.main,
-    paddingHorizontal: 48,
-    paddingVertical: 16,
-    borderRadius: 16,
+    paddingHorizontal: spacing.xl, // 20px - standardized
+    paddingVertical: spacing.lg,   // 16px - standardized
+    borderRadius: 12,
     alignItems: 'center',
     shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
@@ -256,13 +257,14 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   nextButtonText: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: '600',
     color: colors.background.surface,
   },
   signInButton: {
-    marginTop: 16,
-    paddingVertical: 12,
+    marginTop: spacing.lg,         // 16px - standardized
+    paddingVertical: spacing.lg,   // 16px - standardized
+    paddingHorizontal: spacing.lg, // 16px - standardized
     alignItems: 'center',
   },
   signInButtonText: {
@@ -271,15 +273,18 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   signInHeaderButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    paddingHorizontal: spacing.lg, // 16px - standardized
+    paddingVertical: spacing.md,   // 12px - standardized
     backgroundColor: colors.primary.main,
-    borderRadius: 20,
+    borderRadius: 12,
   },
   signInHeaderText: {
-    fontSize: 14,
-    color: '#fff',
+    fontSize: 16,
+    color: colors.background.surface,
     fontWeight: '600',
+  },
+  stepIcon: {
+    marginBottom: spacing.xxl,     // 24px - standardized
   },
 });
 

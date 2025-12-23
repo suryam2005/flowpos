@@ -18,6 +18,7 @@ import { captureRef } from 'react-native-view-shot';
 import { colors } from '../styles/colors';
 import LoadingOverlay from './LoadingOverlay';
 import WhatsAppService from '../services/WhatsAppService';
+import InvoiceService from '../services/InvoiceService'; // CONSOLIDATED: Use unified service
 
 const SimpleInvoicePreview = ({ 
   visible, 
@@ -28,13 +29,82 @@ const SimpleInvoicePreview = ({
   const [isGenerating, setIsGenerating] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState(null);
   const [showSendButton, setShowSendButton] = useState(true);
+  // Receipt settings loaded from AsyncStorage
   const [receiptSettings, setReceiptSettings] = useState({
     showAddress: true,
     showPhone: true,
     showEmail: false,
     showGST: true
   });
+  // Enriched invoice data with store information
+  const [enrichedInvoiceData, setEnrichedInvoiceData] = useState(null);
   const invoiceRef = useRef();
+
+  // Load receipt settings and enrich invoice data on mount
+  useEffect(() => {
+    const loadSettingsAndEnrichData = async () => {
+      try {
+        // Load receipt settings from AsyncStorage
+        const [receiptSettingsData, showStoreNameSetting, storeInfoData] = await Promise.all([
+          AsyncStorage.getItem('receiptSettings'),
+          AsyncStorage.getItem('showStoreNameOnInvoice'),
+          AsyncStorage.getItem('storeInfo')
+        ]);
+
+        // Parse receipt settings
+        const parsedReceiptSettings = receiptSettingsData ? JSON.parse(receiptSettingsData) : {};
+        const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
+        
+        const settings = {
+          showAddress: parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true,
+          showPhone: parsedReceiptSettings.showPhone !== undefined ? parsedReceiptSettings.showPhone : true,
+          showEmail: parsedReceiptSettings.showEmail !== undefined ? parsedReceiptSettings.showEmail : false,
+          showGST: parsedReceiptSettings.showGST !== undefined ? parsedReceiptSettings.showGST : true,
+          showStoreName
+        };
+        
+        setReceiptSettings(settings);
+        console.log('📄 [SimpleInvoicePreview] Loaded receipt settings:', settings);
+
+        // Enrich invoice data with store information
+        if (invoiceData && storeInfoData) {
+          const storeInfo = JSON.parse(storeInfoData);
+          const actualStoreName = storeInfo.store_name || storeInfo.name || 'FlowPOS Store';
+          
+          const enriched = {
+            ...invoiceData,
+            // Apply store name setting
+            storeName: settings.showStoreName ? actualStoreName : 'FlowPOS Store',
+            // Add store contact details
+            storeAddress: storeInfo.store_address || storeInfo.address || '',
+            storePhone: storeInfo.store_phone || storeInfo.phone || '',
+            storeEmail: storeInfo.store_email || storeInfo.email || '',
+            gstNumber: storeInfo.gst_number || storeInfo.gstin || '',
+            // Include receipt settings for display logic
+            receiptSettings: settings
+          };
+          
+          setEnrichedInvoiceData(enriched);
+          console.log('📄 [SimpleInvoicePreview] Enriched invoice data:', {
+            storeName: enriched.storeName,
+            hasAddress: !!enriched.storeAddress,
+            hasPhone: !!enriched.storePhone,
+            hasEmail: !!enriched.storeEmail,
+            hasGST: !!enriched.gstNumber
+          });
+        } else {
+          setEnrichedInvoiceData(invoiceData);
+        }
+      } catch (error) {
+        console.error('❌ [SimpleInvoicePreview] Error loading settings:', error);
+        setEnrichedInvoiceData(invoiceData);
+      }
+    };
+
+    if (visible && invoiceData) {
+      loadSettingsAndEnrichData();
+    }
+  }, [visible, invoiceData, refreshTrigger]);
 
   const generateInvoiceImage = async () => {
     try {
@@ -62,35 +132,33 @@ const SimpleInvoicePreview = ({
     const imageUri = await generateInvoiceImage();
     if (imageUri) {
       try {
-        const totalAmount = Number(invoiceData.grandTotal) || Number(invoiceData.total) || 0;
+        // Use enriched data for complete information
+        const data = enrichedInvoiceData || invoiceData;
+        const totalAmount = Number(data.grandTotal) || Number(data.total) || 0;
+        const storeName = data.storeName || 'FlowPOS Store';
+        const invoiceNumber = data.invoiceNumber || data.orderNumber || 'N/A';
+        const customerName = data.customerName || 'Customer';
+        const date = data.date || (data.timestamp ? new Date(data.timestamp).toLocaleDateString('en-IN') : new Date().toLocaleDateString('en-IN'));
+        
+        // Build comprehensive share message
+        let shareMessage = `🧾 Invoice from ${storeName}\n`;
+        shareMessage += `📋 Invoice #: ${invoiceNumber}\n`;
+        shareMessage += `👤 Customer: ${customerName}\n`;
+        shareMessage += `📅 Date: ${date}\n`;
+        shareMessage += `💰 Total: ₹${totalAmount.toFixed(2)}`;
+        
         await Share.share({
           url: imageUri,
-          message: `Invoice from ${invoiceData.storeName}\nInvoice #${invoiceData.invoiceNumber}\nTotal: ₹${totalAmount.toFixed(2)}`,
+          message: shareMessage,
         });
       } catch (error) {
-        console.error('Error sharing invoice:', error);
+        console.error('❌ [SimpleInvoicePreview] Error sharing invoice:', error);
+        Alert.alert('Share Failed', 'Unable to share invoice. Please try again.');
       }
     }
   };
 
-  // Load receipt settings
-  const loadReceiptSettings = async () => {
-    try {
-      const settings = await AsyncStorage.getItem('receiptSettings');
-      if (settings) {
-        const parsedSettings = JSON.parse(settings);
-        setReceiptSettings({
-          showAddress: parsedSettings.showAddress !== undefined ? parsedSettings.showAddress : true,
-          showPhone: parsedSettings.showPhone !== undefined ? parsedSettings.showPhone : true,
-          showEmail: parsedSettings.showEmail !== undefined ? parsedSettings.showEmail : false,
-          showGST: parsedSettings.showGST !== undefined ? parsedSettings.showGST : true
-        });
-        console.log('🧾 [SimpleInvoicePreview] Receipt settings loaded:', parsedSettings);
-      }
-    } catch (error) {
-      console.error('Error loading receipt settings:', error);
-    }
-  };
+  // Use enriched data's receipt settings or fall back to state-loaded settings
 
   // Check WhatsApp status on component mount and when visibility changes
   useEffect(() => {
@@ -130,13 +198,13 @@ const SimpleInvoicePreview = ({
           setShowSendButton(false);
         }
       } catch (error) {
-        console.error('Error checking WhatsApp status:', error);
+        console.error('❌ [SimpleInvoicePreview] Error checking WhatsApp status:', error);
         setShowSendButton(false);
       }
     };
 
     if (visible && invoiceData) {
-      loadReceiptSettings();
+      // CONSOLIDATED: No need to load receipt settings separately
       checkWhatsAppStatus();
     }
   }, [visible, invoiceData, refreshTrigger]);
@@ -240,13 +308,7 @@ const SimpleInvoicePreview = ({
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={onClose}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-        </TouchableOpacity>
+        <View style={styles.headerRight} />
         <Text style={styles.headerTitle}>E-Bill</Text>
         <View style={styles.headerRight} />
       </View>
@@ -265,43 +327,43 @@ const SimpleInvoicePreview = ({
             <Text style={styles.thankYouTitle}>Thank you for your order!</Text>
           </View>
 
-          {/* Store Name */}
-          {invoiceData.storeName && (
+          {/* Store Name - use enriched data */}
+          {(enrichedInvoiceData?.storeName || invoiceData.storeName) && receiptSettings.showStoreName !== false && (
             <View style={styles.storeNameSection}>
               <Text style={styles.storeName}>
-                {invoiceData.storeName}
+                {enrichedInvoiceData?.storeName || invoiceData.storeName}
               </Text>
             </View>
           )}
 
-          {/* Store Contact Information */}
-          {(receiptSettings.showAddress && invoiceData.storeAddress) ||
-           (receiptSettings.showPhone && invoiceData.storePhone) ||
-           (receiptSettings.showEmail && invoiceData.storeEmail) ||
-           (receiptSettings.showGST && invoiceData.gstNumber) ? (
+          {/* Store Contact Information - use enriched data with receipt settings */}
+          {((receiptSettings.showAddress && (enrichedInvoiceData?.storeAddress || invoiceData.storeAddress)) ||
+           (receiptSettings.showPhone && (enrichedInvoiceData?.storePhone || invoiceData.storePhone)) ||
+           (receiptSettings.showEmail && (enrichedInvoiceData?.storeEmail || invoiceData.storeEmail)) ||
+           (receiptSettings.showGST && (enrichedInvoiceData?.gstNumber || invoiceData.gstNumber))) ? (
             <View style={styles.storeContactSection}>
-              {receiptSettings.showAddress && invoiceData.storeAddress && (
+              {receiptSettings.showAddress && (enrichedInvoiceData?.storeAddress || invoiceData.storeAddress) && (
                 <View style={styles.contactRow}>
                   <Icon name="location-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>{invoiceData.storeAddress}</Text>
+                  <Text style={styles.contactText}>{enrichedInvoiceData?.storeAddress || invoiceData.storeAddress}</Text>
                 </View>
               )}
-              {receiptSettings.showPhone && invoiceData.storePhone && (
+              {receiptSettings.showPhone && (enrichedInvoiceData?.storePhone || invoiceData.storePhone) && (
                 <View style={styles.contactRow}>
                   <Icon name="call-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>{invoiceData.storePhone}</Text>
+                  <Text style={styles.contactText}>{enrichedInvoiceData?.storePhone || invoiceData.storePhone}</Text>
                 </View>
               )}
-              {receiptSettings.showEmail && invoiceData.storeEmail && (
+              {receiptSettings.showEmail && (enrichedInvoiceData?.storeEmail || invoiceData.storeEmail) && (
                 <View style={styles.contactRow}>
                   <Icon name="mail-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>{invoiceData.storeEmail}</Text>
+                  <Text style={styles.contactText}>{enrichedInvoiceData?.storeEmail || invoiceData.storeEmail}</Text>
                 </View>
               )}
-              {receiptSettings.showGST && invoiceData.gstNumber && (
+              {receiptSettings.showGST && (enrichedInvoiceData?.gstNumber || invoiceData.gstNumber) && (
                 <View style={styles.contactRow}>
                   <Icon name="document-text-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>GST: {invoiceData.gstNumber}</Text>
+                  <Text style={styles.contactText}>GST: {enrichedInvoiceData?.gstNumber || invoiceData.gstNumber}</Text>
                 </View>
               )}
             </View>
@@ -376,8 +438,11 @@ const SimpleInvoicePreview = ({
 
           {/* Receipt Details */}
           <View style={styles.receiptDetailsSection}>
-            <Text style={styles.receiptId}>Receipt #: {invoiceData.invoiceNumber}</Text>
-            <Text style={styles.receiptDate}>Date: {invoiceData.date}</Text>
+            <Text style={styles.receiptId}>Receipt #: {invoiceData.invoiceNumber || invoiceData.orderNumber || 'N/A'}</Text>
+            <Text style={styles.receiptDate}>Date: {invoiceData.date || (invoiceData.timestamp ? new Date(invoiceData.timestamp).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }))}</Text>
+            {invoiceData.time && (
+              <Text style={styles.receiptDate}>Time: {invoiceData.time}</Text>
+            )}
           </View>
 
           {/* Footer Message */}

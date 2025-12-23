@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../styles/colors';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const ChangePasswordOTPScreen = ({ navigation, route }) => {
   const { email } = route.params;
@@ -25,6 +26,13 @@ const ChangePasswordOTPScreen = ({ navigation, route }) => {
   const [countdown, setCountdown] = useState(0);
   
   const inputRefs = useRef([]);
+
+  // FIXED: Prevent back navigation during OTP verification
+  useBackPrevention(isLoading, {
+    message: 'OTP verification is in progress. Please wait for completion.',
+    title: 'Verifying OTP',
+    hardBlock: true
+  });
 
   useEffect(() => {
     // Start countdown for resend

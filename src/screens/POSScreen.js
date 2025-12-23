@@ -22,11 +22,15 @@ import featureService from '../services/FeatureService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import { buttonStyles } from '../styles/buttonStyles';
+import { typography } from '../styles/typographyStyles';
+import { useTheme } from '../context/ThemeContext';
 import { getProductImageUrl } from '../utils/imageUtils';
 
 
 
 const POSScreen = ({ navigation, route }) => {
+  const { theme: _ } = useTheme(); // Theme context available for future use
   const [selectedTag, setSelectedTag] = useState('All Items');
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
@@ -41,7 +45,7 @@ const POSScreen = ({ navigation, route }) => {
   
   // Real-time data hooks
   const { data: products, refresh: refreshProducts } = useRealtimeProducts();
-  const { data: storeInfo } = useRealtimeStoreInfo();
+  const { data: storeInfo, refresh: refreshStoreInfo } = useRealtimeStoreInfo();
   
   // Get store name - always display, independent of settings
   // Priority: user settings → profile → store name → fallback: "My Store"
@@ -52,8 +56,9 @@ const POSScreen = ({ navigation, route }) => {
     featureService.initialize();
     
     // Trigger initial products fetch
-    console.log('🏪 [POS] Initial mount - fetching products');
+    console.log('🏪 [POS] Initial mount - fetching products and store info');
     refreshProducts();
+    refreshStoreInfo(); // Also fetch store info on mount
     initialLoadDone.current = true;
   }, []);
 
@@ -241,7 +246,7 @@ const POSScreen = ({ navigation, route }) => {
             />
           ) : (
             <View style={styles.productImagePlaceholder}>
-              <Ionicons name="cube-outline" size={32} color="#6b7280" />
+              <Ionicons name="cube-outline" size={32} color={colors.text.secondary} />
             </View>
           )}
         </View>
@@ -287,7 +292,9 @@ const POSScreen = ({ navigation, route }) => {
         styles.categoryButton,
         selectedTag === item && styles.categoryButtonActive
       ]}
-      onPress={() => setSelectedTag(item)}
+      onPress={() => {
+        setSelectedTag(item);
+      }}
     >
       <ResponsiveText 
         variant="caption" 
@@ -304,7 +311,7 @@ const POSScreen = ({ navigation, route }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="cube-outline" size={64} color="#6b7280" />
+      <Ionicons name="cube-outline" size={64} color={colors.text.secondary} />
       <ResponsiveText variant="title" style={styles.emptyTitle}>
         No Products Yet
       </ResponsiveText>
@@ -313,7 +320,13 @@ const POSScreen = ({ navigation, route }) => {
       </ResponsiveText>
       <TouchableOpacity
         style={styles.addProductButton}
-        onPress={() => navigation.navigate('Main', { screen: 'Manage' })}
+        onPress={() => navigation.navigate('Main', { 
+          screen: 'Manage', 
+          params: { 
+            initialTab: 'Products',
+            openAddModal: true 
+          }
+        })}
         activeOpacity={0.8}
       >
         <ResponsiveText variant="button" style={styles.addProductButtonText}>
@@ -359,7 +372,7 @@ const POSScreen = ({ navigation, route }) => {
               style={styles.searchButton}
               onPress={() => setShowSearch(true)}
             >
-              <Ionicons name="search-outline" size={20} color="#6b7280" />
+              <Ionicons name="search-outline" size={20} color={colors.text.secondary} />
             </TouchableOpacity>
             <FlatList
               data={availableTags}
@@ -387,6 +400,7 @@ const POSScreen = ({ navigation, route }) => {
             showsVerticalScrollIndicator={false}
             style={[styles.productList, webScrollFix]}
             columnWrapperStyle={styles.productRow}
+            onScrollBeginDrag={() => {}}
             refreshControl={
               <RefreshControl
                 refreshing={false}
@@ -423,11 +437,11 @@ const POSScreen = ({ navigation, route }) => {
                 <Ionicons name="trash-outline" size={24} color={colors.error.main} />
               </TouchableOpacity>
               <TouchableOpacity
-                style={styles.cartButton}
+                style={buttonStyles.success}
                 onPress={() => navigation.navigate('Cart')}
                 activeOpacity={0.8}
               >
-                <ResponsiveText variant="button" style={styles.cartButtonText}>
+                <ResponsiveText variant="button" style={buttonStyles.successText}>
                   Complete Order
                 </ResponsiveText>
               </TouchableOpacity>
@@ -451,6 +465,7 @@ const POSScreen = ({ navigation, route }) => {
         visible={showTour}
         currentScreen="POS"
         onComplete={completeTour}
+        navigation={navigation}
       />
       </View>
     </SafeAreaView>
@@ -476,6 +491,7 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.border.light,
   },
   title: {
+    ...typography.styles.h3,
     color: colors.text.primary,
     flexShrink: 1,
     flexWrap: 'wrap',
@@ -484,7 +500,7 @@ const styles = StyleSheet.create({
     padding: 8,
   },
   settingsIcon: {
-    fontSize: 22,
+    ...typography.styles.h4,
     color: colors.text.secondary,
   },
   categorySection: {
@@ -510,7 +526,7 @@ const styles = StyleSheet.create({
     marginRight: 12,
   },
   searchButtonText: {
-    fontSize: 16,
+    ...typography.styles.body,
   },
   searchContainer: {
     flexDirection: 'row',
@@ -519,12 +535,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   searchInput: {
+    ...typography.styles.bodySmall,
     flex: 1,
     height: 36,
     backgroundColor: colors.gray[100],
     borderRadius: 18,
     paddingHorizontal: 16,
-    fontSize: 14,
     color: colors.text.primary,
   },
   searchCloseButton: {
@@ -537,7 +553,7 @@ const styles = StyleSheet.create({
     marginLeft: 12,
   },
   searchCloseText: {
-    fontSize: 14,
+    ...typography.styles.bodySmall,
     color: colors.text.secondary,
   },
   categoryContainer: {
@@ -560,6 +576,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.primary.main,
   },
   categoryText: {
+    ...typography.styles.bodySmallMedium,
     color: colors.text.secondary,
     textAlign: 'center',
     flexWrap: 'wrap',
@@ -625,7 +642,8 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   productImagePlaceholderText: {
-    fontSize: 48, // Larger icon for bigger image area
+    ...typography.styles.h1,
+    fontSize: typography.fontSizes['3xl'] + 18, // Extra large for placeholder
   },
   productContent: {
     width: '100%',
@@ -636,22 +654,20 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
   },
   productName: {
-    fontSize: 14,
+    ...typography.styles.bodySmallMedium,
     color: colors.text.primary,
     textAlign: 'center',
     marginBottom: 8,
     flexWrap: 'wrap',
     flexShrink: 1,
-    lineHeight: 18,
-    fontWeight: '600',
     width: '100%',
+    fontWeight: typography.fontWeights.semibold,
   },
   productPrice: {
-    fontSize: 16,
+    ...typography.styles.priceSmall,
     color: colors.primary.main,
     marginBottom: 4,
     textAlign: 'center',
-    fontWeight: '700',
   },
   stockContainer: {
     backgroundColor: colors.gray[100],
@@ -661,9 +677,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   productStock: {
-    fontSize: 13,
+    ...typography.styles.captionMedium,
     color: colors.text.secondary,
-    fontWeight: '500',
     textAlign: 'center',
   },
   lowStockBadge: {
@@ -676,9 +691,9 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   lowStockText: {
-    fontSize: 10,
-    color: '#d97706',
-    fontWeight: '500',
+    ...typography.styles.badge,
+    fontSize: typography.fontSizes.xs - 2, // Extra small for low stock badge
+    color: colors.warning.main,
   },
   quantityBadge: {
     position: 'absolute',
@@ -697,9 +712,8 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   quantityText: {
-    fontSize: 12,
+    ...typography.styles.badge,
     color: colors.background.surface,
-    fontWeight: '700',
   },
   cartSummary: {
     position: 'absolute',
@@ -752,18 +766,9 @@ const styles = StyleSheet.create({
     borderColor: colors.error.border,
   },
   clearCartText: {
-    fontSize: 16,
+    ...typography.styles.body,
   },
-  cartButton: {
-    backgroundColor: colors.background.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 12,
-    borderRadius: 12,
-  },
-  cartButtonText: {
-    color: colors.text.primary,
-    textAlign: 'center',
-  },
+  // Cart button styles removed - using standardized buttonStyles.success
   emptyState: {
     flex: 1,
     justifyContent: 'center',
@@ -772,15 +777,17 @@ const styles = StyleSheet.create({
     paddingVertical: 60,
   },
   emptyIcon: {
-    fontSize: 80,
+    fontSize: typography.fontSizes['3xl'] * 2.5, // Large empty state icon
     marginBottom: 24,
   },
   emptyTitle: {
+    ...typography.styles.h3,
     color: colors.text.primary,
     marginBottom: 12,
     textAlign: 'center',
   },
   emptyText: {
+    ...typography.styles.body,
     color: colors.text.secondary,
     textAlign: 'center',
     marginBottom: 32,
@@ -798,6 +805,7 @@ const styles = StyleSheet.create({
     elevation: 8,
   },
   addProductButtonText: {
+    ...typography.styles.button,
     color: colors.background.surface,
     textAlign: 'center',
   },

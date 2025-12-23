@@ -18,9 +18,186 @@ import TagInput from '../../components/TagInput';
 import ProductImagePicker from '../../components/ProductImagePicker';
 import { generateProductTags } from '../../utils/tagGenerator';
 import { colors } from '../../styles/colors';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import productsService from '../../services/ProductsService';
 import NetworkService from '../../services/NetworkService';
+
+// Enhanced product validation and security utilities
+const ProductValidation = {
+  // Sanitize input to prevent XSS and injection attacks
+  sanitizeInput: (input) => {
+    if (typeof input !== 'string') return '';
+    return input
+      .trim()
+      .replace(/[<>\"'&]/g, '') // Remove potentially dangerous characters
+      .substring(0, 200); // Limit length to prevent buffer overflow
+  },
+
+  // Product name validation
+  validateProductName: (name) => {
+    const sanitized = ProductValidation.sanitizeInput(name);
+    if (!sanitized) return { isValid: false, error: 'Product name is required' };
+    if (sanitized.length < 2) return { isValid: false, error: 'Product name must be at least 2 characters' };
+    if (sanitized.length > 100) return { isValid: false, error: 'Product name is too long (max 100 characters)' };
+    
+    // Check for valid characters (letters, numbers, spaces, basic punctuation)
+    const validNameRegex = /^[a-zA-Z0-9\s\-\.\&\'\,\(\)\/]+$/;
+    if (!validNameRegex.test(sanitized)) {
+      return { isValid: false, error: 'Product name contains invalid characters' };
+    }
+    
+    return { isValid: true, sanitized };
+  },
+
+  // Price validation
+  validatePrice: (price) => {
+    if (!price || price.toString().trim() === '') {
+      return { isValid: false, error: 'Price is required' };
+    }
+    
+    const priceStr = price.toString().trim();
+    const priceNum = parseFloat(priceStr);
+    
+    if (isNaN(priceNum)) {
+      return { isValid: false, error: 'Please enter a valid price' };
+    }
+    
+    if (priceNum <= 0) {
+      return { isValid: false, error: 'Price must be greater than 0' };
+    }
+    
+    if (priceNum > 999999) {
+      return { isValid: false, error: 'Price is too high (max ₹999,999)' };
+    }
+    
+    // Check for reasonable decimal places (max 2)
+    if (priceStr.includes('.') && priceStr.split('.')[1].length > 2) {
+      return { isValid: false, error: 'Price can have maximum 2 decimal places' };
+    }
+    
+    return { isValid: true, sanitized: priceNum };
+  },
+
+  // Stock validation
+  validateStock: (stock, trackStock) => {
+    if (!trackStock) return { isValid: true, sanitized: 0 }; // Stock not tracked
+    
+    if (!stock || stock.toString().trim() === '') {
+      return { isValid: false, error: 'Stock quantity is required when stock tracking is enabled' };
+    }
+    
+    const stockStr = stock.toString().trim();
+    const stockNum = parseInt(stockStr);
+    
+    if (isNaN(stockNum)) {
+      return { isValid: false, error: 'Please enter a valid stock quantity' };
+    }
+    
+    if (stockNum < 0) {
+      return { isValid: false, error: 'Stock quantity cannot be negative' };
+    }
+    
+    if (stockNum > 999999) {
+      return { isValid: false, error: 'Stock quantity is too high (max 999,999)' };
+    }
+    
+    // Check for decimal values (stock should be whole numbers)
+    if (stockStr.includes('.')) {
+      return { isValid: false, error: 'Stock quantity must be a whole number' };
+    }
+    
+    return { isValid: true, sanitized: stockNum };
+  },
+
+  // Tags validation
+  validateTags: (tags) => {
+    if (!Array.isArray(tags)) return { isValid: true, sanitized: [] };
+    
+    const sanitizedTags = tags
+      .map(tag => ProductValidation.sanitizeInput(tag))
+      .filter(tag => tag.length > 0)
+      .slice(0, 10); // Limit to 10 tags
+    
+    // Check each tag length
+    for (const tag of sanitizedTags) {
+      if (tag.length > 30) {
+        return { isValid: false, error: 'Tag names must be 30 characters or less' };
+      }
+    }
+    
+    return { isValid: true, sanitized: sanitizedTags };
+  },
+
+  // Image URL validation
+  validateImageUrl: (imageUrl) => {
+    if (!imageUrl || !imageUrl.trim()) return { isValid: true, sanitized: '' }; // Optional field
+    
+    const sanitized = imageUrl.trim();
+    if (sanitized.length > 500) return { isValid: false, error: 'Image URL is too long' };
+    
+    // Basic URL validation
+    const urlRegex = /^https?:\/\/.+\.(jpg|jpeg|png|gif|webp)(\?.*)?$/i;
+    if (!urlRegex.test(sanitized)) {
+      return { isValid: false, error: 'Please provide a valid image URL' };
+    }
+    
+    return { isValid: true, sanitized };
+  },
+
+  // Complete product validation
+  validateProduct: (productData) => {
+    const errors = {};
+    let isValid = true;
+
+    // Validate name
+    const nameValidation = ProductValidation.validateProductName(productData.name);
+    if (!nameValidation.isValid) {
+      errors.name = nameValidation.error;
+      isValid = false;
+    }
+
+    // Validate price
+    const priceValidation = ProductValidation.validatePrice(productData.price);
+    if (!priceValidation.isValid) {
+      errors.price = priceValidation.error;
+      isValid = false;
+    }
+
+    // Validate stock
+    const stockValidation = ProductValidation.validateStock(productData.stock, productData.trackStock);
+    if (!stockValidation.isValid) {
+      errors.stock = stockValidation.error;
+      isValid = false;
+    }
+
+    // Validate tags
+    const tagsValidation = ProductValidation.validateTags(productData.tags);
+    if (!tagsValidation.isValid) {
+      errors.tags = tagsValidation.error;
+      isValid = false;
+    }
+
+    // Validate image
+    const imageValidation = ProductValidation.validateImageUrl(productData.image);
+    if (!imageValidation.isValid) {
+      errors.image = imageValidation.error;
+      isValid = false;
+    }
+
+    return {
+      isValid,
+      errors,
+      sanitizedData: isValid ? {
+        name: nameValidation.sanitized,
+        price: priceValidation.sanitized,
+        stock: stockValidation.sanitized,
+        trackStock: productData.trackStock,
+        tags: tagsValidation.sanitized,
+        image: imageValidation.sanitized
+      } : null
+    };
+  }
+};
 
 const ProductOnboardingScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
@@ -39,6 +216,20 @@ const ProductOnboardingScreen = ({ navigation }) => {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingSamples, setIsAddingSamples] = useState(false);
+
+  // Validation error states
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Clear validation error for specific field
+  const clearValidationError = (field) => {
+    if (validationErrors[field]) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+  };
 
   // Sample products to help users get started quickly with high-quality images
   const sampleProducts = {
@@ -492,37 +683,37 @@ const ProductOnboardingScreen = ({ navigation }) => {
   };
 
   const handleSaveProduct = async () => {
-    if (!formData.name.trim()) {
-      Alert.alert('Validation Error', 'Product name is required.');
+    // Comprehensive validation using ProductValidation utility
+    const validation = ProductValidation.validateProduct(formData);
+    
+    if (!validation.isValid) {
+      setValidationErrors(validation.errors);
+      const firstError = Object.values(validation.errors)[0];
+      Alert.alert('Validation Error', firstError);
       return;
     }
 
-    if (!formData.price || isNaN(formData.price) || parseInt(formData.price) <= 0) {
-      Alert.alert('Validation Error', 'Please enter a valid price.');
-      return;
-    }
-
-    if (formData.trackStock && (!formData.stock || isNaN(formData.stock) || parseInt(formData.stock) < 0)) {
-      Alert.alert('Validation Error', 'Please enter a valid stock quantity.');
-      return;
-    }
+    // Clear any existing validation errors
+    setValidationErrors({});
 
     setIsCreating(true);
     try {
-      let finalTags = formData.tags;
+      const sanitizedData = validation.sanitizedData;
+      
+      let finalTags = sanitizedData.tags;
       if (finalTags.length === 0) {
-        finalTags = generateProductTags(formData.name.trim(), businessType);
+        finalTags = generateProductTags(sanitizedData.name, businessType);
       }
 
       const productData = {
-        name: formData.name.trim(),
-        price: parseInt(formData.price),
-        stock_quantity: formData.trackStock ? parseInt(formData.stock) : 0,
-        track_stock: formData.trackStock,
+        name: sanitizedData.name,
+        price: sanitizedData.price,
+        stock_quantity: sanitizedData.trackStock ? sanitizedData.stock : 0,
+        track_stock: sanitizedData.trackStock,
         category: finalTags[0] || 'General',
-        tags: finalTags, // Include tags in backend call
+        tags: finalTags,
         description: `Custom product created during onboarding`,
-        image_url: formData.image || '',
+        image_url: sanitizedData.image || '',
       };
 
       console.log('🚨 Creating custom product in Supabase:', productData);
@@ -536,7 +727,18 @@ const ProductOnboardingScreen = ({ navigation }) => {
       
     } catch (error) {
       console.error('❌ Error creating custom product:', error);
-      Alert.alert('Error', 'Failed to create product. Please try again.');
+      
+      // Enhanced error handling
+      let errorMessage = 'Failed to create product. Please try again.';
+      if (error.message.includes('Network')) {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      } else if (error.message.includes('duplicate') || error.message.includes('already exists')) {
+        errorMessage = 'A product with this name already exists. Please use a different name.';
+      } else if (error.message) {
+        errorMessage = error.message;
+      }
+      
+      Alert.alert('Error', errorMessage);
     } finally {
       setIsCreating(false);
     }
@@ -609,11 +811,12 @@ const ProductOnboardingScreen = ({ navigation }) => {
   const handleSkip = async () => {
     try {
       // Mark onboarding as completed even with fewer products
+      // Skip does NOT add any sample products - user explicitly chose to skip
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
-      console.log('✅ Onboarding marked as completed (skipped)');
+      console.log('✅ Onboarding marked as completed (skipped without adding products)');
       
-      // Allow skipping with fewer than 4 products
+      // Navigate directly to POS screen without adding any products
       navigation.replace('Main', { 
         screen: 'POS',
         params: { startTour: true }
@@ -777,28 +980,60 @@ const ProductOnboardingScreen = ({ navigation }) => {
                   </TouchableOpacity>
                 </View>
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Product Name"
-                  value={formData.name}
-                  onChangeText={(text) => setFormData({ ...formData, name: text })}
-                />
+                <View style={styles.inputGroup}>
+                  <TextInput
+                    style={[styles.textInput, validationErrors.name && styles.inputError]}
+                    placeholder="Product Name"
+                    value={formData.name}
+                    onChangeText={(text) => {
+                      setFormData({ ...formData, name: text });
+                      clearValidationError('name');
+                    }}
+                    maxLength={100}
+                    editable={!isCreating}
+                  />
+                  {validationErrors.name && (
+                    <Text style={styles.errorText}>{validationErrors.name}</Text>
+                  )}
+                </View>
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Price (₹)"
-                  value={formData.price}
-                  onChangeText={(text) => setFormData({ ...formData, price: text })}
-                  keyboardType="numeric"
-                />
+                <View style={styles.inputGroup}>
+                  <TextInput
+                    style={[styles.textInput, validationErrors.price && styles.inputError]}
+                    placeholder="Price (₹)"
+                    value={formData.price}
+                    onChangeText={(text) => {
+                      setFormData({ ...formData, price: text });
+                      clearValidationError('price');
+                    }}
+                    keyboardType="numeric"
+                    maxLength={10}
+                    editable={!isCreating}
+                  />
+                  {validationErrors.price && (
+                    <Text style={styles.errorText}>{validationErrors.price}</Text>
+                  )}
+                </View>
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Stock Quantity"
-                  value={formData.stock}
-                  onChangeText={(text) => setFormData({ ...formData, stock: text })}
-                  keyboardType="numeric"
-                />
+                {formData.trackStock && (
+                  <View style={styles.inputGroup}>
+                    <TextInput
+                      style={[styles.textInput, validationErrors.stock && styles.inputError]}
+                      placeholder="Stock Quantity"
+                      value={formData.stock}
+                      onChangeText={(text) => {
+                        setFormData({ ...formData, stock: text });
+                        clearValidationError('stock');
+                      }}
+                      keyboardType="numeric"
+                      maxLength={8}
+                      editable={!isCreating}
+                    />
+                    {validationErrors.stock && (
+                      <Text style={styles.errorText}>{validationErrors.stock}</Text>
+                    )}
+                  </View>
+                )}
 
                 <ProductImagePicker
                   image={formData.image}
@@ -835,10 +1070,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
       />
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isCreating || isAddingSamples} 
-        message={isCreating ? "Creating product..." : "Adding sample products..."} 
-      />
+      {(isCreating || isAddingSamples) && <LoadingSpinner />}
     </SafeAreaView>
   );
 };
@@ -1097,8 +1329,20 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
     fontSize: 16,
-    marginBottom: 16,
     backgroundColor: '#ffffff',
+  },
+  inputGroup: {
+    marginBottom: 16,
+  },
+  inputError: {
+    borderColor: '#EF4444',
+    borderWidth: 1.5,
+  },
+  errorText: {
+    color: '#EF4444',
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
   },
   saveButton: {
     backgroundColor: '#10b981',

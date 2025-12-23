@@ -21,9 +21,8 @@ import * as Haptics from 'expo-haptics';
 import InventoryScreen from './manage/InventoryScreen';
 import productsService from '../services/ProductsService';
 import StoreSettingsScreen from './manage/StoreSettingsScreen';
-import { PageLoader, InlineLoader } from '../components/LoadingSpinner';
-import { usePageLoading, useTabLoading } from '../hooks/usePageLoading';
-import LoadingOverlay from '../components/LoadingOverlay';
+import LoadingSpinner from '../components/LoadingSpinner';
+
 import featureService from '../services/FeatureService';
 import TagInput from '../components/TagInput';
 import ProductImagePicker from '../components/ProductImagePicker';
@@ -32,14 +31,18 @@ import productImageService from '../services/ProductImageService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
+import { buttonStyles } from '../styles/buttonStyles';
+import { typography } from '../styles/typographyStyles';
+import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { getProductImageUrl } from '../utils/imageUtils';
 import { useDataSync } from '../context/DataSyncContext';
 
 
-const ManageScreen = ({ navigation }) => {
+const ManageScreen = ({ navigation, route }) => {
+  const { theme } = useTheme();
   const { user, isAuthenticated, getStore } = useAuth();
-  const { fetchFreshData } = useDataSync();
+  const { fetchFreshData, subscribe, products: syncedProducts } = useDataSync();
   const [products, setProducts] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
 
@@ -50,12 +53,15 @@ const ManageScreen = ({ navigation }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [saving, setSaving] = useState(false);
   
-  // Page and tab loading states
-  const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
-  const { activeTab, loadingTab, switchTab, isTabLoading } = useTabLoading();
+  // Page loading state
+  const [isLoading, setIsLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState('Products');
   
   // App tour guide
   const { showTour, completeTour } = useAppTour('Manage');
+
+  // Note: Back prevention not needed for ManageScreen as modal handles its own navigation
+  // The LoadingOverlay already prevents interaction during save operations
   
   // Refs for maintaining focus
   const lastFocusedInputRef = useRef(null);
@@ -84,15 +90,44 @@ const ManageScreen = ({ navigation }) => {
       loadProducts(false, false); // Silent refresh
     });
 
+    // FIXED: Subscribe to DataSyncContext for real-time updates from InventoryScreen
+    const unsubscribeSync = subscribe((event) => {
+      if (event.type === 'products') {
+        console.log('📦 [ManageScreen] Received products update from DataSyncContext');
+        const normalizedProducts = normalizeProducts(event.data);
+        setProducts(normalizedProducts);
+      }
+    });
+
     // Initialize active tab
     if (!activeTab) {
-      switchTab('Products', 0); // No loading for initial tab
+      setActiveTab('Products'); // Set initial tab to Products
     }
 
     // No animations needed
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+      unsubscribeSync();
+    };
   }, [navigation]);
+
+  // Handle route params for navigation from POS screen
+  useEffect(() => {
+    if (route?.params?.initialTab) {
+      console.log('📦 [ManageScreen] Setting initial tab:', route.params.initialTab);
+      setActiveTab(route.params.initialTab);
+    }
+    if (route?.params?.openAddModal) {
+      console.log('📦 [ManageScreen] Opening add product modal');
+      // Small delay to ensure tab is set and screen is ready
+      setTimeout(() => {
+        handleAddProduct();
+      }, 200);
+      // Clear the param to prevent re-triggering
+      navigation.setParams({ openAddModal: undefined });
+    }
+  }, [route?.params, navigation, handleAddProduct]);
 
   // Trigger DataSync refresh when modal closes (product updated)
   useEffect(() => {
@@ -203,12 +238,12 @@ const ManageScreen = ({ navigation }) => {
       
       // Only finish loading on initial load (not on focus refresh)
       if (isInitialLoad) {
-        finishLoading();
+        setIsLoading(false);
       }
     } catch (error) {
       console.error('Error loading products:', error);
       if (isInitialLoad) {
-        finishLoading();
+        setIsLoading(false);
       }
     } finally {
       if (isRefresh) {
@@ -448,14 +483,15 @@ const ManageScreen = ({ navigation }) => {
           track_stock: formData.trackStock,
           category: finalTags[0] || 'General',
           tags: finalTags,
-          // Use the uploaded Supabase URL or existing image URL
-          ...(imageUrl && { image_url: imageUrl }),
+          // FIXED: Always include image_url - set to empty string if null (to clear the image)
+          image_url: imageUrl || '',
         };
         
         console.log('\n🟡🟡🟡 === MANAGESCREEN SENDING UPDATE === 🟡🟡🟡');
         console.log('Product ID:', editingProduct.id);
         console.log('formData.trackStock:', formData.trackStock, 'Type:', typeof formData.trackStock);
         console.log('updateData.track_stock:', updateData.track_stock, 'Type:', typeof updateData.track_stock);
+        console.log('updateData.image_url:', updateData.image_url);
         console.log('Full updateData:', JSON.stringify(updateData, null, 2));
         
         console.log('🟡 CALLING productsService.updateProduct...');
@@ -596,16 +632,18 @@ const ManageScreen = ({ navigation }) => {
       </View>
       <View style={styles.productActions}>
         <TouchableOpacity
-          style={styles.actionButton}
+          style={buttonStyles.iconSmall}
           onPress={() => handleEditProduct(item)}
+          activeOpacity={0.7}
         >
-          <Ionicons name="pencil-outline" size={20} color="#3b82f6" />
+          <Ionicons name="pencil-outline" size={20} color={colors.primary.main} />
         </TouchableOpacity>
         <TouchableOpacity
-          style={styles.actionButton}
+          style={[buttonStyles.iconSmall, { backgroundColor: colors.error.background }]}
           onPress={() => handleDeleteProduct(item.id)}
+          activeOpacity={0.7}
         >
-          <Ionicons name="trash-outline" size={20} color="#ef4444" />
+          <Ionicons name="trash-outline" size={20} color={colors.error.main} />
         </TouchableOpacity>
       </View>
     </View>
@@ -688,17 +726,9 @@ const ManageScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <LoadingOverlay 
-        visible={saving} 
-        message={
-          formData.image && formData.image.startsWith('file://') 
-            ? (editingProduct ? 'Uploading image and updating product...' : 'Uploading image and creating product...')
-            : (editingProduct ? 'Updating product...' : 'Adding product...')
-        } 
-      />
-      <PageLoader visible={isLoading} text="Loading manage..." />
+      {(saving || isLoading) && <LoadingSpinner />}
       
-      <View style={[styles.content, contentStyle]}>
+      <View style={styles.content}>
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.titleContainer}
@@ -737,11 +767,10 @@ const ManageScreen = ({ navigation }) => {
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => switchTab(tab)}
-            disabled={isTabLoading(tab)}
+            onPress={() => setActiveTab(tab)}
           >
-            {isTabLoading(tab) ? (
-              <InlineLoader visible={true} size="small" color={colors.primary.main} />
+            {false ? (
+              null
             ) : (
               <Text 
                 style={[
@@ -773,15 +802,13 @@ const ManageScreen = ({ navigation }) => {
             </View>
             <TouchableOpacity
               style={[
-                styles.addButton,
-                !storeSetupCompleted && styles.addButtonDisabled
+                buttonStyles.compact,
+                !storeSetupCompleted && buttonStyles.disabled
               ]}
               onPress={handleAddProduct}
+              activeOpacity={0.8}
             >
-              <Text style={[
-                styles.addButtonText,
-                !storeSetupCompleted && styles.addButtonTextDisabled
-              ]}>
+              <Text style={buttonStyles.compactText}>
                 {!storeSetupCompleted ? 'Setup First' : 'Add Product'}
               </Text>
             </TouchableOpacity>
@@ -945,10 +972,11 @@ const ManageScreen = ({ navigation }) => {
                 />
 
                 <TouchableOpacity
-                  style={styles.saveButton}
+                  style={buttonStyles.success}
                   onPress={handleSaveProduct}
+                  activeOpacity={0.8}
                 >
-                  <Text style={styles.saveButtonText}>
+                  <Text style={buttonStyles.successText}>
                     {editingProduct ? 'Update Product' : 'Add Product'}
                   </Text>
                 </TouchableOpacity>
@@ -994,12 +1022,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   title: {
-    fontSize: 24,
-    fontWeight: '700',
+    ...typography.styles.h2,
     color: colors.text.primary,
   },
   storeSubtitle: {
-    fontSize: 14,
+    ...typography.styles.bodySmall,
     color: colors.text.secondary,
     marginTop: 2,
   },
@@ -1016,7 +1043,7 @@ const styles = StyleSheet.create({
     borderColor: '#fbbf24',
   },
   subscriptionIcon: {
-    fontSize: 16,
+    ...typography.styles.body,
   },
   profileButton: {
     padding: 8,
@@ -1025,13 +1052,13 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   profileIcon: {
-    fontSize: 22,
+    ...typography.styles.h4,
   },
   settingsButton: {
     padding: 8,
   },
   settingsIcon: {
-    fontSize: 20,
+    ...typography.styles.xl,
   },
   tabBar: {
     flexDirection: 'row',
@@ -1054,7 +1081,8 @@ const styles = StyleSheet.create({
     borderBottomColor: colors.primary.main,
   },
   tabText: {
-    fontSize: 11,
+    ...typography.styles.caption,
+    fontSize: typography.fontSizes.xs - 1, // Extra small for tabs
     color: colors.text.secondary,
     textAlign: 'center',
     flexWrap: 'wrap',
@@ -1062,9 +1090,10 @@ const styles = StyleSheet.create({
     numberOfLines: 2,
   },
   tabTextActive: {
-    fontSize: 11,
+    ...typography.styles.captionMedium,
+    fontSize: typography.fontSizes.xs - 1, // Extra small for tabs
     color: colors.primary.main,
-    fontWeight: '600',
+    fontWeight: typography.fontWeights.semibold,
     textAlign: 'center',
     flexWrap: 'wrap',
     lineHeight: 14,
@@ -1082,8 +1111,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   productsTitle: {
-    fontSize: 18,
-    fontWeight: '600',
+    ...typography.styles.h4,
     color: colors.text.primary,
   },
   setupWarning: {
@@ -1093,27 +1121,10 @@ const styles = StyleSheet.create({
     gap: 4,
   },
   setupWarningText: {
-    fontSize: 12,
+    ...typography.styles.captionMedium,
     color: colors.warning.main,
-    fontWeight: '500',
   },
-  addButton: {
-    backgroundColor: colors.primary.main,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
-  },
-  addButtonText: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: colors.background.surface,
-  },
-  addButtonDisabled: {
-    backgroundColor: colors.text.tertiary,
-  },
-  addButtonTextDisabled: {
-    color: colors.background.surface,
-  },
+  // Add button styles removed - using standardized buttonStyles.compact
   productsList: {
     padding: 20,
     paddingBottom: 140, // Reduced spacing
@@ -1154,7 +1165,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
   },
   productImagePlaceholderText: {
-    fontSize: 20,
+    ...typography.styles.xl,
   },
   productTags: {
     flexDirection: 'row',
@@ -1170,12 +1181,12 @@ const styles = StyleSheet.create({
     marginBottom: 2,
   },
   productTagText: {
-    fontSize: 10,
+    fontSize: typography.fontSizes.xs - 2, // Extra small for tags
     color: '#1e40af',
-    fontWeight: '500',
+    fontWeight: typography.fontWeights.medium,
   },
   moreTags: {
-    fontSize: 10,
+    fontSize: typography.fontSizes.xs - 2, // Extra small for tags
     color: colors.text.secondary,
     fontStyle: 'italic',
   },
@@ -1195,31 +1206,27 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   productName: {
-    fontSize: 16,
-    fontWeight: '600',
+    ...typography.styles.bodySemibold,
     color: colors.text.primary,
     marginBottom: 4,
     flexWrap: 'wrap',
     flexShrink: 1,
   },
   productDetails: {
-    fontSize: 14,
+    ...typography.styles.bodySmall,
     color: colors.text.secondary,
     marginBottom: 2,
   },
   productCategory: {
-    fontSize: 12,
+    ...typography.styles.caption,
     color: colors.text.tertiary,
   },
   productActions: {
     flexDirection: 'row',
   },
-  actionButton: {
-    padding: 8,
-    marginLeft: 8,
-  },
+  // Action button styles removed - using standardized buttonStyles.iconSmall
   actionIcon: {
-    fontSize: 18,
+    ...typography.styles.lg,
   },
   modalOverlay: {
     flex: 1,
@@ -1251,8 +1258,7 @@ const styles = StyleSheet.create({
     marginBottom: 16,
   },
   modalTitle: {
-    fontSize: 20,
-    fontWeight: '600',
+    ...typography.styles.h3,
     color: colors.text.primary,
   },
   closeButton: {
@@ -1352,17 +1358,7 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     color: colors.background.surface,
   },
-  saveButton: {
-    backgroundColor: colors.success.main,
-    paddingVertical: 16,
-    borderRadius: 12,
-    alignItems: 'center',
-  },
-  saveButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.background.surface,
-  },
+  // Save button styles removed - using standardized buttonStyles.success
 
   tabContent: {
     flex: 1,

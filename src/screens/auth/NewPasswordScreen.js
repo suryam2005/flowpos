@@ -12,8 +12,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const NewPasswordScreen = ({ navigation, route }) => {
   const { email } = route.params;
@@ -26,6 +27,13 @@ const NewPasswordScreen = ({ navigation, route }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+
+  // FIXED: Prevent back navigation during password reset to avoid security issues
+  useBackPrevention(isLoading, {
+    message: 'Password reset is in progress. Please wait for completion.',
+    title: 'Resetting Password',
+    hardBlock: true // No cancellation allowed during password operations
+  });
 
   const validatePassword = (password) => {
     const minLength = 8;
@@ -281,10 +289,7 @@ const NewPasswordScreen = ({ navigation, route }) => {
       </KeyboardAvoidingView>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isLoading} 
-        message="Resetting password..." 
-      />
+      {isLoading && <LoadingSpinner />}
     </SafeAreaView>
   );
 };

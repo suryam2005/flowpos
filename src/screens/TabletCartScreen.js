@@ -142,14 +142,14 @@ const TabletCartScreen = ({ navigation }) => {
             onPress={() => navigation.goBack()}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={isTablet ? 28 : 24} color="#1f2937" />
+            <Ionicons name="arrow-back" size={isTablet ? 28 : 24} color={colors.text.primary} />
           </TouchableOpacity>
           <Text style={[styles.title, isTablet && styles.tabletTitle]}>Cart</Text>
           <View style={styles.placeholder} />
         </View>
         
         <View style={styles.emptyCart}>
-          <Ionicons name="cart-outline" size={isTablet ? 80 : 64} color="#9ca3af" />
+          <Ionicons name="cart-outline" size={isTablet ? 80 : 64} color={colors.text.tertiary} />
           <Text style={[styles.emptyText, isTablet && styles.tabletEmptyText]}>Your cart is empty</Text>
           <Text style={[styles.emptySubtext, isTablet && styles.tabletEmptySubtext]}>
             Add some items to get started
@@ -180,7 +180,7 @@ const TabletCartScreen = ({ navigation }) => {
             onPress={() => navigation.goBack()}
             activeOpacity={0.7}
           >
-            <Ionicons name="arrow-back" size={isTablet ? 28 : 24} color="#1f2937" />
+            <Ionicons name="arrow-back" size={isTablet ? 28 : 24} color={colors.text.primary} />
           </TouchableOpacity>
           <Text style={[styles.title, isTablet && styles.tabletTitle]}>
             Cart ({getItemCount()})
@@ -217,7 +217,7 @@ const TabletCartScreen = ({ navigation }) => {
                   value={customerName}
                   onChangeText={setCustomerName}
                   placeholder="Customer name"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={colors.text.tertiary}
                 />
               </View>
               
@@ -228,7 +228,7 @@ const TabletCartScreen = ({ navigation }) => {
                   value={customerPhone}
                   onChangeText={setCustomerPhone}
                   placeholder="Phone number"
-                  placeholderTextColor="#9ca3af"
+                  placeholderTextColor={colors.text.tertiary}
                   keyboardType="phone-pad"
                 />
               </View>
@@ -241,7 +241,7 @@ const TabletCartScreen = ({ navigation }) => {
                 value={notes}
                 onChangeText={setNotes}
                 placeholder="Order notes or special instructions"
-                placeholderTextColor="#9ca3af"
+                placeholderTextColor={colors.text.tertiary}
                 multiline
                 numberOfLines={3}
                 textAlignVertical="top"
@@ -262,7 +262,7 @@ const TabletCartScreen = ({ navigation }) => {
               onPress={handleQRPayment}
               activeOpacity={0.9}
             >
-              <Ionicons name="qr-code-outline" size={isTablet ? 24 : 20} color="#ffffff" style={{ marginRight: 8 }} />
+              <Ionicons name="qr-code-outline" size={isTablet ? 24 : 20} color={colors.background.surface} style={{ marginRight: 8 }} />
               <Text style={[styles.qrPayButtonText, isTablet && styles.tabletQrPayButtonText]}>
                 QR Pay
               </Text>
@@ -297,7 +297,7 @@ const TabletCartScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f8fafc',
+    backgroundColor: colors.background.primary,
   },
   header: {
     flexDirection: 'row',
@@ -306,9 +306,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingVertical: 16,
     paddingTop: 60,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderBottomWidth: 1,
-    borderBottomColor: '#e5e7eb',
+    borderBottomColor: colors.border.light,
   },
   tabletHeader: {
     paddingHorizontal: 32,
@@ -321,21 +321,21 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 20,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   tabletTitle: {
     fontSize: 28,
   },
   clearButton: {
     paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingVertical: 8,
     borderRadius: 8,
-    backgroundColor: '#fee2e2',
+    backgroundColor: colors.error.background,
   },
   clearButtonText: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '600',
-    color: '#dc2626',
+    color: colors.error.main,
   },
   tabletClearButtonText: {
     fontSize: 16,
@@ -360,11 +360,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingHorizontal: 20,
     paddingVertical: 16,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     marginHorizontal: 20,
     marginVertical: 4,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow.default,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -399,7 +399,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 4,
   },
   tabletItemName: {
@@ -408,7 +408,7 @@ const styles = StyleSheet.create({
   },
   itemPrice: {
     fontSize: 14,
-    color: '#6b7280',
+    color: colors.text.secondary,
   },
   tabletItemPrice: {
     fontSize: 16,
@@ -419,22 +419,26 @@ const styles = StyleSheet.create({
     marginHorizontal: 16,
   },
   quantityButton: {
-    width: 32,
-    height: 32,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
     borderRadius: 16,
-    backgroundColor: '#f3f4f6',
+    backgroundColor: colors.gray[100],
     justifyContent: 'center',
     alignItems: 'center',
+    minWidth: 32,
+    minHeight: 32,
   },
   tabletQuantityButton: {
-    width: 40,
-    height: 40,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderRadius: 20,
+    minWidth: 40,
+    minHeight: 40,
   },
   quantityButtonText: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#374151',
+    color: colors.gray[700],
   },
   tabletQuantityButtonText: {
     fontSize: 22,
@@ -442,7 +446,7 @@ const styles = StyleSheet.create({
   quantity: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginHorizontal: 16,
     minWidth: 24,
     textAlign: 'center',
@@ -455,7 +459,7 @@ const styles = StyleSheet.create({
   itemTotal: {
     fontSize: 16,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
     minWidth: 80,
     textAlign: 'right',
   },
@@ -464,12 +468,12 @@ const styles = StyleSheet.create({
     minWidth: 100,
   },
   customerSection: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     marginHorizontal: 20,
     marginVertical: 16,
     padding: 20,
     borderRadius: 12,
-    shadowColor: '#000',
+    shadowColor: colors.shadow.default,
     shadowOffset: { width: 0, height: 1 },
     shadowOpacity: 0.1,
     shadowRadius: 2,
@@ -487,7 +491,7 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 16,
   },
   tabletSectionTitle: {
@@ -505,7 +509,7 @@ const styles = StyleSheet.create({
   inputLabel: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#374151',
+    color: colors.gray[700],
     marginBottom: 8,
   },
   tabletInputLabel: {
@@ -514,13 +518,13 @@ const styles = StyleSheet.create({
   },
   input: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.medium,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 16,
-    color: '#1f2937',
-    backgroundColor: '#ffffff',
+    color: colors.text.primary,
+    backgroundColor: colors.background.surface,
   },
   tabletInput: {
     borderRadius: 12,
@@ -536,9 +540,9 @@ const styles = StyleSheet.create({
     height: 100,
   },
   footer: {
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.background.surface,
     borderTopWidth: 1,
-    borderTopColor: '#e5e7eb',
+    borderTopColor: colors.border.light,
     paddingHorizontal: 20,
     paddingVertical: 20,
     paddingBottom: 40,
@@ -557,7 +561,7 @@ const styles = StyleSheet.create({
   totalLabel: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   tabletTotalLabel: {
     fontSize: 24,
@@ -565,20 +569,20 @@ const styles = StyleSheet.create({
   totalAmount: {
     fontSize: 28,
     fontWeight: '700',
-    color: '#1f2937',
+    color: colors.text.primary,
   },
   tabletTotalAmount: {
     fontSize: 36,
   },
   checkoutButton: {
-    backgroundColor: '#1f2937',
+    backgroundColor: colors.gray[800],
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 56,
-    shadowColor: '#000',
+    shadowColor: colors.shadow.default,
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.1,
     shadowRadius: 4,
@@ -594,7 +598,7 @@ const styles = StyleSheet.create({
   checkoutButtonText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   tabletCheckoutButtonText: {
     fontSize: 22,
@@ -625,7 +629,7 @@ const styles = StyleSheet.create({
   qrPayButtonText: {
     fontSize: 18,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   tabletQrPayButtonText: {
     fontSize: 22,
@@ -643,7 +647,7 @@ const styles = StyleSheet.create({
   emptyText: {
     fontSize: 24,
     fontWeight: '600',
-    color: '#1f2937',
+    color: colors.text.primary,
     marginBottom: 12,
     textAlign: 'center',
   },
@@ -653,7 +657,7 @@ const styles = StyleSheet.create({
   },
   emptySubtext: {
     fontSize: 16,
-    color: '#6b7280',
+    color: colors.text.secondary,
     textAlign: 'center',
     marginBottom: 32,
   },
@@ -662,7 +666,7 @@ const styles = StyleSheet.create({
     marginBottom: 40,
   },
   continueShoppingButton: {
-    backgroundColor: '#2563eb',
+    backgroundColor: colors.primary.main,
     paddingHorizontal: 32,
     paddingVertical: 16,
     borderRadius: 12,
@@ -675,7 +679,7 @@ const styles = StyleSheet.create({
   continueShoppingText: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#ffffff',
+    color: colors.background.surface,
   },
   tabletContinueShoppingText: {
     fontSize: 18,

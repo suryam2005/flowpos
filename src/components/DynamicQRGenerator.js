@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Alert,
   Modal,
-  Share,
   Platform,
 } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
@@ -39,36 +38,76 @@ const DynamicQRGenerator = ({
   const { isTablet } = getDeviceInfo();
   const { getStore } = useAuth();
   
+  // Use refs to store callback functions and avoid dependency issues
+  const onCloseRef = useRef(onClose);
+  const onPaymentCompleteRef = useRef(onPaymentComplete);
+  const onNavigateToSettingsRef = useRef(onNavigateToSettings);
+  const paymentIdRef = useRef('');
+  const isAutoListeningRef = useRef(false);
+  
   // Enhanced notification payment reader hook
   const { 
     isListening, 
     trackPayment, 
     stopTrackingPayment, 
-    lastConfirmation,
-    confirmPaymentManually
+    lastConfirmation
   } = useNotificationPaymentReader();
+  
+  const stopTrackingPaymentRef = useRef(stopTrackingPayment);
+
+  // Keep refs in sync with props
+  useEffect(() => {
+    onCloseRef.current = onClose;
+  }, [onClose]);
+  
+  useEffect(() => {
+    onPaymentCompleteRef.current = onPaymentComplete;
+  }, [onPaymentComplete]);
+  
+  useEffect(() => {
+    onNavigateToSettingsRef.current = onNavigateToSettings;
+  }, [onNavigateToSettings]);
+  
+  useEffect(() => {
+    stopTrackingPaymentRef.current = stopTrackingPayment;
+  }, [stopTrackingPayment]);
+
+  // Keep state refs in sync
+  useEffect(() => {
+    paymentIdRef.current = paymentId;
+  }, [paymentId]);
+  
+  useEffect(() => {
+    isAutoListeningRef.current = isAutoListening;
+  }, [isAutoListening]);
 
   useEffect(() => {
     if (visible) {
       loadStoreInfo();
       // Generate unique payment ID
-      const newPaymentId = `PAY_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const newPaymentId = `PAY_${Date.now()}_${Math.random().toString(36).substring(2, 11)}`;
       setPaymentId(newPaymentId);
     } else {
       // Stop tracking immediately when modal closes
-      if (paymentId && isAutoListening) {
-        stopTrackingPayment(paymentId);
+      if (paymentIdRef.current && isAutoListeningRef.current) {
+        stopTrackingPaymentRef.current(paymentIdRef.current);
         setIsAutoListening(false);
       }
-      // Reset payment ID
+      // Reset state
       setPaymentId('');
+      setStoreInfo(null);
+      setQrValue('');
+      setSelectedUpiId('');
+      setAvailableUpiIds([]);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible]);
 
   useEffect(() => {
-    if (storeInfo && amount && visible && selectedUpiId) {
+    if (storeInfo && amount && visible && selectedUpiId && !qrValue) {
       generateQRCode();
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeInfo, amount, visible, selectedUpiId]);
 
   // Load auto payment detection setting
@@ -99,14 +138,12 @@ const DynamicQRGenerator = ({
           'Store Setup Required',
           'Please set up your store information first to generate QR codes.',
           [
-            { text: 'Cancel', onPress: onClose },
+            { text: 'Cancel', onPress: () => onCloseRef.current?.() },
             { 
               text: 'Go to Settings', 
               onPress: () => {
-                onClose();
-                if (onNavigateToSettings) {
-                  onNavigateToSettings();
-                }
+                onCloseRef.current?.();
+                onNavigateToSettingsRef.current?.();
               }
             }
           ]
@@ -137,14 +174,12 @@ const DynamicQRGenerator = ({
           'UPI ID Required',
           'Please add your UPI ID in Store Settings to generate QR codes for UPI payments.',
           [
-            { text: 'Cancel', onPress: onClose },
+            { text: 'Cancel', onPress: () => onCloseRef.current?.() },
             { 
               text: 'Add UPI ID', 
               onPress: () => {
-                onClose();
-                if (onNavigateToSettings) {
-                  onNavigateToSettings();
-                }
+                onCloseRef.current?.();
+                onNavigateToSettingsRef.current?.();
               }
             }
           ]
@@ -161,26 +196,24 @@ const DynamicQRGenerator = ({
       Alert.alert(
         'Error',
         'Failed to load store information from server. Please check your connection and try again.',
-        [{ text: 'OK', onPress: onClose }]
+        [{ text: 'OK', onPress: () => onCloseRef.current?.() }]
       );
     }
   };
 
-  const generateQRCode = () => {
+  const generateQRCode = useCallback(() => {
     if (!selectedUpiId) {
       setShowUpiError(true);
       Alert.alert(
         'UPI ID Required',
         'Please set up your UPI ID in Store Settings first to generate QR codes.',
         [
-          { text: 'Cancel', onPress: onClose },
+          { text: 'Cancel', onPress: () => onCloseRef.current?.() },
           { 
             text: 'Add UPI ID', 
             onPress: () => {
-              onClose();
-              if (onNavigateToSettings) {
-                onNavigateToSettings();
-              }
+              onCloseRef.current?.();
+              onNavigateToSettingsRef.current?.();
             }
           }
         ]
@@ -188,7 +221,7 @@ const DynamicQRGenerator = ({
       return;
     }
 
-    // Prevent regenerating if already generating or if QR already exists for same params
+    // Prevent regenerating if already generating
     if (isGenerating) {
       return;
     }
@@ -197,7 +230,7 @@ const DynamicQRGenerator = ({
 
     try {
       // Create UPI payment URL with all parameters
-      const storeName = storeInfo.store_name || storeInfo.name || 'FlowPOS Store';
+      const storeName = storeInfo?.store_name || storeInfo?.name || 'FlowPOS Store';
       const upiParams = {
         pa: selectedUpiId, // Payee address (UPI ID)
         pn: encodeURIComponent(storeName), // Payee name
@@ -218,8 +251,8 @@ const DynamicQRGenerator = ({
       setShowUpiError(false);
       
       // Start tracking this payment for automatic confirmation (only if enabled)
-      if (paymentId && isListening && !isAutoListening && autoPaymentDetectionEnabled) {
-        trackPayment(paymentId, amount, selectedUpiId, customerName);
+      if (paymentIdRef.current && isListening && !isAutoListeningRef.current && autoPaymentDetectionEnabled) {
+        trackPayment(paymentIdRef.current, amount, selectedUpiId, customerName);
         setIsAutoListening(true);
       }
       
@@ -231,14 +264,15 @@ const DynamicQRGenerator = ({
     } finally {
       setIsGenerating(false);
     }
-  };
+  }, [selectedUpiId, storeInfo, amount, orderNote, customerName, isGenerating, isListening, autoPaymentDetectionEnabled, trackPayment]);
 
-  const handleUpiIdChange = (upiId) => {
+  const handleUpiIdChange = useCallback((upiId) => {
     setSelectedUpiId(upiId);
+    setQrValue(''); // Reset QR value to trigger regeneration
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-  };
+  }, []);
 
-  const handlePaymentReceived = () => {
+  const handlePaymentReceived = useCallback(() => {
     Alert.alert(
       'Payment Confirmation',
       'Have you received the payment confirmation?',
@@ -248,89 +282,66 @@ const DynamicQRGenerator = ({
           text: 'Yes, Received',
           onPress: () => {
             // Stop tracking
-            if (paymentId && isAutoListening) {
-              stopTrackingPayment(paymentId);
+            if (paymentIdRef.current && isAutoListeningRef.current) {
+              stopTrackingPaymentRef.current(paymentIdRef.current);
               setIsAutoListening(false);
             }
             
             Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-            if (onPaymentComplete) {
-              onPaymentComplete();
-            }
-            onClose();
+            onPaymentCompleteRef.current?.();
+            onCloseRef.current?.();
           }
         }
       ]
     );
-  };
+  }, []);
 
   // Handle automatic payment confirmation
   useEffect(() => {
-    if (lastConfirmation && paymentId && isAutoListening && visible) {
-      // Only auto-complete if auto detection is enabled
-      if (autoPaymentDetectionEnabled) {
-        // Check if this confirmation is for our current payment (exact amount match)
-        if (lastConfirmation.activePayment && 
-            lastConfirmation.paymentId === paymentId &&
-            Math.abs(lastConfirmation.amount - amount) < 0.01) {
-          
-          // Stop tracking immediately
-          stopTrackingPayment(paymentId);
-          setIsAutoListening(false);
-          
-          // Auto-complete payment and redirect to home
-          Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-          
-          if (onPaymentComplete) {
-            onPaymentComplete();
-          }
-          
-          // Close QR modal immediately
-          onClose();
-          
-          // Show success message briefly
-          Alert.alert(
-            'Payment Received!',
-            `₹${lastConfirmation.amount} received successfully${lastConfirmation.sender ? ` from ${lastConfirmation.sender}` : ''}`,
-            [
-              {
-                text: 'OK',
-                onPress: () => {
-                  // Navigate to home (POS screen)
-                  // This will be handled by the parent component
-                }
-              }
-            ]
-          );
-        }
-      } else {
-        // If auto detection is OFF, just log the notification but don't auto-complete
-        console.log('🔔 Payment notification received but auto-detection is OFF - manual completion required');
-        console.log('💰 Payment details:', {
-          amount: lastConfirmation.amount,
-          sender: lastConfirmation.sender,
-          paymentId: lastConfirmation.paymentId
-        });
+    if (lastConfirmation && paymentIdRef.current && isAutoListeningRef.current && visible && autoPaymentDetectionEnabled) {
+      // Check if this confirmation is for our current payment (exact amount match)
+      if (lastConfirmation.activePayment && 
+          lastConfirmation.paymentId === paymentIdRef.current &&
+          Math.abs(lastConfirmation.amount - amount) < 0.01) {
+        
+        // Stop tracking immediately
+        stopTrackingPaymentRef.current(paymentIdRef.current);
+        setIsAutoListening(false);
+        
+        // Auto-complete payment and redirect to home
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        
+        onPaymentCompleteRef.current?.();
+        onCloseRef.current?.();
+        
+        // Show success message briefly
+        Alert.alert(
+          'Payment Received!',
+          `₹${lastConfirmation.amount} received successfully${lastConfirmation.sender ? ` from ${lastConfirmation.sender}` : ''}`,
+          [{ text: 'OK' }]
+        );
       }
     }
-  }, [lastConfirmation, paymentId, isAutoListening, visible, autoPaymentDetectionEnabled, amount, onPaymentComplete, onClose]);
+  }, [lastConfirmation, visible, autoPaymentDetectionEnabled, amount]);
 
   // Cleanup effect - only run on unmount
   useEffect(() => {
     return () => {
-      // Cleanup when component unmounts - use current values
-      if (paymentId && isAutoListening) {
-        stopTrackingPayment(paymentId);
+      // Cleanup when component unmounts - use refs for current values
+      if (paymentIdRef.current && isAutoListeningRef.current) {
+        stopTrackingPaymentRef.current(paymentIdRef.current);
       }
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   if (!visible) return null;
 
+  // Show loading state while store info is being fetched
+  const isLoadingStore = visible && !storeInfo && !showUpiError;
+
   return (
     <Modal
-      animationType="none"
+      animationType="fade"
       transparent={true}
       visible={visible}
       onRequestClose={onClose}
@@ -351,6 +362,12 @@ const DynamicQRGenerator = ({
           </View>
 
           <View style={styles.modalContent}>
+          {isLoadingStore ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Loading payment details...</Text>
+            </View>
+          ) : (
+            <>
             {/* Payment Details */}
             <View style={styles.paymentDetails}>
               <View style={styles.amountContainer}>
@@ -368,7 +385,7 @@ const DynamicQRGenerator = ({
                     {storeInfo.store_name || storeInfo.name || 'FlowPOS Store'}
                   </ResponsiveText>
                   <ResponsiveText variant="caption" style={styles.upiId}>
-                    UPI ID: {selectedUpiId}
+                    UPI: {selectedUpiId}
                   </ResponsiveText>
                 </View>
               )}
@@ -380,7 +397,7 @@ const DynamicQRGenerator = ({
                     Select UPI ID:
                   </ResponsiveText>
                   <View style={styles.upiOptions}>
-                    {availableUpiIds.map((upiId, index) => (
+                    {availableUpiIds.map((upiId) => (
                       <TouchableOpacity
                         key={upiId}
                         style={[
@@ -422,7 +439,7 @@ const DynamicQRGenerator = ({
                 <View style={styles.qrCodeWrapper}>
                   <QRCode
                     value={qrValue}
-                    size={isTablet ? 250 : 200}
+                    size={isTablet ? 220 : 180}
                     backgroundColor="white"
                     color="black"
                     logoSize={30}
@@ -437,8 +454,8 @@ const DynamicQRGenerator = ({
                       <Text style={styles.autoListenIcon}>🔔</Text>
                       <ResponsiveText variant="small" style={styles.autoListenText}>
                         {autoPaymentDetectionEnabled 
-                          ? 'Auto-detecting payment from notifications...'
-                          : 'Waiting for manual payment confirmation...'
+                          ? 'Auto-detecting payment...'
+                          : 'Manual confirmation required'
                         }
                       </ResponsiveText>
                     </View>
@@ -458,8 +475,6 @@ const DynamicQRGenerator = ({
               )}
             </View>
 
-
-
             {/* Payment Confirmation */}
             <TouchableOpacity
               style={styles.confirmButton}
@@ -472,12 +487,13 @@ const DynamicQRGenerator = ({
             </TouchableOpacity>
 
             <ResponsiveText variant="small" style={styles.disclaimer}>
-              Show this QR code to customer for scanning. 
-              {isListening && isAutoListening 
-                ? 'Payment will be auto-detected from notifications and SMS.' 
-                : 'Confirm payment receipt before completing the order.'
+              Show QR to customer. {isListening && isAutoListening 
+                ? 'Payment auto-detected.' 
+                : 'Confirm receipt manually.'
               }
             </ResponsiveText>
+            </>
+          )}
           </View>
         </View>
       </View>
@@ -491,25 +507,25 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(0, 0, 0, 0.5)',
     justifyContent: 'center',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 40,
+    paddingHorizontal: 16,
+    paddingVertical: 20,
   },
   modalContainer: {
     width: '100%',
-    maxWidth: 400,
+    maxWidth: 380,
     backgroundColor: colors.background.surface,
-    borderRadius: 20,
-    maxHeight: '100%',
+    borderRadius: 16,
   },
   tabletModalContainer: {
-    maxWidth: 500,
+    maxWidth: 450,
     width: '80%',
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    padding: 16,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
@@ -517,30 +533,30 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
   },
   closeButton: {
-    padding: 8,
-    borderRadius: 20,
+    padding: 6,
+    borderRadius: 16,
     backgroundColor: colors.gray[100],
   },
   closeButtonText: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.text.secondary,
   },
   modalContent: {
-    paddingTop: 16,
+    paddingTop: 12,
     paddingHorizontal: 16,
     paddingBottom: 16,
   },
   paymentDetails: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
   },
   amountContainer: {
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
   },
   amountLabel: {
     color: colors.text.secondary,
-    marginBottom: 4,
+    marginBottom: 2,
   },
   amountValue: {
     color: '#059669',
@@ -548,16 +564,17 @@ const styles = StyleSheet.create({
   },
   storeDetails: {
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   storeName: {
     color: colors.text.primary,
     fontWeight: '600',
-    marginBottom: 4,
+    marginBottom: 2,
   },
   upiId: {
     color: colors.text.secondary,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 12,
   },
   customerName: {
     color: colors.primary.main,
@@ -565,62 +582,63 @@ const styles = StyleSheet.create({
   },
   qrContainer: {
     alignItems: 'center',
-    marginBottom: 24,
+    marginBottom: 12,
   },
   loadingContainer: {
-    height: 200,
+    height: 150,
     justifyContent: 'center',
     alignItems: 'center',
   },
   loadingText: {
-    fontSize: 16,
+    fontSize: 14,
     color: colors.text.secondary,
   },
   qrCodeWrapper: {
     alignItems: 'center',
-    padding: 20,
+    padding: 16,
     backgroundColor: colors.background.primary,
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border.light,
   },
   qrInstructions: {
     color: colors.text.secondary,
     textAlign: 'center',
-    marginTop: 12,
+    marginTop: 8,
+    fontSize: 12,
   },
   errorContainer: {
-    height: 200,
+    height: 150,
     justifyContent: 'center',
     alignItems: 'center',
   },
   errorText: {
-    fontSize: 16,
+    fontSize: 14,
     color: '#dc2626',
-    marginBottom: 12,
+    marginBottom: 8,
   },
   retryButton: {
     backgroundColor: colors.primary.main,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 6,
   },
   retryButtonText: {
     color: colors.background.surface,
     fontWeight: '600',
+    fontSize: 14,
   },
-
   confirmButton: {
     backgroundColor: '#059669',
-    paddingVertical: 16,
-    borderRadius: 12,
+    paddingVertical: 14,
+    borderRadius: 10,
     alignItems: 'center',
-    marginBottom: 16,
+    marginBottom: 8,
     shadowColor: '#059669',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.2,
+    shadowRadius: 4,
+    elevation: 4,
   },
   confirmButtonText: {
     color: colors.background.surface,
@@ -628,27 +646,29 @@ const styles = StyleSheet.create({
   disclaimer: {
     color: colors.text.tertiary,
     textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 14,
+    fontSize: 11,
   },
   upiSelection: {
-    marginTop: 16,
+    marginTop: 8,
     alignItems: 'center',
   },
   upiSelectionLabel: {
     color: colors.text.secondary,
-    marginBottom: 8,
+    marginBottom: 6,
+    fontSize: 12,
   },
   upiOptions: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   upiOption: {
     backgroundColor: colors.gray[100],
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border.light,
   },
@@ -659,6 +679,7 @@ const styles = StyleSheet.create({
   upiOptionText: {
     color: colors.text.secondary,
     fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace',
+    fontSize: 11,
   },
   upiOptionTextSelected: {
     color: colors.background.surface,
@@ -667,21 +688,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    marginTop: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     backgroundColor: '#dcfce7',
-    borderRadius: 12,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: '#bbf7d0',
   },
   autoListenIcon: {
-    fontSize: 16,
-    marginRight: 6,
+    fontSize: 14,
+    marginRight: 4,
   },
   autoListenText: {
     color: '#15803d',
     fontWeight: '500',
+    fontSize: 11,
   },
 });
 

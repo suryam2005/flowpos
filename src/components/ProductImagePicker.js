@@ -65,8 +65,6 @@ const ProductImagePicker = ({
     }
   };
 
-
-
   const takePhoto = async () => {
     const { status } = await ImagePicker.requestCameraPermissionsAsync();
     if (status !== 'granted') {
@@ -99,6 +97,44 @@ const ProductImagePicker = ({
     }
   };
 
+  // Delete image from Supabase storage if it's a Supabase URL
+  const handleDeleteImage = async () => {
+    setIsLoading(true);
+    try {
+      // Check if image is a Supabase URL
+      if (image && image.includes('supabase')) {
+        console.log('🗑️ Deleting image from Supabase storage...');
+        try {
+          // Extract the path from the URL
+          // URL format: https://xxx.supabase.co/storage/v1/object/public/product-images/userId/productId_timestamp.jpg
+          const bucketName = 'product-images';
+          if (image.includes(bucketName)) {
+            const urlParts = image.split(`${bucketName}/`);
+            if (urlParts.length > 1) {
+              const imagePath = urlParts[1];
+              console.log('🗑️ Extracted image path:', imagePath);
+              await productImageService.deleteProductImage(imagePath);
+              console.log('✅ Image deleted from Supabase storage');
+            }
+          }
+        } catch (deleteError) {
+          console.error('⚠️ Error deleting from Supabase:', deleteError);
+          // Continue anyway - the image URL will be cleared from the product
+        }
+      }
+      
+      // Clear the image in the form (this will be saved when product is updated)
+      onImageChange(null);
+      console.log('✅ Image cleared from form');
+      
+    } catch (error) {
+      console.error('Error deleting image:', error);
+      Alert.alert('Error', 'Failed to delete image. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   const showImageOptions = () => {
     Alert.alert(
       'Product Image',
@@ -107,7 +143,6 @@ const ProductImagePicker = ({
         { text: 'Cancel', style: 'cancel' },
         { text: 'Take Photo', onPress: takePhoto },
         { text: 'Choose from Gallery', onPress: pickImage },
-        ...(image ? [{ text: 'Remove Image', onPress: () => onImageChange(null), style: 'destructive' }] : [])
       ]
     );
   };
@@ -124,8 +159,29 @@ const ProductImagePicker = ({
     <View style={styles.imageContainer}>
       <Image source={{ uri: image }} style={styles.image} />
       <View style={styles.imageOverlay}>
-        <Text style={styles.changeText}>Change</Text>
+        <Text style={styles.changeText}>Tap to Change</Text>
       </View>
+      {/* Delete button */}
+      <TouchableOpacity
+        style={styles.deleteImageButton}
+        onPress={() => {
+          Alert.alert(
+            'Remove Image',
+            'Are you sure you want to remove this product image?',
+            [
+              { text: 'Cancel', style: 'cancel' },
+              { 
+                text: 'Remove', 
+                style: 'destructive',
+                onPress: handleDeleteImage
+              }
+            ]
+          );
+        }}
+        activeOpacity={0.7}
+      >
+        <Ionicons name="trash-outline" size={16} color="#ffffff" />
+      </TouchableOpacity>
     </View>
   );
 
@@ -144,7 +200,7 @@ const ProductImagePicker = ({
 
       <Text style={styles.helperText}>
         {image 
-          ? 'Tap to change or remove the product image'
+          ? 'Tap image to change, or tap 🗑️ to remove'
           : 'Add a photo to help customers identify your product'
         }
       </Text>
@@ -225,6 +281,17 @@ const styles = StyleSheet.create({
     color: '#ffffff',
     fontSize: 12,
     fontWeight: '600',
+  },
+  deleteImageButton: {
+    position: 'absolute',
+    top: 4,
+    right: 4,
+    backgroundColor: 'rgba(220, 38, 38, 0.9)',
+    borderRadius: 12,
+    width: 24,
+    height: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   helperText: {
     fontSize: 12,

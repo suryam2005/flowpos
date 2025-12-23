@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -12,16 +12,16 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
 import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { Linking } from 'react-native';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { colors } from '../../styles/colors';
 import { useAuth } from '../../context/AuthContext';
-import LoadingSpinner from '../../components/LoadingSpinner';
 
 const StoreSettingsScreen = ({ navigation }) => {
   const { user, getStore, updateStore } = useAuth();
@@ -66,15 +66,18 @@ const StoreSettingsScreen = ({ navigation }) => {
   const [businessSettings, setBusinessSettings] = useState({
     lowStockThreshold: 5,
     enableNotifications: true,
-    workingHours: {
-      start: '09:00',
-      end: '21:00',
-    },
   });
 
   useEffect(() => {
     loadSettings();
   }, []);
+
+  // Reload settings when screen comes into focus to prevent UI flash
+  useFocusEffect(
+    useCallback(() => {
+      loadSettings(); // Reload store settings when screen comes into focus
+    }, [])
+  );
 
   const loadSettings = async () => {
     try {
@@ -201,6 +204,42 @@ const StoreSettingsScreen = ({ navigation }) => {
         return;
       }
 
+      // Validate GST number if provided
+      if (storeInfo.gst_number && storeInfo.gst_number.trim()) {
+        const gstRegex = /^[0-9A-Z]{15}$/;
+        if (!gstRegex.test(storeInfo.gst_number.trim())) {
+          Alert.alert('Validation Error', 'GST number must be exactly 15 alphanumeric characters.');
+          return;
+        }
+      }
+
+      // Validate email format if provided
+      if (storeInfo.store_email && storeInfo.store_email.trim()) {
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(storeInfo.store_email.trim())) {
+          Alert.alert('Validation Error', 'Please enter a valid email address.');
+          return;
+        }
+      }
+
+      // Validate phone number if provided
+      if (storeInfo.store_phone && storeInfo.store_phone.trim()) {
+        const phoneRegex = /^[0-9]{10}$/;
+        if (!phoneRegex.test(storeInfo.store_phone.replace(/\D/g, ''))) {
+          Alert.alert('Validation Error', 'Please enter a valid 10-digit phone number.');
+          return;
+        }
+      }
+
+      // Validate website URL if provided
+      if (storeInfo.store_website && storeInfo.store_website.trim()) {
+        const urlRegex = /^https?:\/\/.+/;
+        if (!urlRegex.test(storeInfo.store_website.trim())) {
+          Alert.alert('Validation Error', 'Website URL must start with http:// or https://');
+          return;
+        }
+      }
+
       // Prepare data for backend (all store-related fields)
       const backendData = {
         store_name: storeInfo.store_name.trim(),
@@ -298,42 +337,25 @@ const StoreSettingsScreen = ({ navigation }) => {
 
 
 
-  const handleUPIRedirect = () => {
-    if (!storeInfo.upiId) {
-      Alert.alert('UPI ID Required', 'Please enter your UPI ID first to generate payment links.');
+  const handleUPITest = (upiId) => {
+    if (!upiId) {
+      Alert.alert('UPI ID Required', 'Please enter a UPI ID first to test.');
       return;
     }
 
-    const amount = '100'; // Default amount, can be customized
-    const note = encodeURIComponent(`Payment to ${storeInfo.name || 'Store'}`);
+    const amount = '10'; // Test with ₹10
+    const note = encodeURIComponent(`Test payment to ${storeInfo.store_name || 'Store'}`);
     
-    // Create UPI payment URL
-    const upiUrl = `upi://pay?pa=${storeInfo.upiId}&pn=${encodeURIComponent(storeInfo.name || 'Store')}&am=${amount}&cu=INR&tn=${note}`;
+    // Create UPI payment URL and open directly
+    const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(storeInfo.store_name || 'Store')}&am=${amount}&cu=INR&tn=${note}`;
     
-    Alert.alert(
-      'UPI Payment Options',
-      'Choose how you want to use your UPI ID:',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Test Payment Link',
-          onPress: () => {
-            Linking.openURL(upiUrl).catch(() => {
-              Alert.alert('Error', 'No UPI apps found on this device.');
-            });
-          },
-        },
-        {
-          text: 'Generate QR Code',
-          onPress: () => {
-            Alert.alert(
-              'QR Code Generator',
-              `Use this UPI ID to generate a QR code:\n\n${storeInfo.upiId}\n\nYou can use any QR code generator app or website to create a payment QR code with this UPI ID.`
-            );
-          },
-        },
-      ]
-    );
+    Linking.openURL(upiUrl).catch(() => {
+      Alert.alert('Error', 'No UPI apps found on this device.');
+    });
+  };
+
+  const handleUPIRedirect = () => {
+    handleUPITest(storeInfo.upiId);
   };
 
   const renderSection = (title, children) => (
@@ -399,16 +421,8 @@ const StoreSettingsScreen = ({ navigation }) => {
 
   // Handle receipt setting changes with immediate save
   const handleReceiptSettingChange = async (settingKey, value) => {
-    const newReceiptSettings = { ...receiptSettings, [settingKey]: value };
-    setReceiptSettings(newReceiptSettings);
-    
-    try {
-      // Save immediately to AsyncStorage
-      await AsyncStorage.setItem('receiptSettings', JSON.stringify(newReceiptSettings));
-      console.log(`✅ Receipt setting ${settingKey} updated to ${value}`);
-    } catch (error) {
-      console.error('Error saving receipt setting:', error);
-    }
+    // This function is moved to SettingsScreen - keeping for compatibility
+    console.log(`Receipt setting ${settingKey} should be changed in Settings screen`);
   };
 
   if (isLoading) {
@@ -467,10 +481,47 @@ const StoreSettingsScreen = ({ navigation }) => {
                 setStoreInfo({ ...storeInfo, store_name: text }),
                 { editable: isEditing }
               )}
-              {renderInputField('Business Type', storeInfo.business_type, (text) =>
-                setStoreInfo({ ...storeInfo, business_type: text }),
-                { placeholder: 'e.g., Retail, Restaurant, Service', editable: isEditing }
-              )}
+              <View style={styles.inputGroup}>
+                <Text style={styles.inputLabel}>Business Type</Text>
+                <View style={styles.businessTypeOptions}>
+                  {[
+                    'Retail Store',
+                    'Restaurant',
+                    'Cafe',
+                    'Grocery Store',
+                    'Pharmacy',
+                    'Electronics Store',
+                    'Clothing Store',
+                    'Service Business',
+                    'Other'
+                  ].map((type) => {
+                    const isSelected = storeInfo.business_type === type;
+                    return (
+                      <TouchableOpacity
+                        key={type}
+                        style={[
+                          styles.businessTypeOption,
+                          isSelected && styles.businessTypeOptionSelected,
+                          !isEditing && !isSelected && styles.businessTypeOptionDisabled
+                        ]}
+                        onPress={isEditing ? () => setStoreInfo({
+                          ...storeInfo,
+                          business_type: type
+                        }) : undefined}
+                        disabled={!isEditing}
+                      >
+                        <Text style={[
+                          styles.businessTypeOptionText,
+                          isSelected && styles.businessTypeOptionTextSelected,
+                          !isEditing && !isSelected && styles.businessTypeOptionTextDisabled
+                        ]}>
+                          {type}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </View>
               {renderInputField('Address', storeInfo.store_address, (text) =>
                 setStoreInfo({ ...storeInfo, store_address: text }),
                 { multiline: true, numberOfLines: 3, editable: isEditing }
@@ -487,10 +538,16 @@ const StoreSettingsScreen = ({ navigation }) => {
                 setStoreInfo({ ...storeInfo, store_website: text }),
                 { placeholder: 'https://yourstore.com', editable: isEditing }
               )}
-              {renderInputField('GST Number', storeInfo.gst_number, (text) =>
-                setStoreInfo({ ...storeInfo, gst_number: text }),
-                { editable: isEditing }
-              )}
+              {renderInputField('GST Number (15 characters)', storeInfo.gst_number, (text) => {
+                // Validate GST format: 15 characters, alphanumeric
+                const gstRegex = /^[0-9A-Z]{15}$/;
+                const formattedText = text.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
+                setStoreInfo({ ...storeInfo, gst_number: formattedText });
+              }, { 
+                editable: isEditing,
+                placeholder: '22AAAAA0000A1Z5',
+                autoCapitalize: 'characters'
+              })}
             </>
           ))}
 
@@ -505,10 +562,15 @@ const StoreSettingsScreen = ({ navigation }) => {
             )}
             {taxSettings.enableGST && (
               <>
-                {renderInputField('GST Rate (%)', (taxSettings.gstRate || 0).toString(), (text) =>
-                  setTaxSettings({ ...taxSettings, gstRate: parseFloat(text) || 0 }),
-                  { keyboardType: 'numeric' }
-                )}
+                {renderInputField('GST Rate (%)', (taxSettings.gstRate || 18).toString(), (text) => {
+                  const rate = parseFloat(text) || 0;
+                  if (rate >= 0 && rate <= 100) {
+                    setTaxSettings({ ...taxSettings, gstRate: rate });
+                  }
+                }, { 
+                  keyboardType: 'numeric',
+                  placeholder: '18'
+                })}
                 {renderSwitchField(
                   'Include Tax in Price',
                   'Show prices with tax included',
@@ -520,92 +582,24 @@ const StoreSettingsScreen = ({ navigation }) => {
           </>
         ))}
 
-        {/* Receipt Settings */}
-        {renderSection('Receipt Settings', (
-          <>
-            {renderReceiptSwitchField(
-              'Show Store Address',
-              'Display address on receipts',
-              receiptSettings.showAddress,
-              (value) => handleReceiptSettingChange('showAddress', value)
-            )}
-            {renderReceiptSwitchField(
-              'Show Phone Number',
-              'Display phone on receipts',
-              receiptSettings.showPhone,
-              (value) => handleReceiptSettingChange('showPhone', value)
-            )}
-            {renderReceiptSwitchField(
-              'Show Email',
-              'Display email on receipts',
-              receiptSettings.showEmail,
-              (value) => handleReceiptSettingChange('showEmail', value)
-            )}
-            {renderReceiptSwitchField(
-              'Show GST Number',
-              'Display GST number on receipts',
-              receiptSettings.showGST,
-              (value) => handleReceiptSettingChange('showGST', value)
-            )}
-            {renderInputField('Footer Message', receiptSettings.footerMessage, (text) =>
-              setReceiptSettings({ ...receiptSettings, footerMessage: text }),
-              { multiline: true, numberOfLines: 2 }
-            )}
-          </>
-        ))}
-
         {/* Business Settings */}
         {renderSection('Business Settings', (
           <>
-            {renderInputField('Low Stock Threshold', (businessSettings.lowStockThreshold || 5).toString(), (text) =>
-              setBusinessSettings({ ...businessSettings, lowStockThreshold: parseInt(text) || 5 }),
-              { keyboardType: 'numeric' }
-            )}
+            {renderInputField('Low Stock Threshold', (businessSettings.lowStockThreshold || 5).toString(), (text) => {
+              const threshold = parseInt(text) || 5;
+              if (threshold >= 1 && threshold <= 1000) {
+                setBusinessSettings({ ...businessSettings, lowStockThreshold: threshold });
+              }
+            }, { 
+              keyboardType: 'numeric',
+              placeholder: '5'
+            })}
             {renderSwitchField(
               'Enable Notifications',
               'Get alerts for low stock and other events',
               businessSettings.enableNotifications,
               (value) => setBusinessSettings({ ...businessSettings, enableNotifications: value })
             )}
-          </>
-        ))}
-
-        {/* Currency Settings */}
-        {renderSection('Currency Settings', (
-          <>
-            <View style={styles.currencyGroup}>
-              <Text style={styles.inputLabel}>Currency</Text>
-              <View style={styles.currencyOptions}>
-                {[
-                  { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
-                  { code: 'USD', symbol: '$', name: 'US Dollar' },
-                  { code: 'EUR', symbol: '€', name: 'Euro' },
-                  { code: 'GBP', symbol: '£', name: 'British Pound' },
-                ].map((currency) => (
-                  <TouchableOpacity
-                    key={currency.code}
-                    style={[
-                      styles.currencyOption,
-                      storeInfo.currency === currency.code && styles.currencyOptionSelected
-                    ]}
-                                        onPress={isEditing ? () => setStoreInfo({
-                      ...storeInfo,
-                      currency: currency.code,
-                      currencySymbol: currency.symbol
-                    }) : undefined}
-                    disabled={!isEditing}
-                  >
-                    <Text style={[
-                      styles.currencyOptionText,
-                      storeInfo.currency === currency.code && styles.currencyOptionTextSelected
-                    ]}>
-                      {currency.symbol} {currency.code}
-                    </Text>
-                    <Text style={styles.currencyName}>{currency.name}</Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            </View>
           </>
         ))}
 
@@ -644,15 +638,26 @@ const StoreSettingsScreen = ({ navigation }) => {
               <Text style={styles.paymentDescription}>
                 Backup UPI ID in case primary fails
               </Text>
-              <TextInput
-                style={styles.upiInput}
-                value={storeInfo.upiId2}
-                onChangeText={isEditing ? (text) => setStoreInfo({ ...storeInfo, upiId2: text.toLowerCase() }) : undefined}
-                editable={isEditing}
-                placeholder="yourname@gpay"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+              <View style={styles.upiInputContainer}>
+                <TextInput
+                  style={[styles.upiInput, { flex: 1 }]}
+                  value={storeInfo.upiId2}
+                  onChangeText={isEditing ? (text) => setStoreInfo({ ...storeInfo, upiId2: text.toLowerCase() }) : undefined}
+                  editable={isEditing}
+                  placeholder="yourname@gpay"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {storeInfo.upiId2 && (
+                  <TouchableOpacity
+                    style={styles.upiTestButton}
+                    onPress={() => handleUPITest(storeInfo.upiId2)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.upiTestText}>Test</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
 
             <View style={styles.paymentSection}>
@@ -660,15 +665,26 @@ const StoreSettingsScreen = ({ navigation }) => {
               <Text style={styles.paymentDescription}>
                 Additional backup UPI ID for maximum reliability
               </Text>
-              <TextInput
-                style={styles.upiInput}
-                value={storeInfo.upiId3}
-                onChangeText={isEditing ? (text) => setStoreInfo({ ...storeInfo, upiId3: text.toLowerCase() }) : undefined}
-                editable={isEditing}
-                placeholder="yourname@phonepe"
-                keyboardType="email-address"
-                autoCapitalize="none"
-              />
+              <View style={styles.upiInputContainer}>
+                <TextInput
+                  style={[styles.upiInput, { flex: 1 }]}
+                  value={storeInfo.upiId3}
+                  onChangeText={isEditing ? (text) => setStoreInfo({ ...storeInfo, upiId3: text.toLowerCase() }) : undefined}
+                  editable={isEditing}
+                  placeholder="yourname@phonepe"
+                  keyboardType="email-address"
+                  autoCapitalize="none"
+                />
+                {storeInfo.upiId3 && (
+                  <TouchableOpacity
+                    style={styles.upiTestButton}
+                    onPress={() => handleUPITest(storeInfo.upiId3)}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={styles.upiTestText}>Test</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
             </View>
           </>
         ))}
@@ -676,10 +692,7 @@ const StoreSettingsScreen = ({ navigation }) => {
       </KeyboardAvoidingView>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isSaving} 
-        message="Saving store settings..." 
-      />
+      {isSaving && <LoadingSpinner />}
     </View>
   );
 };
@@ -905,6 +918,50 @@ const styles = StyleSheet.create({
     color: colors.background.surface,
     fontWeight: '600',
     fontSize: 14,
+  },
+  businessTypeOptions: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+  },
+  businessTypeOption: {
+    backgroundColor: colors.background.surface,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    minWidth: '30%',
+    alignItems: 'center',
+    shadowColor: colors.shadow.default,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  businessTypeOptionSelected: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.background,
+    borderWidth: 2,
+  },
+  businessTypeOptionText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text.primary,
+    textAlign: 'center',
+  },
+  businessTypeOptionTextSelected: {
+    color: colors.primary.main,
+    fontWeight: '600',
+  },
+  businessTypeOptionDisabled: {
+    // Keep selected state visible when disabled - use lighter styling for unselected
+    opacity: 0.7,
+    backgroundColor: colors.gray[50],
+    borderColor: colors.gray[200],
+  },
+  businessTypeOptionTextDisabled: {
+    color: colors.gray[400],
   },
 });
 

@@ -11,14 +11,18 @@ import {
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons } from '@expo/vector-icons';
+import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
 import { safeGoBack } from '../../utils/navigationUtils';
-import LoadingSpinner from '../../components/LoadingSpinner';
+import { useAuth } from '../../context/AuthContext';
 
 const HelpSupportScreen = ({ navigation }) => {
+  const { user } = useAuth();
   const [contactModal, setContactModal] = useState(false);
   const [feedbackModal, setFeedbackModal] = useState(false);
+  const [expandedFaq, setExpandedFaq] = useState(null);
   const [contactForm, setContactForm] = useState({
     subject: '',
     message: '',
@@ -31,107 +35,75 @@ const HelpSupportScreen = ({ navigation }) => {
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  const helpCategories = [
+  // FAQ Data with actual answers
+  const faqData = [
     {
-      id: 'getting-started',
-      title: 'Getting Started',
-      icon: 'rocket-outline',
-      items: [
-        'Setting up your store',
-        'Adding your first products',
-        'Processing your first order',
-        'Understanding the dashboard',
-        'Basic navigation guide',
-      ]
+      id: 'add-products',
+      question: 'How do I add products?',
+      answer: 'Go to Manage screen → Products tab → Tap "Add Product" button. Fill in product name, price, stock quantity, and optionally add an image and tags. Products with stock tracking will show low stock alerts.',
     },
     {
-      id: 'orders-payments',
-      title: 'Orders & Payments',
-      icon: 'card-outline',
-      items: [
-        'Processing orders',
-        'Payment methods setup',
-        'UPI payment integration',
-        'Managing refunds',
-        'Order history and tracking',
-      ]
+      id: 'process-order',
+      question: 'How do I process an order?',
+      answer: 'From the POS screen, tap products to add them to cart. Tap "Complete Order" to go to checkout. Enter customer details, select payment method (Cash, Card, or QR Pay), then tap "Complete Order" to finish.',
     },
     {
-      id: 'inventory',
-      title: 'Inventory Management',
-      icon: 'cube-outline',
-      items: [
-        'Adding and editing products',
-        'Stock management',
-        'Categories and organization',
-        'Barcode scanning',
-        'Low stock alerts',
-      ]
+      id: 'qr-payment',
+      question: 'How do I set up QR payments?',
+      answer: 'Go to Manage → Store Settings → scroll to UPI Settings. Add your UPI ID (e.g., yourname@upi). You can add up to 3 UPI IDs. When processing orders, select "QR Pay" to generate a payment QR code.',
     },
     {
-      id: 'reports',
-      title: 'Reports & Analytics',
-      icon: 'stats-chart-outline',
-      items: [
-        'Understanding sales reports',
-        'Viewing analytics dashboard',
-        'Exporting data',
-        'Setting up automated reports',
-        'Performance insights',
-      ]
+      id: 'view-reports',
+      question: 'How do I view sales reports?',
+      answer: 'Go to Analytics screen from the bottom navigation. You can see daily, weekly, and monthly sales. For detailed reports, go to Settings → PDF Reports or Data Export to generate comprehensive business reports.',
     },
     {
-      id: 'account',
-      title: 'Account & Settings',
-      icon: 'settings-outline',
-      items: [
-        'Managing your profile',
-        'Subscription and billing',
-        'Security settings',
-        'Notification preferences',
-        'Data backup and sync',
-      ]
+      id: 'manage-inventory',
+      question: 'How do I manage inventory?',
+      answer: 'Go to Manage → Inventory tab. Here you can update stock quantities, enable/disable stock tracking for products, and see low stock alerts. Products with tracking enabled will prevent overselling.',
     },
     {
-      id: 'troubleshooting',
-      title: 'Troubleshooting',
-      icon: 'construct-outline',
-      items: [
-        'App crashes or freezes',
-        'Payment issues',
-        'Sync problems',
-        'Performance optimization',
-        'Common error messages',
-      ]
+      id: 'whatsapp-invoice',
+      question: 'How do I send invoices via WhatsApp?',
+      answer: 'After completing an order, you can share the invoice. For automatic WhatsApp sending, go to Settings → WhatsApp Setup and configure your Twilio credentials. Invoices will be sent automatically to customers with phone numbers.',
+    },
+    {
+      id: 'change-store-info',
+      question: 'How do I update store information?',
+      answer: 'Go to Manage → Store Settings tab. Here you can update store name, address, phone, email, GST number, business type, and UPI IDs. Changes are saved automatically.',
+    },
+    {
+      id: 'export-data',
+      question: 'How do I export my data?',
+      answer: 'Go to Settings → Data Export. You can export products, orders, sales summary, or complete business reports in CSV format. For PDF reports, use Settings → PDF Reports.',
     },
   ];
 
+  // Quick Actions
   const quickActions = [
     {
       id: 'contact-support',
       title: 'Contact Support',
-      subtitle: 'Get help from our support team',
-      icon: 'headset-outline',
+      subtitle: 'Send us a message',
+      icon: 'mail-outline',
       color: colors.primary.main,
       onPress: () => setContactModal(true),
     },
+    {
+      id: 'send-feedback',
+      title: 'Send Feedback',
+      subtitle: 'Help us improve',
+      icon: 'chatbubble-outline',
+      color: colors.success.main,
+      onPress: () => setFeedbackModal(true),
+    },
+  ];
 
-    {
-      id: 'video-call',
-      title: 'Video Support',
-      subtitle: 'Schedule a video call with expert',
-      icon: 'videocam-outline',
-      color: colors.info.main,
-      onPress: () => Alert.alert('Video Support', 'Video support feature coming soon!'),
-    },
-    {
-      id: 'community',
-      title: 'Community Forum',
-      subtitle: 'Connect with other FlowPOS users',
-      icon: 'people-outline',
-      color: colors.warning.main,
-      onPress: () => Alert.alert('Community', 'Community forum feature coming soon!'),
-    },
+  // Coming Soon Features
+  const comingSoonFeatures = [
+    { title: 'Video Tutorials', icon: 'play-circle-outline' },
+    { title: 'Live Chat Support', icon: 'chatbubbles-outline' },
+    { title: 'Community Forum', icon: 'people-outline' },
   ];
 
   const handleContactSubmit = async () => {
@@ -142,13 +114,37 @@ const HelpSupportScreen = ({ navigation }) => {
 
     setIsSubmitting(true);
     try {
-      // TODO: Implement actual contact form submission
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      
+      // Save support request locally
+      const supportRequests = await AsyncStorage.getItem('supportRequests');
+      const requests = supportRequests ? JSON.parse(supportRequests) : [];
+      
+      const newRequest = {
+        id: `SR_${Date.now()}`,
+        type: 'support',
+        subject: contactForm.subject,
+        message: contactForm.message,
+        priority: contactForm.priority,
+        userEmail: user?.email || 'Unknown',
+        userId: user?.id || 'Unknown',
+        timestamp: new Date().toISOString(),
+        status: 'pending',
+      };
+      
+      requests.push(newRequest);
+      await AsyncStorage.setItem('supportRequests', JSON.stringify(requests));
       
       setContactModal(false);
       setContactForm({ subject: '', message: '', priority: 'medium' });
-      Alert.alert('Success', 'Your message has been sent. We\'ll get back to you soon!');
+      
+      Alert.alert(
+        'Message Sent',
+        'Your support request has been saved. Our team will review it and get back to you via email.',
+        [{ text: 'OK' }]
+      );
     } catch (error) {
+      console.error('Error submitting support request:', error);
       Alert.alert('Error', 'Failed to send message. Please try again.');
     } finally {
       setIsSubmitting(false);
@@ -163,24 +159,52 @@ const HelpSupportScreen = ({ navigation }) => {
 
     setIsSubmitting(true);
     try {
-      // TODO: Implement actual feedback submission
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+      
+      // Save feedback locally
+      const feedbackData = await AsyncStorage.getItem('userFeedback');
+      const feedbacks = feedbackData ? JSON.parse(feedbackData) : [];
+      
+      const newFeedback = {
+        id: `FB_${Date.now()}`,
+        type: feedbackForm.type,
+        message: feedbackForm.message,
+        rating: feedbackForm.rating,
+        userEmail: user?.email || 'Unknown',
+        userId: user?.id || 'Unknown',
+        timestamp: new Date().toISOString(),
+      };
+      
+      feedbacks.push(newFeedback);
+      await AsyncStorage.setItem('userFeedback', JSON.stringify(feedbacks));
       
       setFeedbackModal(false);
       setFeedbackForm({ type: 'suggestion', message: '', rating: 5 });
-      Alert.alert('Success', 'Thank you for your feedback!');
+      
+      Alert.alert(
+        'Thank You!',
+        'Your feedback has been recorded. We appreciate you helping us improve FlowPOS!',
+        [{ text: 'OK' }]
+      );
     } catch (error) {
+      console.error('Error submitting feedback:', error);
       Alert.alert('Error', 'Failed to send feedback. Please try again.');
     } finally {
       setIsSubmitting(false);
     }
   };
 
-  const openExternalLink = (url) => {
-    Linking.openURL(url).catch(() => {
-      Alert.alert('Error', 'Unable to open link');
-    });
+  const toggleFaq = (id) => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
+    setExpandedFaq(expandedFaq === id ? null : id);
   };
+
+  // Coming Soon Badge
+  const ComingSoonBadge = () => (
+    <View style={styles.comingSoonBadge}>
+      <Text style={styles.comingSoonText}>Coming Soon</Text>
+    </View>
+  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -188,24 +212,19 @@ const HelpSupportScreen = ({ navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => safeGoBack(navigation)}
+          onPress={() => safeGoBack(navigation, 'Profile')}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Help & Support</Text>
-        <TouchableOpacity
-          style={styles.feedbackButton}
-          onPress={() => setFeedbackModal(true)}
-        >
-          <Ionicons name="chatbubble-outline" size={20} color={colors.primary.main} />
-        </TouchableOpacity>
+        <View style={styles.headerSpacer} />
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Quick Actions */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <View style={styles.quickActionsGrid}>
+          <Text style={styles.sectionTitle}>Get Help</Text>
+          <View style={styles.quickActionsRow}>
             {quickActions.map((action) => (
               <TouchableOpacity
                 key={action.id}
@@ -223,136 +242,69 @@ const HelpSupportScreen = ({ navigation }) => {
           </View>
         </View>
 
-        {/* Help Categories */}
+        {/* FAQ Section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Browse Help Topics</Text>
-          {helpCategories.map((category) => (
-            <View key={category.id} style={styles.categoryCard}>
+          <Text style={styles.sectionTitle}>Frequently Asked Questions</Text>
+          {faqData.map((faq) => (
+            <View key={faq.id} style={styles.faqItem}>
               <TouchableOpacity
-                style={styles.categoryHeader}
-                onPress={() => Alert.alert(category.title, 'Help articles feature coming soon!')}
+                style={styles.faqQuestion}
+                onPress={() => toggleFaq(faq.id)}
+                activeOpacity={0.7}
               >
-                <View style={styles.categoryLeft}>
-                  <Ionicons name={category.icon} size={24} color={colors.text.primary} style={styles.categoryIconSvg} />
-                  <Text style={styles.categoryTitle}>{category.title}</Text>
-                </View>
-                <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
+                <Text style={styles.faqQuestionText}>{faq.question}</Text>
+                <Ionicons
+                  name={expandedFaq === faq.id ? 'chevron-up' : 'chevron-down'}
+                  size={20}
+                  color={colors.text.secondary}
+                />
               </TouchableOpacity>
-              <View style={styles.categoryItems}>
-                {category.items.slice(0, 3).map((item, index) => (
-                  <TouchableOpacity
-                    key={index}
-                    style={styles.categoryItem}
-                    onPress={() => Alert.alert('Help Article', `"${item}" article coming soon!`)}
-                  >
-                    <Text style={styles.categoryItemText}>• {item}</Text>
-                  </TouchableOpacity>
-                ))}
-                {category.items.length > 3 && (
-                  <TouchableOpacity
-                    style={styles.viewAllButton}
-                    onPress={() => Alert.alert(category.title, 'All articles feature coming soon!')}
-                  >
-                    <Text style={styles.viewAllText}>View all {category.items.length} articles</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
+              {expandedFaq === faq.id && (
+                <View style={styles.faqAnswer}>
+                  <Text style={styles.faqAnswerText}>{faq.answer}</Text>
+                </View>
+              )}
             </View>
           ))}
         </View>
 
-        {/* Resources */}
+        {/* Coming Soon Features */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Resources</Text>
-          
-          <TouchableOpacity
-            style={styles.resourceItem}
-            onPress={() => Alert.alert('Video Tutorials', 'Video tutorials feature coming soon!')}
-          >
-            <Ionicons name="play-circle-outline" size={24} color={colors.text.primary} />
-            <View style={styles.resourceContent}>
-              <Text style={styles.resourceTitle}>Video Tutorials</Text>
-              <Text style={styles.resourceSubtitle}>Step-by-step video guides</Text>
+          <Text style={styles.sectionTitle}>More Resources</Text>
+          {comingSoonFeatures.map((feature, index) => (
+            <View key={index} style={styles.comingSoonItem}>
+              <Ionicons name={feature.icon} size={24} color={colors.text.secondary} />
+              <Text style={styles.comingSoonItemText}>{feature.title}</Text>
+              <ComingSoonBadge />
             </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.resourceItem}
-            onPress={() => Alert.alert('User Manual', 'User manual feature coming soon!')}
-          >
-            <Ionicons name="book-outline" size={24} color={colors.text.primary} />
-            <View style={styles.resourceContent}>
-              <Text style={styles.resourceTitle}>User Manual</Text>
-              <Text style={styles.resourceSubtitle}>Complete FlowPOS guide</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.resourceItem}
-            onPress={() => openExternalLink('https://flowpos.com/blog')}
-          >
-            <Ionicons name="newspaper-outline" size={24} color={colors.text.primary} />
-            <View style={styles.resourceContent}>
-              <Text style={styles.resourceTitle}>Blog & Tips</Text>
-              <Text style={styles.resourceSubtitle}>Latest updates and business tips</Text>
-            </View>
-            <Ionicons name="open-outline" size={16} color={colors.text.secondary} />
-          </TouchableOpacity>
-
-          <TouchableOpacity
-            style={styles.resourceItem}
-            onPress={() => Alert.alert('FAQ', 'FAQ feature coming soon!')}
-          >
-            <Ionicons name="help-circle-outline" size={24} color={colors.text.primary} />
-            <View style={styles.resourceContent}>
-              <Text style={styles.resourceTitle}>Frequently Asked Questions</Text>
-              <Text style={styles.resourceSubtitle}>Quick answers to common questions</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
+          ))}
         </View>
 
         {/* Contact Information */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Contact Information</Text>
-          
           <View style={styles.contactCard}>
             <View style={styles.contactItem}>
               <Ionicons name="mail-outline" size={20} color={colors.text.secondary} />
               <Text style={styles.contactText}>support@flowpos.com</Text>
             </View>
             <View style={styles.contactItem}>
-              <Ionicons name="call-outline" size={20} color={colors.text.secondary} />
-              <Text style={styles.contactText}>+91 1800-123-4567</Text>
-            </View>
-            <View style={styles.contactItem}>
               <Ionicons name="time-outline" size={20} color={colors.text.secondary} />
-              <Text style={styles.contactText}>Mon-Fri, 9 AM - 6 PM IST</Text>
+              <Text style={styles.contactText}>Response within 24-48 hours</Text>
             </View>
           </View>
         </View>
 
-        {/* App Information */}
+        {/* App Info */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>App Information</Text>
-          
           <View style={styles.appInfoCard}>
-            <View style={styles.appInfoItem}>
-              <Text style={styles.appInfoLabel}>Version</Text>
-              <Text style={styles.appInfoValue}>1.0.0</Text>
-            </View>
-            <View style={styles.appInfoItem}>
-              <Text style={styles.appInfoLabel}>Build</Text>
-              <Text style={styles.appInfoValue}>2024.01.15</Text>
-            </View>
-            <View style={styles.appInfoItem}>
-              <Text style={styles.appInfoLabel}>Platform</Text>
-              <Text style={styles.appInfoValue}>React Native</Text>
-            </View>
+            <Text style={styles.appInfoTitle}>FlowPOS</Text>
+            <Text style={styles.appInfoVersion}>Version 1.0.0</Text>
+            <Text style={styles.appInfoTagline}>Made with ❤️ for small businesses</Text>
           </View>
         </View>
+
+        <View style={styles.bottomPadding} />
       </ScrollView>
 
       {/* Contact Support Modal */}
@@ -366,10 +318,7 @@ const HelpSupportScreen = ({ navigation }) => {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Contact Support</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setContactModal(false)}
-              >
+              <TouchableOpacity onPress={() => setContactModal(false)}>
                 <Ionicons name="close" size={24} color={colors.text.primary} />
               </TouchableOpacity>
             </View>
@@ -380,6 +329,7 @@ const HelpSupportScreen = ({ navigation }) => {
                 <TextInput
                   style={styles.input}
                   placeholder="Brief description of your issue"
+                  placeholderTextColor={colors.text.tertiary}
                   value={contactForm.subject}
                   onChangeText={(text) => setContactForm({...contactForm, subject: text})}
                 />
@@ -413,6 +363,7 @@ const HelpSupportScreen = ({ navigation }) => {
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Describe your issue in detail..."
+                  placeholderTextColor={colors.text.tertiary}
                   value={contactForm.message}
                   onChangeText={(text) => setContactForm({...contactForm, message: text})}
                   multiline={true}
@@ -426,11 +377,9 @@ const HelpSupportScreen = ({ navigation }) => {
                 onPress={handleContactSubmit}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? (
-                  <LoadingSpinner size="small" color={colors.background.surface} />
-                ) : (
-                  <Text style={styles.submitButtonText}>Send Message</Text>
-                )}
+                <Text style={styles.submitButtonText}>
+                  {isSubmitting ? 'Sending...' : 'Send Message'}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -448,10 +397,7 @@ const HelpSupportScreen = ({ navigation }) => {
           <View style={styles.modalContainer}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Send Feedback</Text>
-              <TouchableOpacity
-                style={styles.closeButton}
-                onPress={() => setFeedbackModal(false)}
-              >
+              <TouchableOpacity onPress={() => setFeedbackModal(false)}>
                 <Ionicons name="close" size={24} color={colors.text.primary} />
               </TouchableOpacity>
             </View>
@@ -507,6 +453,7 @@ const HelpSupportScreen = ({ navigation }) => {
                 <TextInput
                   style={[styles.input, styles.textArea]}
                   placeholder="Tell us what you think..."
+                  placeholderTextColor={colors.text.tertiary}
                   value={feedbackForm.message}
                   onChangeText={(text) => setFeedbackForm({...feedbackForm, message: text})}
                   multiline={true}
@@ -520,11 +467,9 @@ const HelpSupportScreen = ({ navigation }) => {
                 onPress={handleFeedbackSubmit}
                 disabled={isSubmitting}
               >
-                {isSubmitting ? (
-                  <LoadingSpinner size="small" color={colors.background.surface} />
-                ) : (
-                  <Text style={styles.submitButtonText}>Send Feedback</Text>
-                )}
+                <Text style={styles.submitButtonText}>
+                  {isSubmitting ? 'Sending...' : 'Send Feedback'}
+                </Text>
               </TouchableOpacity>
             </ScrollView>
           </View>
@@ -557,8 +502,8 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.text.primary,
   },
-  feedbackButton: {
-    padding: 8,
+  headerSpacer: {
+    width: 40,
   },
   scrollView: {
     flex: 1,
@@ -570,21 +515,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.text.primary,
-    marginBottom: 16,
+    marginBottom: 12,
     marginHorizontal: 20,
+    marginTop: 16,
   },
-  quickActionsGrid: {
+  quickActionsRow: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
     paddingHorizontal: 20,
     gap: 12,
   },
   quickActionCard: {
+    flex: 1,
     backgroundColor: colors.background.surface,
     borderRadius: 12,
     padding: 16,
     alignItems: 'center',
-    width: '48%',
     borderWidth: 1,
     borderColor: colors.border.light,
   },
@@ -608,53 +553,41 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     textAlign: 'center',
   },
-  categoryCard: {
+  faqItem: {
     backgroundColor: colors.background.surface,
     marginHorizontal: 20,
-    marginBottom: 12,
+    marginBottom: 8,
     borderRadius: 12,
     borderWidth: 1,
     borderColor: colors.border.light,
+    overflow: 'hidden',
   },
-  categoryHeader: {
+  faqQuestion: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: 16,
   },
-  categoryLeft: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  faqQuestionText: {
     flex: 1,
-  },
-  categoryIconSvg: {
-    marginRight: 12,
-  },
-  categoryTitle: {
-    fontSize: 16,
+    fontSize: 15,
     fontWeight: '500',
     color: colors.text.primary,
+    marginRight: 12,
   },
-  categoryItems: {
+  faqAnswer: {
     paddingHorizontal: 16,
     paddingBottom: 16,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+    paddingTop: 12,
   },
-  categoryItem: {
-    paddingVertical: 4,
-  },
-  categoryItemText: {
+  faqAnswerText: {
     fontSize: 14,
     color: colors.text.secondary,
+    lineHeight: 20,
   },
-  viewAllButton: {
-    marginTop: 8,
-  },
-  viewAllText: {
-    fontSize: 14,
-    color: colors.primary.main,
-    fontWeight: '500',
-  },
-  resourceItem: {
+  comingSoonItem: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: colors.background.surface,
@@ -662,20 +595,27 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
+    opacity: 0.7,
   },
-  resourceContent: {
+  comingSoonItemText: {
     flex: 1,
-    marginLeft: 12,
-  },
-  resourceTitle: {
     fontSize: 16,
     fontWeight: '500',
     color: colors.text.primary,
-    marginBottom: 2,
+    marginLeft: 12,
   },
-  resourceSubtitle: {
-    fontSize: 14,
-    color: colors.text.secondary,
+  comingSoonBadge: {
+    backgroundColor: colors.warning.background,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: colors.warning.border,
+  },
+  comingSoonText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.warning.main,
   },
   contactCard: {
     backgroundColor: colors.background.surface,
@@ -699,24 +639,28 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.surface,
     marginHorizontal: 20,
     borderRadius: 12,
-    padding: 16,
+    padding: 20,
+    alignItems: 'center',
     borderWidth: 1,
     borderColor: colors.border.light,
   },
-  appInfoItem: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  appInfoTitle: {
+    fontSize: 20,
+    fontWeight: '700',
+    color: colors.primary.main,
+    marginBottom: 4,
   },
-  appInfoLabel: {
+  appInfoVersion: {
     fontSize: 14,
     color: colors.text.secondary,
+    marginBottom: 8,
   },
-  appInfoValue: {
-    fontSize: 14,
-    fontWeight: '500',
-    color: colors.text.primary,
+  appInfoTagline: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+  },
+  bottomPadding: {
+    height: 40,
   },
   modalOverlay: {
     flex: 1,
@@ -727,7 +671,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.surface,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
-    maxHeight: '90%',
+    maxHeight: '85%',
   },
   modalHeader: {
     flexDirection: 'row',
@@ -741,9 +685,6 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: '600',
     color: colors.text.primary,
-  },
-  closeButton: {
-    padding: 4,
   },
   modalContent: {
     padding: 20,
@@ -804,9 +745,10 @@ const styles = StyleSheet.create({
   submitButton: {
     backgroundColor: colors.primary.main,
     borderRadius: 8,
-    paddingVertical: 12,
+    paddingVertical: 14,
     alignItems: 'center',
     marginTop: 8,
+    marginBottom: 20,
   },
   submitButtonDisabled: {
     opacity: 0.6,

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -10,16 +10,153 @@ import {
   KeyboardAvoidingView,
   Platform,
   Dimensions,
-  Image,
-  Switch,
   Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { Ionicons, MaterialIcons, FontAwesome5 } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import { buttonStyles } from '../../styles/buttonStyles';
+import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
+
+// Enhanced input validation and security utilities for Store Setup
+const StoreValidation = {
+  // Sanitize input to prevent XSS and injection attacks
+  sanitizeInput: (input) => {
+    if (typeof input !== 'string') return '';
+    return input
+      .trim()
+      .replace(/[<>\"'&]/g, '') // Remove potentially dangerous characters
+      .substring(0, 500); // Limit length to prevent buffer overflow
+  },
+
+  // Store name validation
+  validateStoreName: (name) => {
+    const sanitized = StoreValidation.sanitizeInput(name);
+    if (!sanitized) return { isValid: false, error: 'Store name is required' };
+    if (sanitized.length < 2) return { isValid: false, error: 'Store name must be at least 2 characters' };
+    if (sanitized.length > 100) return { isValid: false, error: 'Store name is too long (max 100 characters)' };
+    
+    // Check for valid characters (letters, numbers, spaces, basic punctuation)
+    const validNameRegex = /^[a-zA-Z0-9\s\-\.\&\'\,]+$/;
+    if (!validNameRegex.test(sanitized)) {
+      return { isValid: false, error: 'Store name contains invalid characters' };
+    }
+    
+    return { isValid: true, sanitized };
+  },
+
+  // Business type validation
+  validateBusinessType: (type, validTypes) => {
+    if (!type) return { isValid: false, error: 'Business type is required' };
+    if (!validTypes.some(bt => bt.type === type)) {
+      return { isValid: false, error: 'Please select a valid business type' };
+    }
+    return { isValid: true };
+  },
+
+  // Address validation
+  validateAddress: (address) => {
+    const sanitized = StoreValidation.sanitizeInput(address);
+    if (!sanitized) return { isValid: false, error: 'Store address is required' };
+    if (sanitized.length < 10) return { isValid: false, error: 'Please enter a complete address' };
+    if (sanitized.length > 300) return { isValid: false, error: 'Address is too long (max 300 characters)' };
+    
+    return { isValid: true, sanitized };
+  },
+
+  // Phone validation
+  validatePhone: (phone) => {
+    const sanitized = phone.replace(/\s/g, ''); // Remove spaces
+    if (!sanitized) return { isValid: false, error: 'Phone number is required' };
+    
+    // Enhanced phone validation - supports international formats
+    const phoneRegex = /^[\+]?[1-9][\d]{7,14}$/;
+    if (!phoneRegex.test(sanitized)) {
+      return { isValid: false, error: 'Please enter a valid phone number (8-15 digits)' };
+    }
+    
+    return { isValid: true, sanitized };
+  },
+
+  // Email validation
+  validateEmail: (email) => {
+    if (!email || !email.trim()) return { isValid: true, sanitized: '' }; // Optional field
+    
+    const sanitized = StoreValidation.sanitizeInput(email);
+    if (sanitized.length > 100) return { isValid: false, error: 'Email is too long' };
+    
+    const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
+    if (!emailRegex.test(sanitized)) {
+      return { isValid: false, error: 'Please enter a valid email address' };
+    }
+    
+    return { isValid: true, sanitized: sanitized.toLowerCase() };
+  },
+
+  // Website validation
+  validateWebsite: (website) => {
+    if (!website || !website.trim()) return { isValid: true, sanitized: '' }; // Optional field
+    
+    const sanitized = StoreValidation.sanitizeInput(website);
+    if (sanitized.length > 200) return { isValid: false, error: 'Website URL is too long' };
+    
+    // Basic URL validation
+    const urlRegex = /^https?:\/\/(www\.)?[-a-zA-Z0-9@:%._\+~#=]{1,256}\.[a-zA-Z0-9()]{1,6}\b([-a-zA-Z0-9()@:%_\+.~#?&//=]*)$/;
+    if (!urlRegex.test(sanitized)) {
+      return { isValid: false, error: 'Please enter a valid website URL (include http:// or https://)' };
+    }
+    
+    return { isValid: true, sanitized };
+  },
+
+  // UPI ID validation
+  validateUpiId: (upiId, isRequired = false) => {
+    if (!upiId || !upiId.trim()) {
+      if (isRequired) return { isValid: false, error: 'UPI ID is required when UPI payment is enabled' };
+      return { isValid: true, sanitized: '' };
+    }
+    
+    const sanitized = upiId.trim().toLowerCase();
+    if (sanitized.length > 50) return { isValid: false, error: 'UPI ID is too long' };
+    
+    // UPI ID format validation
+    const upiRegex = /^[a-zA-Z0-9.\-_]{2,50}@[a-zA-Z]{2,20}$/;
+    if (!upiRegex.test(sanitized)) {
+      return { isValid: false, error: 'Please enter a valid UPI ID (e.g., yourname@paytm)' };
+    }
+    
+    return { isValid: true, sanitized };
+  },
+
+  // GST number validation
+  validateGstNumber: (gstNumber) => {
+    if (!gstNumber || !gstNumber.trim()) return { isValid: true, sanitized: '' }; // Optional field
+    
+    const sanitized = gstNumber.trim().toUpperCase();
+    if (sanitized.length !== 15) return { isValid: false, error: 'GST number must be exactly 15 characters' };
+    
+    // GST format validation
+    const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+    if (!gstRegex.test(sanitized)) {
+      return { isValid: false, error: 'Please enter a valid GST number (e.g., 22AAAAA0000A1Z5)' };
+    }
+    
+    return { isValid: true, sanitized };
+  },
+
+  // Description validation
+  validateDescription: (description) => {
+    if (!description || !description.trim()) return { isValid: true, sanitized: '' }; // Optional field
+    
+    const sanitized = StoreValidation.sanitizeInput(description);
+    if (sanitized.length > 500) return { isValid: false, error: 'Description is too long (max 500 characters)' };
+    
+    return { isValid: true, sanitized };
+  }
+};
 
 const { width } = Dimensions.get('window');
 
@@ -45,9 +182,29 @@ const StoreSetupScreen = ({ navigation, route }) => {
   
   const [isLoading, setIsLoading] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
+
+  // Prevent back navigation during store setup completion
+  useBackPrevention(isLoading, {
+    message: 'Store setup is in progress. Please wait for completion to avoid losing your setup data.',
+    title: 'Setting Up Store',
+    hardBlock: true // No cancellation allowed during store setup
+  });
   const [showBusinessTypeModal, setShowBusinessTypeModal] = useState(false);
-  // Removed showOperatingHours state - not needed anymore
   const totalSteps = 4;
+
+  // Validation error states
+  const [validationErrors, setValidationErrors] = useState({});
+
+  // Clear validation error for specific field
+  const clearValidationError = (field) => {
+    if (validationErrors[field]) {
+      setValidationErrors(prev => {
+        const newErrors = { ...prev };
+        delete newErrors[field];
+        return newErrors;
+      });
+    }
+  };
 
   const businessTypes = [
     { type: 'Retail Store', icon: 'storefront', color: '#4CAF50', description: 'General merchandise, clothing, accessories' },
@@ -69,84 +226,109 @@ const StoreSetupScreen = ({ navigation, route }) => {
       ...prev,
       [field]: value
     }));
+    // Clear validation error when user starts typing
+    clearValidationError(field);
   };
 
   const validateStep = (step) => {
+    const errors = {};
+    let isValid = true;
+
     switch (step) {
       case 1:
-        if (!storeData.store_name.trim()) {
-          Alert.alert('Store Name Required', 'Please enter your store name to continue');
-          return false;
+        // Validate store name
+        const storeNameValidation = StoreValidation.validateStoreName(storeData.store_name);
+        if (!storeNameValidation.isValid) {
+          errors.store_name = storeNameValidation.error;
+          isValid = false;
         }
-        if (storeData.store_name.trim().length < 2) {
-          Alert.alert('Invalid Store Name', 'Store name must be at least 2 characters long');
-          return false;
+
+        // Validate business type
+        const businessTypeValidation = StoreValidation.validateBusinessType(storeData.business_type, businessTypes);
+        if (!businessTypeValidation.isValid) {
+          errors.business_type = businessTypeValidation.error;
+          isValid = false;
         }
-        if (!storeData.business_type) {
-          Alert.alert('Business Type Required', 'Please select your business type to continue');
-          return false;
+
+        // Validate description (optional)
+        const descriptionValidation = StoreValidation.validateDescription(storeData.store_description);
+        if (!descriptionValidation.isValid) {
+          errors.store_description = descriptionValidation.error;
+          isValid = false;
         }
-        return true;
+        break;
+
       case 2:
-        if (!storeData.store_address.trim()) {
-          Alert.alert('Address Required', 'Please enter your store address to continue');
-          return false;
+        // Validate address
+        const addressValidation = StoreValidation.validateAddress(storeData.store_address);
+        if (!addressValidation.isValid) {
+          errors.store_address = addressValidation.error;
+          isValid = false;
         }
-        if (!storeData.store_phone.trim()) {
-          Alert.alert('Phone Required', 'Please enter your store phone number to continue');
-          return false;
+
+        // Validate phone
+        const phoneValidation = StoreValidation.validatePhone(storeData.store_phone);
+        if (!phoneValidation.isValid) {
+          errors.store_phone = phoneValidation.error;
+          isValid = false;
         }
-        // Validate phone number format
-        const phoneRegex = /^[\+]?[1-9][\d]{0,15}$/;
-        if (!phoneRegex.test(storeData.store_phone.replace(/\s/g, ''))) {
-          Alert.alert('Invalid Phone Number', 'Please enter a valid phone number');
-          return false;
+
+        // Validate email (optional)
+        const emailValidation = StoreValidation.validateEmail(storeData.store_email);
+        if (!emailValidation.isValid) {
+          errors.store_email = emailValidation.error;
+          isValid = false;
         }
-        // Validate email if provided
-        if (storeData.store_email && storeData.store_email.trim()) {
-          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-          if (!emailRegex.test(storeData.store_email)) {
-            Alert.alert('Invalid Email', 'Please enter a valid email address');
-            return false;
-          }
+
+        // Validate website (optional)
+        const websiteValidation = StoreValidation.validateWebsite(storeData.store_website);
+        if (!websiteValidation.isValid) {
+          errors.store_website = websiteValidation.error;
+          isValid = false;
         }
-        return true;
+        break;
+
       case 3:
-        // Business operations step - validate UPI ID if UPI is selected
-        if (storeData.accepts_upi && !storeData.upi_id.trim()) {
-          Alert.alert('UPI ID Required', 'Please enter your primary UPI ID since UPI payment is enabled');
-          return false;
-        }
-        if (storeData.accepts_upi && storeData.upi_id.trim()) {
-          // Basic UPI ID validation (should contain @ symbol and valid format)
-          const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
-          if (!upiRegex.test(storeData.upi_id)) {
-            Alert.alert('Invalid UPI ID', 'Please enter a valid UPI ID (e.g., yourname@paytm)');
-            return false;
+        // Validate UPI ID if UPI is enabled
+        if (storeData.accepts_upi) {
+          const upiValidation = StoreValidation.validateUpiId(storeData.upi_id, true);
+          if (!upiValidation.isValid) {
+            errors.upi_id = upiValidation.error;
+            isValid = false;
           }
         }
-        // Validate second UPI ID if provided
-        if (storeData.upi_id_2 && storeData.upi_id_2.trim()) {
-          const upiRegex = /^[a-zA-Z0-9.\-_]{2,256}@[a-zA-Z]{2,64}$/;
-          if (!upiRegex.test(storeData.upi_id_2)) {
-            Alert.alert('Invalid Secondary UPI ID', 'Please enter a valid secondary UPI ID (e.g., business@gpay)');
-            return false;
-          }
+
+        // Validate secondary UPI ID (optional)
+        const upi2Validation = StoreValidation.validateUpiId(storeData.upi_id_2, false);
+        if (!upi2Validation.isValid) {
+          errors.upi_id_2 = upi2Validation.error;
+          isValid = false;
         }
-        return true;
+        break;
+
       case 4:
-        // Optional step - validate GST and PAN if provided
-        if (storeData.gst_number && storeData.gst_number.trim()) {
-          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
-          if (!gstRegex.test(storeData.gst_number.toUpperCase())) {
-            Alert.alert('Invalid GST Number', 'Please enter a valid GST number (e.g., 22AAAAA0000A1Z5)');
-            return false;
-          }
+        // Validate GST number (optional)
+        const gstValidation = StoreValidation.validateGstNumber(storeData.gst_number);
+        if (!gstValidation.isValid) {
+          errors.gst_number = gstValidation.error;
+          isValid = false;
         }
-        return true;
+        break;
+
       default:
         return true;
     }
+
+    // Set validation errors
+    setValidationErrors(errors);
+
+    // Show first error in alert
+    if (!isValid) {
+      const firstError = Object.values(errors)[0];
+      Alert.alert('Validation Error', firstError);
+    }
+
+    return isValid;
   };
 
   const handleNext = () => {
@@ -389,8 +571,8 @@ const StoreSetupScreen = ({ navigation, route }) => {
         <Text style={styles.inputLabel}>
           Store Name <Text style={styles.required}>*</Text>
         </Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="storefront-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, validationErrors.store_name && styles.inputError]}>
+          <Ionicons name="storefront-outline" size={20} color={validationErrors.store_name ? colors.error : colors.textSecondary} style={styles.inputIcon} />
           <TextInput
             style={styles.inputWithIcon}
             value={storeData.store_name}
@@ -398,9 +580,14 @@ const StoreSetupScreen = ({ navigation, route }) => {
             placeholder="Enter your store name"
             autoCapitalize="words"
             maxLength={100}
+            editable={!isLoading}
           />
         </View>
-        <Text style={styles.inputHint}>This will be displayed to your customers</Text>
+        {validationErrors.store_name ? (
+          <Text style={styles.errorText}>{validationErrors.store_name}</Text>
+        ) : (
+          <Text style={styles.inputHint}>This will be displayed to your customers</Text>
+        )}
       </View>
 
       <View style={styles.inputGroup}>
@@ -445,8 +632,8 @@ const StoreSetupScreen = ({ navigation, route }) => {
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Store Description</Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="document-text-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, validationErrors.store_description && styles.inputError]}>
+          <Ionicons name="document-text-outline" size={20} color={validationErrors.store_description ? colors.error : colors.textSecondary} style={styles.inputIcon} />
           <TextInput
             style={[styles.inputWithIcon, styles.textArea]}
             value={storeData.store_description}
@@ -456,11 +643,16 @@ const StoreSetupScreen = ({ navigation, route }) => {
             numberOfLines={3}
             textAlignVertical="top"
             maxLength={500}
+            editable={!isLoading}
           />
         </View>
-        <Text style={styles.inputHint}>
-          {storeData.store_description.length}/500 characters
-        </Text>
+        {validationErrors.store_description ? (
+          <Text style={styles.errorText}>{validationErrors.store_description}</Text>
+        ) : (
+          <Text style={styles.inputHint}>
+            {storeData.store_description.length}/500 characters
+          </Text>
+        )}
       </View>
     </View>
   );
@@ -481,8 +673,8 @@ const StoreSetupScreen = ({ navigation, route }) => {
         <Text style={styles.inputLabel}>
           Store Address <Text style={styles.required}>*</Text>
         </Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="location-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, validationErrors.store_address && styles.inputError]}>
+          <Ionicons name="location-outline" size={20} color={validationErrors.store_address ? colors.error : colors.textSecondary} style={styles.inputIcon} />
           <TextInput
             style={[styles.inputWithIcon, styles.textArea]}
             value={storeData.store_address}
@@ -492,17 +684,22 @@ const StoreSetupScreen = ({ navigation, route }) => {
             numberOfLines={3}
             textAlignVertical="top"
             maxLength={300}
+            editable={!isLoading}
           />
         </View>
-        <Text style={styles.inputHint}>Include street, city, state, and postal code</Text>
+        {validationErrors.store_address ? (
+          <Text style={styles.errorText}>{validationErrors.store_address}</Text>
+        ) : (
+          <Text style={styles.inputHint}>Include street, city, state, and postal code</Text>
+        )}
       </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>
           Phone Number <Text style={styles.required}>*</Text>
         </Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="call-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, validationErrors.store_phone && styles.inputError]}>
+          <Ionicons name="call-outline" size={20} color={validationErrors.store_phone ? colors.error : colors.textSecondary} style={styles.inputIcon} />
           <TextInput
             style={styles.inputWithIcon}
             value={storeData.store_phone}
@@ -510,15 +707,20 @@ const StoreSetupScreen = ({ navigation, route }) => {
             placeholder="+91 9876543210"
             keyboardType="phone-pad"
             maxLength={15}
+            editable={!isLoading}
           />
         </View>
-        <Text style={styles.inputHint}>Include country code for better reach</Text>
+        {validationErrors.store_phone ? (
+          <Text style={styles.errorText}>{validationErrors.store_phone}</Text>
+        ) : (
+          <Text style={styles.inputHint}>Include country code for better reach</Text>
+        )}
       </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Store Email</Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="mail-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, validationErrors.store_email && styles.inputError]}>
+          <Ionicons name="mail-outline" size={20} color={validationErrors.store_email ? colors.error : colors.textSecondary} style={styles.inputIcon} />
           <TextInput
             style={styles.inputWithIcon}
             value={storeData.store_email}
@@ -527,15 +729,20 @@ const StoreSetupScreen = ({ navigation, route }) => {
             keyboardType="email-address"
             autoCapitalize="none"
             maxLength={100}
+            editable={!isLoading}
           />
         </View>
-        <Text style={styles.inputHint}>For customer inquiries and receipts</Text>
+        {validationErrors.store_email ? (
+          <Text style={styles.errorText}>{validationErrors.store_email}</Text>
+        ) : (
+          <Text style={styles.inputHint}>For customer inquiries and receipts</Text>
+        )}
       </View>
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Website</Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="globe-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, validationErrors.store_website && styles.inputError]}>
+          <Ionicons name="globe-outline" size={20} color={validationErrors.store_website ? colors.error : colors.textSecondary} style={styles.inputIcon} />
           <TextInput
             style={styles.inputWithIcon}
             value={storeData.store_website}
@@ -544,9 +751,14 @@ const StoreSetupScreen = ({ navigation, route }) => {
             keyboardType="url"
             autoCapitalize="none"
             maxLength={200}
+            editable={!isLoading}
           />
         </View>
-        <Text style={styles.inputHint}>Your online presence (optional)</Text>
+        {validationErrors.store_website ? (
+          <Text style={styles.errorText}>{validationErrors.store_website}</Text>
+        ) : (
+          <Text style={styles.inputHint}>Your online presence (optional)</Text>
+        )}
       </View>
     </View>
   );
@@ -593,10 +805,10 @@ const StoreSetupScreen = ({ navigation, route }) => {
             activeOpacity={0.7}
           >
             <View style={styles.paymentMethodHeader}>
-              <FontAwesome5 name="money-bill-wave" size={24} color="#4CAF50" />
+              <FontAwesome5 name="money-bill-wave" size={24} color={colors.success} />
               {storeData.accepts_cash && (
                 <View style={styles.selectedBadge}>
-                  <Ionicons name="checkmark" size={16} color="#fff" />
+                  <Ionicons name="checkmark" size={16} color={colors.surface} />
                 </View>
               )}
             </View>
@@ -618,10 +830,10 @@ const StoreSetupScreen = ({ navigation, route }) => {
             activeOpacity={0.7}
           >
             <View style={styles.paymentMethodHeader}>
-              <FontAwesome5 name="mobile-alt" size={24} color="#FF9800" />
+              <FontAwesome5 name="mobile-alt" size={24} color={colors.warning} />
               {storeData.accepts_upi && (
                 <View style={styles.selectedBadge}>
-                  <Ionicons name="checkmark" size={16} color="#fff" />
+                  <Ionicons name="checkmark" size={16} color={colors.surface} />
                 </View>
               )}
             </View>
@@ -639,32 +851,50 @@ const StoreSetupScreen = ({ navigation, route }) => {
         {storeData.accepts_upi && (
           <View style={styles.upiInputContainer}>
             <Text style={styles.inputLabel}>Primary UPI ID *</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Enter your primary UPI ID (e.g., yourname@paytm)"
-              value={storeData.upi_id}
-              onChangeText={(text) => handleInputChange('upi_id', text.toLowerCase())}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.upiHelpText}>
-              💡 This will be used for digital payments and QR code generation
-            </Text>
+            <View style={[styles.inputContainer, validationErrors.upi_id && styles.inputError]}>
+              <Ionicons name="card-outline" size={20} color={validationErrors.upi_id ? colors.error : colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.inputWithIcon}
+                placeholder="Enter your primary UPI ID (e.g., yourname@paytm)"
+                value={storeData.upi_id}
+                onChangeText={(text) => handleInputChange('upi_id', text.toLowerCase())}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={50}
+                editable={!isLoading}
+              />
+            </View>
+            {validationErrors.upi_id ? (
+              <Text style={styles.errorText}>{validationErrors.upi_id}</Text>
+            ) : (
+              <Text style={styles.upiHelpText}>
+                💡 This will be used for digital payments and QR code generation
+              </Text>
+            )}
             
             <Text style={[styles.inputLabel, { marginTop: 16 }]}>Secondary UPI ID (Optional)</Text>
-            <TextInput
-              style={styles.textInput}
-              placeholder="Enter secondary UPI ID (e.g., business@gpay)"
-              value={storeData.upi_id_2}
-              onChangeText={(text) => handleInputChange('upi_id_2', text.toLowerCase())}
-              keyboardType="email-address"
-              autoCapitalize="none"
-              autoCorrect={false}
-            />
-            <Text style={styles.upiHelpText}>
-              💡 Optional backup UPI ID for additional payment options
-            </Text>
+            <View style={[styles.inputContainer, validationErrors.upi_id_2 && styles.inputError]}>
+              <Ionicons name="card-outline" size={20} color={validationErrors.upi_id_2 ? colors.error : colors.textSecondary} style={styles.inputIcon} />
+              <TextInput
+                style={styles.inputWithIcon}
+                placeholder="Enter secondary UPI ID (e.g., business@gpay)"
+                value={storeData.upi_id_2}
+                onChangeText={(text) => handleInputChange('upi_id_2', text.toLowerCase())}
+                keyboardType="email-address"
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={50}
+                editable={!isLoading}
+              />
+            </View>
+            {validationErrors.upi_id_2 ? (
+              <Text style={styles.errorText}>{validationErrors.upi_id_2}</Text>
+            ) : (
+              <Text style={styles.upiHelpText}>
+                💡 Optional backup UPI ID for additional payment options
+              </Text>
+            )}
           </View>
         )}
       </View>
@@ -687,8 +917,8 @@ const StoreSetupScreen = ({ navigation, route }) => {
 
       <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>GST Number</Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="receipt-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, validationErrors.gst_number && styles.inputError]}>
+          <Ionicons name="receipt-outline" size={20} color={validationErrors.gst_number ? colors.error : colors.textSecondary} style={styles.inputIcon} />
           <TextInput
             style={styles.inputWithIcon}
             value={storeData.gst_number}
@@ -696,9 +926,14 @@ const StoreSetupScreen = ({ navigation, route }) => {
             placeholder="22AAAAA0000A1Z5"
             autoCapitalize="characters"
             maxLength={15}
+            editable={!isLoading}
           />
         </View>
-        <Text style={styles.inputHint}>15-digit GST identification number (optional)</Text>
+        {validationErrors.gst_number ? (
+          <Text style={styles.errorText}>{validationErrors.gst_number}</Text>
+        ) : (
+          <Text style={styles.inputHint}>15-digit GST identification number (optional)</Text>
+        )}
       </View>
 
       <View style={styles.completionCard}>
@@ -835,16 +1070,14 @@ const StoreSetupScreen = ({ navigation, route }) => {
         {/* Footer */}
         <View style={styles.footer}>
           <TouchableOpacity
-            style={[styles.nextButton, isLoading && styles.disabledButton]}
+            style={buttonStyles.primary}
             onPress={handleNext}
             disabled={isLoading}
+            activeOpacity={0.8}
           >
-            <Text style={styles.nextButtonText}>
+            <Text style={buttonStyles.primaryText}>
               {currentStep === totalSteps ? 'Complete Setup' : 'Next'}
             </Text>
-            {currentStep < totalSteps && (
-              <Ionicons name="chevron-forward" size={20} color="#fff" />
-            )}
           </TouchableOpacity>
         </View>
       </KeyboardAvoidingView>
@@ -853,10 +1086,7 @@ const StoreSetupScreen = ({ navigation, route }) => {
       {renderBusinessTypeModal()}
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isLoading} 
-        message={currentStep === totalSteps ? "Setting up your store..." : "Processing..."} 
-      />
+      {isLoading && <LoadingSpinner />}
     </SafeAreaView>
   );
 };
@@ -1046,7 +1276,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   businessTypeCardTextSelected: {
-    color: '#fff',
+    color: colors.surface,
   },
   completionCard: {
     backgroundColor: colors.success.light,
@@ -1092,24 +1322,7 @@ const styles = StyleSheet.create({
     borderTopColor: colors.border,
     backgroundColor: colors.surface,
   },
-  nextButton: {
-    backgroundColor: colors.primary,
-    paddingVertical: 16,
-    borderRadius: 12,
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  nextButtonText: {
-    color: '#fff',
-    fontSize: 16,
-    fontWeight: '600',
-    marginRight: 8,
-  },
-  disabledButton: {
-    backgroundColor: colors.border,
-    opacity: 0.6,
-  },
+  // Button styles removed - using standardized buttonStyles
   // Business Type Selector
   businessTypeSelector: {
     borderWidth: 1,
@@ -1286,7 +1499,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.5,
   },
   paymentMethodStatusSelected: {
-    color: '#fff',
+    color: colors.surface,
   },
   // UPI Input
   upiInputContainer: {
@@ -1348,6 +1561,28 @@ const styles = StyleSheet.create({
     color: colors.primary.main,
     marginLeft: 12,
     fontWeight: '500',
+  },
+  // Validation error styles
+  inputError: {
+    borderColor: colors.error,
+    borderWidth: 1.5,
+  },
+  errorText: {
+    color: colors.error,
+    fontSize: 12,
+    marginTop: 4,
+    marginLeft: 4,
+  },
+  // Text input style for UPI inputs
+  textInput: {
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    fontSize: 16,
+    color: colors.text,
+    backgroundColor: colors.surface,
   },
 });
 

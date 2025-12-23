@@ -16,6 +16,9 @@ import { getDeviceInfo } from '../utils/deviceUtils';
 import { safeGoBack } from '../utils/navigationUtils';
 import { colors } from '../styles/colors';
 import { useAuth } from '../context/AuthContext';
+import LoadingSpinner from '../components/LoadingSpinner';
+import ImprovedTourGuide from '../components/ImprovedTourGuide';
+import { useAppTour } from '../hooks/useAppTour';
 
 const SubscriptionScreen = ({ navigation }) => {
   const { user, refreshUserData, getUserSubscriptionPlan } = useAuth();
@@ -24,6 +27,9 @@ const SubscriptionScreen = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [showAllFeatures, setShowAllFeatures] = useState({});
   const { isTablet } = getDeviceInfo();
+
+  // App tour guide
+  const { showTour, completeTour } = useAppTour('Subscription');
 
   useEffect(() => {
     loadSubscriptionData();
@@ -215,7 +221,7 @@ const SubscriptionScreen = ({ navigation }) => {
             </ResponsiveText>
             {isCurrentPlan && (
               <View style={styles.activeBadge}>
-                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Ionicons name="checkmark-circle" size={16} color={colors.success.main} />
                 <Text style={styles.activeBadgeText}>ACTIVE</Text>
               </View>
             )}
@@ -277,7 +283,7 @@ const SubscriptionScreen = ({ navigation }) => {
           <View style={styles.keyFeatures}>
             {featuresToDisplay.map((feature, index) => (
               <View key={index} style={styles.featureItemRow}>
-                <Ionicons name="checkmark-circle" size={16} color="#059669" />
+                <Ionicons name="checkmark-circle" size={16} color={colors.success.main} />
                 <Text style={styles.featureItem}>{feature}</Text>
               </View>
             ))}
@@ -300,7 +306,7 @@ const SubscriptionScreen = ({ navigation }) => {
                 <Ionicons 
                   name={showAll ? 'chevron-up' : 'chevron-down'} 
                   size={16} 
-                  color="#3B82F6" 
+                  color={colors.primary.main} 
                 />
               </TouchableOpacity>
             )}
@@ -396,24 +402,7 @@ const SubscriptionScreen = ({ navigation }) => {
   };
 
   if (isLoading) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => safeGoBack(navigation)}
-            activeOpacity={0.7}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Subscription Plans</Text>
-          <View style={styles.headerRight} />
-        </View>
-        <View style={styles.loadingContainer}>
-          <Text style={styles.loadingText}>Loading...</Text>
-        </View>
-      </SafeAreaView>
-    );
+    return <LoadingSpinner />;
   }
 
   return (
@@ -421,7 +410,7 @@ const SubscriptionScreen = ({ navigation }) => {
       <View style={styles.header}>
         <TouchableOpacity
           style={styles.backButton}
-          onPress={() => safeGoBack(navigation)}
+          onPress={() => safeGoBack(navigation, 'Main', { screen: 'Manage' })}
           activeOpacity={0.7}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
@@ -434,7 +423,7 @@ const SubscriptionScreen = ({ navigation }) => {
         {/* Current Plan Info */}
         <View style={styles.currentPlanInfo}>
           <View style={styles.currentPlanHeader}>
-            <Ionicons name="checkmark-circle" size={20} color="#059669" />
+            <Ionicons name="checkmark-circle" size={20} color={colors.success.main} />
             <Text style={styles.currentPlanLabel}>Your Active Plan</Text>
           </View>
           <Text style={styles.currentPlanName}>
@@ -514,6 +503,13 @@ const SubscriptionScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* App Tour Guide */}
+      <ImprovedTourGuide
+        visible={showTour}
+        onComplete={completeTour}
+        currentScreen="Subscription"
+      />
     </SafeAreaView>
   );
 };
@@ -551,15 +547,7 @@ const styles = StyleSheet.create({
   headerRight: {
     width: 40,
   },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loadingText: {
-    fontSize: 16,
-    color: colors.text.secondary,
-  },
+
   content: {
     flex: 1,
     padding: 20,
@@ -576,7 +564,7 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
     borderWidth: 2,
-    borderColor: '#dcfce7',
+    borderColor: colors.success.border,
   },
   currentPlanHeader: {
     flexDirection: 'row',
@@ -586,7 +574,7 @@ const styles = StyleSheet.create({
   },
   currentPlanLabel: {
     fontSize: 14,
-    color: '#059669',
+    color: colors.success.main,
     fontWeight: '600',
   },
   currentPlanName: {
@@ -597,7 +585,7 @@ const styles = StyleSheet.create({
   },
   currentPlanPrice: {
     fontSize: 18,
-    color: '#059669',
+    color: colors.success.main,
     fontWeight: '600',
   },
   trialExpiryText: {
@@ -662,11 +650,11 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   planCard: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background.surface,
     borderRadius: 16,
     padding: 20,
     borderWidth: 2,
-    borderColor: '#E5E7EB',
+    borderColor: colors.border.light,
     position: 'relative',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -680,17 +668,17 @@ const styles = StyleSheet.create({
   },
   currentPlanCard: {
     borderWidth: 3,
-    borderColor: '#3B82F6',
-    backgroundColor: '#FFFFFF',
-    shadowColor: '#3B82F6',
+    borderColor: colors.primary.main,
+    backgroundColor: colors.background.surface,
+    shadowColor: colors.primary.main,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.15,
     shadowRadius: 8,
     elevation: 6,
   },
   inactivePlanCard: {
-    backgroundColor: '#FFFFFF',
-    borderColor: '#E5E7EB',
+    backgroundColor: colors.background.surface,
+    borderColor: colors.border.light,
   },
   planHeader: {
     marginBottom: 16,
@@ -702,18 +690,18 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   planName: {
-    color: '#1F2937',
+    color: colors.text.primary,
     flex: 1,
     fontWeight: '600',
   },
   planNameActive: {
-    color: '#3B82F6',
+    color: colors.primary.main,
     fontWeight: '700',
   },
   activeBadge: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#dcfce7',
+    backgroundColor: colors.success.background,
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
@@ -722,7 +710,7 @@ const styles = StyleSheet.create({
   activeBadgeText: {
     fontSize: 10,
     fontWeight: '700',
-    color: '#059669',
+    color: colors.success.main,
     letterSpacing: 0.5,
   },
   priceContainer: {
@@ -730,12 +718,12 @@ const styles = StyleSheet.create({
     alignItems: 'baseline',
   },
   planPrice: {
-    color: '#059669',
+    color: colors.success.main,
     marginRight: 4,
     fontWeight: '700',
   },
   planPriceActive: {
-    color: '#3B82F6',
+    color: colors.primary.main,
     fontWeight: '800',
   },
   priceUnit: {
@@ -785,7 +773,7 @@ const styles = StyleSheet.create({
   },
   featureItem: {
     fontSize: 14,
-    color: '#059669',
+    color: colors.success.main,
   },
   upgradeButton: {
     paddingVertical: 14,
@@ -794,22 +782,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   upgradeButtonPrimary: {
-    backgroundColor: '#3B82F6',
+    backgroundColor: colors.primary.main,
   },
   upgradeButtonSecondary: {
-    backgroundColor: '#FFFFFF',
+    backgroundColor: colors.background.surface,
     borderWidth: 2,
-    borderColor: '#3B82F6',
+    borderColor: colors.primary.main,
   },
   upgradeButtonText: {
     fontWeight: '600',
     fontSize: 14,
   },
   upgradeButtonTextPrimary: {
-    color: '#FFFFFF',
+    color: colors.background.surface,
   },
   upgradeButtonTextSecondary: {
-    color: '#3B82F6',
+    color: colors.primary.main,
   },
   benefitsContainer: {
     backgroundColor: colors.background.surface,
@@ -888,7 +876,7 @@ const styles = StyleSheet.create({
   },
   seeMoreText: {
     fontSize: 14,
-    color: '#3B82F6',
+    color: colors.primary.main,
     fontWeight: '500',
   },
 });

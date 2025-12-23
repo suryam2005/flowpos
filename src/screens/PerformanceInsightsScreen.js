@@ -13,9 +13,9 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 
 import { colors } from '../styles/colors';
-import { PageLoader } from '../components/LoadingSpinner';
-import { usePageLoading } from '../hooks/usePageLoading';
+import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceInsightsService from '../services/PerformanceInsightsService';
+import { safeGoBack } from '../utils/navigationUtils';
 import Icon from '../components/SVGIcons';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
 import { useAppTour } from '../hooks/useAppTour';
@@ -24,7 +24,7 @@ const PerformanceInsightsScreen = ({ navigation }) => {
   const [insightsData, setInsightsData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   
-  const { isLoading, finishLoading, contentStyle } = usePageLoading(true, 1000);
+  const [isLoading, setIsLoading] = useState(true);
   
   // App tour guide
   const { showTour, completeTour } = useAppTour('PerformanceInsights');
@@ -45,7 +45,7 @@ const PerformanceInsightsScreen = ({ navigation }) => {
       setInsightsData(data);
       
       if (!isRefresh) {
-        finishLoading();
+        setIsLoading(false);
       }
     } catch (error) {
       console.error('Error loading performance insights:', error);
@@ -259,14 +259,14 @@ const PerformanceInsightsScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <PageLoader visible={isLoading} text="Loading insights..." />
+      {isLoading && <LoadingSpinner />}
       
-      <View style={[styles.content, contentStyle]}>
+      <View style={styles.content}>
         {/* Header */}
         <View style={styles.header}>
           <TouchableOpacity
             style={styles.backButton}
-            onPress={() => navigation.goBack()}
+            onPress={() => safeGoBack(navigation, 'Manage')}
           >
             <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
           </TouchableOpacity>

@@ -33,125 +33,108 @@ class PDFReportsService {
     });
   }
 
-  // Get store information
+  // Get store information with validation
   async getStoreInfo() {
     try {
+      console.log('📊 [PDF Reports] Getting store information...');
+      
       const storeData = await AsyncStorage.getItem('storeInfo');
       if (storeData) {
         const store = JSON.parse(storeData);
-        return {
-          name: store.store_name || store.name || 'FlowPOS Store',
-          address: store.store_address || store.address || 'Store Address',
-          phone: store.store_phone || store.phone || '+91 XXXXXXXXXX',
+        console.log('📊 [PDF Reports] Store data found:', {
+          hasName: !!store.store_name || !!store.name,
+          hasAddress: !!store.store_address || !!store.address,
+          hasPhone: !!store.store_phone || !!store.phone
+        });
+        
+        // Validate required fields
+        const storeInfo = {
+          name: store.store_name || store.name || null,
+          address: store.store_address || store.address || null,
+          phone: store.store_phone || store.phone || null,
           email: store.store_email || store.email || '',
           gstNumber: store.gst_number || store.gstin || ''
         };
+        
+        // Check if essential store data is missing
+        if (!storeInfo.name || !storeInfo.address || !storeInfo.phone) {
+          console.warn('📊 [PDF Reports] Incomplete store data detected');
+          throw new Error('Store information is incomplete. Please complete your store setup in Settings.');
+        }
+        
+        console.log('✅ [PDF Reports] Store information validated successfully');
+        return storeInfo;
+      } else {
+        console.warn('📊 [PDF Reports] No store data found in storage');
+        throw new Error('Store information not found. Please complete your store setup in Settings.');
       }
     } catch (error) {
-      console.error('Error getting store info:', error);
+      console.error('❌ [PDF Reports] Error getting store info:', error);
+      
+      // If it's a validation error, throw it up
+      if (error.message.includes('incomplete') || error.message.includes('not found')) {
+        throw error;
+      }
+      
+      // For other errors, provide a generic message
+      throw new Error('Unable to load store information. Please check your store settings and try again.');
     }
-    
-    return {
-      name: 'FlowPOS Store',
-      address: 'Store Address',
-      phone: '+91 XXXXXXXXXX',
-      email: '',
-      gstNumber: ''
-    };
   }
 
-  // Get business data for reports
+  // Get business data for reports - FIXED: Fetch real store data
   async getBusinessData() {
     try {
-      console.log('📊 [PDF Reports] Fetching business data...');
+      console.log('📊 [PDF Reports] Fetching REAL business data from services...');
       
-      const [productsData, ordersData] = await Promise.all([
-        AsyncStorage.getItem('products'),
-        AsyncStorage.getItem('orders')
+      // Import services dynamically to avoid circular dependencies
+      const productsService = (await import('./ProductsService')).default;
+      const ordersService = (await import('./OrdersService')).default;
+      
+      // Fetch real data from services (which handle store filtering)
+      const [products, orders] = await Promise.all([
+        productsService.getProducts().catch(err => {
+          console.warn('📊 [PDF Reports] Products service failed, trying AsyncStorage:', err.message);
+          return AsyncStorage.getItem('products').then(data => data ? JSON.parse(data) : []);
+        }),
+        ordersService.getOrders().catch(err => {
+          console.warn('📊 [PDF Reports] Orders service failed, trying AsyncStorage:', err.message);
+          return AsyncStorage.getItem('orders').then(data => data ? JSON.parse(data) : []);
+        })
       ]);
 
-      let products = productsData ? JSON.parse(productsData) : [];
-      let orders = ordersData ? JSON.parse(ordersData) : [];
-
-      // Create sample data if none exists
-      if (products.length === 0) {
-        console.log('📊 [PDF Reports] No products found, creating sample data');
-        products = [
-          {
-            name: 'Sample Product 1',
-            category: 'Electronics',
-            price: 299,
-            stock: 15,
-            trackStock: true,
-            createdAt: new Date().toISOString()
-          },
-          {
-            name: 'Sample Product 2',
-            category: 'Clothing',
-            price: 49,
-            stock: 25,
-            trackStock: true,
-            createdAt: new Date(Date.now() - 86400000).toISOString()
-          },
-          {
-            name: 'Sample Product 3',
-            category: 'Food & Beverages',
-            price: 15,
-            stock: 100,
-            trackStock: true,
-            createdAt: new Date(Date.now() - 172800000).toISOString()
-          }
-        ];
-      }
-
-      if (orders.length === 0) {
-        console.log('📊 [PDF Reports] No orders found, creating sample data');
-        orders = [
-          {
-            id: 'ORD001',
-            orderNumber: 'FP241211001',
-            customerName: 'John Doe',
-            items: [{ name: 'Sample Product 1', quantity: 2, price: 299 }],
-            subtotal: 598,
-            tax: 107.64,
-            total: 705.64,
-            paymentMethod: 'Cash',
-            timestamp: new Date().toISOString()
-          },
-          {
-            id: 'ORD002',
-            orderNumber: 'FP241211002',
-            customerName: 'Jane Smith',
-            items: [{ name: 'Sample Product 2', quantity: 1, price: 49 }],
-            subtotal: 49,
-            tax: 8.82,
-            total: 57.82,
-            paymentMethod: 'UPI',
-            timestamp: new Date(Date.now() - 3600000).toISOString()
-          },
-          {
-            id: 'ORD003',
-            orderNumber: 'FP241211003',
-            customerName: 'Walk-in Customer',
-            items: [{ name: 'Sample Product 3', quantity: 5, price: 15 }],
-            subtotal: 75,
-            tax: 13.5,
-            total: 88.5,
-            paymentMethod: 'Cash',
-            timestamp: new Date(Date.now() - 7200000).toISOString()
-          }
-        ];
-      }
-
-      console.log('✅ [PDF Reports] Business data loaded:', {
+      console.log('📊 [PDF Reports] REAL business data loaded:', {
         products: products.length,
         orders: orders.length
       });
 
+      // Validate that we have real store data
+      if (products.length === 0 && orders.length === 0) {
+        throw new Error('No business data available. Please add products and make some sales before generating reports.');
+      }
+
+      // Log sample data for verification
+      if (products.length > 0) {
+        console.log('📊 [PDF Reports] Sample product:', {
+          name: products[0].name,
+          price: products[0].price,
+          stock: products[0].stock || products[0].stock_quantity,
+          trackStock: products[0].trackStock || products[0].track_stock
+        });
+      }
+
+      if (orders.length > 0) {
+        console.log('📊 [PDF Reports] Sample order:', {
+          id: orders[0].id,
+          orderNumber: orders[0].orderNumber,
+          total: orders[0].total,
+          itemsCount: orders[0].items?.length || 0
+        });
+      }
+
       return { products, orders };
     } catch (error) {
       console.error('❌ [PDF Reports] Error fetching business data:', error);
-      return { products: [], orders: [] };
+      throw error; // Don't fall back to sample data - throw error instead
     }
   }
 
@@ -162,10 +145,24 @@ class PDFReportsService {
     const totalProducts = products.length;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-    // Calculate by payment method
+    // Calculate by payment method - FIXED: Detect all payment methods
     const paymentMethods = {
-      cash: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('cash')).length,
-      upi: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('upi')).length
+      cash: orders.filter(o => {
+        const method = (o.paymentMethod || '').toLowerCase();
+        return method.includes('cash');
+      }).length,
+      card: orders.filter(o => {
+        const method = (o.paymentMethod || '').toLowerCase();
+        return method.includes('card');
+      }).length,
+      upi: orders.filter(o => {
+        const method = (o.paymentMethod || '').toLowerCase();
+        return method.includes('upi') || method.includes('qr');
+      }).length,
+      other: orders.filter(o => {
+        const method = (o.paymentMethod || '').toLowerCase();
+        return !method.includes('cash') && !method.includes('card') && !method.includes('upi') && !method.includes('qr');
+      }).length
     };
 
     // Calculate by category
@@ -175,13 +172,18 @@ class PDFReportsService {
       categories[category] = (categories[category] || 0) + 1;
     });
 
-    // Calculate inventory value
+    // Calculate inventory value - FIXED: Use correct stock field
     const inventoryValue = products.reduce((sum, product) => {
-      return sum + ((product.stock || 0) * (product.price || 0));
+      const stock = product.stock || product.stock_quantity || 0;
+      return sum + (stock * (product.price || 0));
     }, 0);
 
-    // Low stock products
-    const lowStockProducts = products.filter(p => p.trackStock && (p.stock || 0) <= 5);
+    // Low stock products - FIXED: Use track_stock (backend field)
+    const lowStockProducts = products.filter(p => {
+      const isTracking = p.track_stock !== false;
+      const stock = p.stock || p.stock_quantity || 0;
+      return isTracking && stock <= 5;
+    });
 
     return {
       totalRevenue,
@@ -222,8 +224,15 @@ class PDFReportsService {
     try {
       console.log('📊 [PDF Reports] Generating Business Summary Report...');
       
+      // Validate store information first
       const storeInfo = await this.getStoreInfo();
       const { products, orders } = await this.getBusinessData();
+      
+      // Validate business data
+      if (products.length === 0 && orders.length === 0) {
+        throw new Error('No business data available. Please add products and make some sales before generating reports.');
+      }
+      
       const metrics = this.calculateMetrics(products, orders);
 
       const html = this.generateBusinessSummaryHTML(storeInfo, metrics);
@@ -246,7 +255,15 @@ class PDFReportsService {
       return { uri, filename, type: 'business_summary' };
     } catch (error) {
       console.error('❌ [PDF Reports] Error generating Business Summary Report:', error);
-      throw error;
+      
+      // Provide specific error messages for common issues
+      if (error.message.includes('incomplete') || error.message.includes('not found')) {
+        throw new Error(`Store Setup Required: ${error.message}`);
+      } else if (error.message.includes('No business data')) {
+        throw error; // Pass through business data error as-is
+      } else {
+        throw new Error(`Report Generation Failed: ${error.message}`);
+      }
     }
   }
 
@@ -506,9 +523,19 @@ class PDFReportsService {
                 <span class="payment-value">${metrics.paymentMethods.cash} orders</span>
               </div>
               <div class="payment-item">
-                <span class="payment-label">UPI Payments:</span>
+                <span class="payment-label">Card Payments:</span>
+                <span class="payment-value">${metrics.paymentMethods.card} orders</span>
+              </div>
+              <div class="payment-item">
+                <span class="payment-label">UPI/QR Payments:</span>
                 <span class="payment-value">${metrics.paymentMethods.upi} orders</span>
               </div>
+              ${metrics.paymentMethods.other > 0 ? `
+              <div class="payment-item">
+                <span class="payment-label">Other Payments:</span>
+                <span class="payment-value">${metrics.paymentMethods.other} orders</span>
+              </div>
+              ` : ''}
             </div>
 
             <h2>Top Selling Products</h2>
@@ -644,19 +671,25 @@ class PDFReportsService {
                   <th>Category</th>
                   <th>Price</th>
                   <th>Stock</th>
+                  <th>Track Stock</th>
                   <th>Status</th>
                 </tr>
               </thead>
               <tbody>
-                ${products.map(product => `
+                ${products.map(product => {
+                  const isTracking = product.track_stock !== false;
+                  const stock = product.stock || product.stock_quantity || 0;
+                  const status = !isTracking ? 'Not Tracked' : stock <= 5 ? 'Low Stock' : 'In Stock';
+                  return `
                   <tr>
                     <td>${product.name}</td>
                     <td>${product.category || 'Uncategorized'}</td>
                     <td>${this.formatCurrency(product.price)}</td>
-                    <td>${product.trackStock ? (product.stock || 0) : 'Not Tracked'}</td>
-                    <td>${(product.stock || 0) <= 5 && product.trackStock ? 'Low Stock' : 'In Stock'}</td>
+                    <td>${isTracking ? stock : 'N/A'}</td>
+                    <td>${isTracking ? 'Yes' : 'No'}</td>
+                    <td class="${status === 'Low Stock' ? 'low-stock' : ''}">${status}</td>
                   </tr>
-                `).join('')}
+                `}).join('')}
               </tbody>
             </table>
           </div>
@@ -669,9 +702,12 @@ class PDFReportsService {
   }
 
   generateInventoryReportHTML(storeInfo, products) {
-    const trackedProducts = products.filter(p => p.trackStock);
-    const totalValue = products.reduce((sum, p) => sum + ((p.stock || 0) * (p.price || 0)), 0);
-    const lowStockProducts = trackedProducts.filter(p => (p.stock || 0) <= 5);
+    const trackedProducts = products.filter(p => p.track_stock !== false);
+    const totalValue = products.reduce((sum, p) => {
+      const stock = p.stock || p.stock_quantity || 0;
+      return sum + (stock * (p.price || 0));
+    }, 0);
+    const lowStockProducts = trackedProducts.filter(p => (p.stock || p.stock_quantity || 0) <= 5);
 
     return `
       <!DOCTYPE html>
@@ -716,6 +752,7 @@ class PDFReportsService {
                   <th>Product Name</th>
                   <th>Category</th>
                   <th>Current Stock</th>
+                  <th>Track Stock</th>
                   <th>Unit Price</th>
                   <th>Stock Value</th>
                   <th>Status</th>
@@ -723,15 +760,18 @@ class PDFReportsService {
               </thead>
               <tbody>
                 ${products.map(product => {
-                  const stockValue = (product.stock || 0) * (product.price || 0);
-                  const status = !product.trackStock ? 'Not Tracked' : 
-                                (product.stock || 0) <= 5 ? 'Low Stock' : 'In Stock';
+                  const isTracking = product.track_stock !== false;
+                  const stock = product.stock || product.stock_quantity || 0;
+                  const stockValue = stock * (product.price || 0);
+                  const status = !isTracking ? 'Not Tracked' : 
+                                stock <= 5 ? 'Low Stock' : 'In Stock';
                   
                   return `
                     <tr>
                       <td>${product.name}</td>
                       <td>${product.category || 'Uncategorized'}</td>
-                      <td>${product.trackStock ? (product.stock || 0) : 'N/A'}</td>
+                      <td>${isTracking ? stock : 'N/A'}</td>
+                      <td>${isTracking ? 'Yes' : 'No'}</td>
                       <td>${this.formatCurrency(product.price)}</td>
                       <td>${this.formatCurrency(stockValue)}</td>
                       <td class="${status === 'Low Stock' ? 'low-stock' : ''}">${status}</td>

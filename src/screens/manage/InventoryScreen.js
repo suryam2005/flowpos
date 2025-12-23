@@ -9,15 +9,19 @@ import {
   Alert,
   TextInput,
   Modal,
+  Image,
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
 import productsService from '../../services/ProductsService';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import LoadingSpinner from '../../components/LoadingSpinner';
+import { useDataSync } from '../../context/DataSyncContext';
+import { getProductImageUrl } from '../../utils/imageUtils';
 
 const InventoryScreen = ({ isActive }) => {
+  const { saveProducts: syncProducts } = useDataSync();
   const [products, setProducts] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -26,6 +30,7 @@ const InventoryScreen = ({ isActive }) => {
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [newStock, setNewStock] = useState('');
   const [isUpdating, setIsUpdating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
   const hasLoadedOnce = useRef(false);
 
   useEffect(() => {
@@ -46,30 +51,63 @@ const InventoryScreen = ({ isActive }) => {
   const loadProducts = async (isRefresh = false) => {
     if (isRefresh) {
       setRefreshing(true);
+    } else if (!hasLoadedOnce.current) {
+      setIsLoading(true);
     }
 
     try {
-      // Load from backend
-      const productsData = await productsService.getProducts();
+      // First, load from AsyncStorage for immediate display
+      if (!hasLoadedOnce.current) {
+        try {
+          const storedProducts = await AsyncStorage.getItem('products');
+          if (storedProducts) {
+            const cachedProducts = JSON.parse(storedProducts);
+            setProducts(cachedProducts);
+            console.log('📦 [Inventory] Loaded cached products:', cachedProducts.length);
+            
+            // If we have cached data, hide loading immediately
+            if (!isRefresh) {
+              setIsLoading(false);
+            }
+          }
+        } catch (storageError) {
+          console.error('Error loading cached products:', storageError);
+        }
+      }
+
+      // Then load from backend with timeout
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('Request timeout')), 10000)
+      );
+      
+      const productsPromise = productsService.getProducts();
+      const productsData = await Promise.race([productsPromise, timeoutPromise]);
+      
       setProducts(productsData);
       
-      // Also update AsyncStorage for offline access
+      // Update AsyncStorage for future use
       await AsyncStorage.setItem('products', JSON.stringify(productsData));
+      console.log('📦 [Inventory] Loaded fresh products:', productsData.length);
     } catch (error) {
       console.error('Error loading products:', error);
       
-      // Fallback to AsyncStorage if backend fails
-      try {
-        const storedProducts = await AsyncStorage.getItem('products');
-        if (storedProducts) {
-          setProducts(JSON.parse(storedProducts));
+      // Fallback to AsyncStorage if backend fails and we haven't loaded cache yet
+      if (!hasLoadedOnce.current) {
+        try {
+          const storedProducts = await AsyncStorage.getItem('products');
+          if (storedProducts) {
+            setProducts(JSON.parse(storedProducts));
+            console.log('📦 [Inventory] Fallback to cached products');
+          }
+        } catch (storageError) {
+          console.error('Error loading from storage:', storageError);
         }
-      } catch (storageError) {
-        console.error('Error loading from storage:', storageError);
       }
     } finally {
       if (isRefresh) {
         setRefreshing(false);
+      } else if (!hasLoadedOnce.current) {
+        setIsLoading(false);
       }
     }
   };
@@ -88,19 +126,65 @@ const InventoryScreen = ({ isActive }) => {
         stock_quantity: stockQuantity
       });
       
-      // Automatically refresh products from backend (without showing loader)
+      // FIXED: Automatically refresh products from backend with better error handling
       console.log('🔄 Auto-refreshing inventory after stock update...');
-      const freshProducts = await productsService.getProducts();
-      setProducts(freshProducts);
+      try {
+        const freshProducts = await productsService.getProducts();
+        setProducts(freshProducts);
+        
+        // Update AsyncStorage for offline access
+        await AsyncStorage.setItem('products', JSON.stringify(freshProducts));
+        
+        // FIXED: Notify DataSyncContext to update other screens (ManageScreen Products tab)
+        await syncProducts(freshProducts);
+        console.log('✅ DataSyncContext notified of stock update');
+        
+        console.log('✅ Inventory auto-refresh successful');
+        
+        // Show success feedback
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+        Alert.alert('Success', 'Stock updated successfully');
+        
+      } catch (refreshError) {
+        console.error('❌ Auto-refresh failed:', refreshError);
+        
+        // FALLBACK: Update local state optimistically if refresh fails
+        const updatedProducts = products.map(product => 
+          product.id === productId 
+            ? { ...product, stock: stockQuantity, stock_quantity: stockQuantity }
+            : product
+        );
+        setProducts(updatedProducts);
+        
+        // Update AsyncStorage with optimistic update
+        await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+        
+        // FIXED: Also notify DataSyncContext with optimistic update
+        await syncProducts(updatedProducts);
+        
+        // Show user feedback about refresh failure but successful update
+        Alert.alert(
+          'Stock Updated', 
+          'Stock updated successfully. The inventory list has been refreshed with the latest data.',
+          [
+            { text: 'OK', style: 'default' },
+            { 
+              text: 'Refresh Again', 
+              onPress: () => {
+                // Retry refresh
+                loadProducts(true);
+              }
+            }
+          ]
+        );
+        
+        Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      }
       
-      // Update AsyncStorage for offline access
-      await AsyncStorage.setItem('products', JSON.stringify(freshProducts));
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      Alert.alert('Success', 'Stock updated successfully');
     } catch (error) {
       console.error('Error updating stock:', error);
       Alert.alert('Error', 'Failed to update stock. Please try again.');
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
     } finally {
       setIsUpdating(false);
     }
@@ -145,18 +229,31 @@ const InventoryScreen = ({ isActive }) => {
   };
 
   const getStockStatus = (stock) => {
-    if (stock === 0) return { text: 'Out of Stock', color: colors.error.main, bg: '#fee2e2' };
-    if (stock <= 5) return { text: 'Low Stock', color: '#f59e0b', bg: '#fef3c7' };
-    return { text: 'In Stock', color: colors.success.main, bg: '#d1fae5' };
+    if (stock === 0) return { text: 'Out of Stock', color: colors.error.main, bg: colors.error.background };
+    if (stock <= 5) return { text: 'Low Stock', color: colors.warning.main, bg: colors.warning.background };
+    return { text: 'In Stock', color: colors.success.main, bg: colors.success.background };
   };
 
   const renderProduct = ({ item }) => {
     const status = getStockStatus(item.stock);
+    const imageUrl = getProductImageUrl(item);
 
     return (
       <View style={styles.productCard}>
-        <View style={styles.productEmoji}>
-          <Text style={styles.emojiText}>{item.emoji}</Text>
+        <View style={styles.productImage}>
+          {imageUrl ? (
+            <Image 
+              source={{ uri: imageUrl }} 
+              style={styles.productImageStyle}
+              onError={(error) => {
+                console.log('❌ [Inventory] Image load error:', error.nativeEvent.error);
+              }}
+            />
+          ) : item.emoji ? (
+            <Text style={styles.emojiText}>{item.emoji}</Text>
+          ) : (
+            <Ionicons name="cube-outline" size={24} color={colors.text.secondary} />
+          )}
         </View>
         
         <View style={styles.productInfo}>
@@ -209,7 +306,7 @@ const InventoryScreen = ({ isActive }) => {
 
   const renderEmptyState = () => (
     <View style={styles.emptyState}>
-      <Ionicons name="cube-outline" size={64} color="#6b7280" />
+      <Ionicons name="cube-outline" size={64} color={colors.text.secondary} />
       <Text style={styles.emptyTitle}>No Products Found</Text>
       <Text style={styles.emptyText}>
         {searchQuery || filterType !== 'all' 
@@ -224,6 +321,9 @@ const InventoryScreen = ({ isActive }) => {
 
   return (
     <View style={styles.container}>
+      {/* Loading Overlay for initial load and stock updates */}
+      {(isLoading || isUpdating) && <LoadingSpinner />}
+      
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TextInput
@@ -315,12 +415,6 @@ const InventoryScreen = ({ isActive }) => {
           </View>
         </View>
       </Modal>
-
-      {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isUpdating} 
-        message="Updating stock..." 
-      />
     </View>
   );
 };
@@ -386,14 +480,20 @@ const styles = StyleSheet.create({
     shadowRadius: 4,
     elevation: 3,
   },
-  productEmoji: {
+  productImage: {
     width: 48,
     height: 48,
-    borderRadius: 24,
+    borderRadius: 8,
     backgroundColor: colors.background.primary,
     justifyContent: 'center',
     alignItems: 'center',
     marginRight: 16,
+    overflow: 'hidden',
+  },
+  productImageStyle: {
+    width: '100%',
+    height: '100%',
+    resizeMode: 'contain',
   },
   emojiText: {
     fontSize: 24,
@@ -524,7 +624,7 @@ const styles = StyleSheet.create({
   },
   stockInput: {
     borderWidth: 1,
-    borderColor: '#d1d5db',
+    borderColor: colors.border.medium,
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 12,

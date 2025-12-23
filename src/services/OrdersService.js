@@ -373,7 +373,14 @@ class OrdersService {
     try {
       console.log('🌐 [OrdersService] getOrdersFromCloud() called');
       
+      // SECURITY FIX: Get user and store IDs for filtering
+      const { userId, storeId } = await this.getUserAndStoreIds();
+      
       const queryParams = new URLSearchParams();
+      
+      // CRITICAL: Add user/store filtering to prevent data leaks
+      queryParams.append('user_id', userId);
+      if (storeId) queryParams.append('store_id', storeId);
       
       if (options.limit) queryParams.append('limit', options.limit);
       if (options.offset) queryParams.append('offset', options.offset);
@@ -382,7 +389,7 @@ class OrdersService {
       if (options.status) queryParams.append('status', options.status);
 
       const endpoint = `/orders?${queryParams}`;
-      console.log('🌐 [OrdersService] Calling networkService.apiCall():', endpoint);
+      console.log('🌐 [OrdersService] Calling networkService.apiCall() with user filtering:', endpoint);
 
       const response = await networkService.apiCall(endpoint, {
         method: 'GET'

@@ -13,7 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
-import LoadingOverlay from '../../components/LoadingOverlay';
+import LoadingSpinner from '../../components/LoadingSpinner';
 
 const MaterialsScreen = () => {
   const [materials, setMaterials] = useState([]);
@@ -288,10 +288,7 @@ const MaterialsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <LoadingOverlay 
-        visible={loading} 
-        message={modalType === 'material' ? 'Adding material...' : 'Adding supplier...'} 
-      />
+      {loading && <LoadingSpinner />}
       {/* Tab Bar */}
       <View style={styles.tabBar}>
         {renderTabButton('materials', 'Materials')}

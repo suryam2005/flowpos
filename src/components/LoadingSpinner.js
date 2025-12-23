@@ -1,140 +1,46 @@
-import React, { useEffect, useRef } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  Animated,
-  Dimensions,
-} from 'react-native';
-import { typography, createTextStyle, spacing } from '../utils/typography';
+import React from 'react';
+import { View, ActivityIndicator, Modal } from 'react-native';
 import { colors } from '../styles/colors';
 
-const { width } = Dimensions.get('window');
-
-const LoadingSpinner = ({ 
-  visible = true, 
-  text = 'Loading...', 
-  size = 'medium',
-  overlay = false,
-  color = colors.primary.main 
-}) => {
-  const spinValue = useRef(new Animated.Value(0)).current;
-
-  useEffect(() => {
-    if (visible) {
-      // Simple continuous spin animation for spinner only
-      const spinAnimation = Animated.loop(
-        Animated.timing(spinValue, {
-          toValue: 1,
-          duration: 1000,
-          useNativeDriver: true,
-        })
-      );
-      spinAnimation.start();
-
-      return () => spinAnimation.stop();
-    }
-  }, [visible]);
-
-  const spin = spinValue.interpolate({
-    inputRange: [0, 1],
-    outputRange: ['0deg', '360deg'],
-  });
-
-  const getSpinnerSize = () => {
-    switch (size) {
-      case 'small': return 20;
-      case 'large': return 40;
-      default: return 30;
-    }
-  };
-
-  const getContainerStyle = () => {
-    if (overlay) {
-      return [styles.overlayContainer, { opacity: 1 }];
-    }
-    return [styles.inlineContainer, { opacity: 1 }];
-  };
-
+/**
+ * Enhanced loading overlay with Modal wrapper
+ * - Uses Modal to ensure it's ALWAYS on top of everything including other modals
+ * - Larger spinner for better visibility
+ * - Full background blur for complete focus
+ * - Prevents all user interaction
+ */
+const LoadingSpinner = ({ visible = true }) => {
   if (!visible) return null;
 
   return (
-    <View style={getContainerStyle()}>
-      <View style={styles.content}>
-        <Animated.View
-          style={[
-            styles.spinner,
-            {
-              width: getSpinnerSize(),
-              height: getSpinnerSize(),
-              borderColor: `${color}20`,
-              borderTopColor: color,
-              transform: [{ rotate: spin }],
-            },
-          ]}
-        />
-        {text && (
-          <Text style={[styles.loadingText, { color }]}>
-            {text}
-          </Text>
-        )}
+    <Modal
+      transparent={true}
+      animationType="fade"
+      visible={visible}
+      statusBarTranslucent={true}
+      onRequestClose={() => {}} // Prevent closing
+    >
+      <View 
+        style={{
+          flex: 1,
+          backgroundColor: 'rgba(255, 255, 255, 0.95)', // Stronger blur effect
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <View style={{
+          backgroundColor: 'rgba(59, 130, 246, 0.1)', // Light blue background
+          borderRadius: 16,
+          padding: 24,
+        }}>
+          <ActivityIndicator 
+            size={48} // Custom larger size
+            color={colors.primary.main}
+          />
+        </View>
       </View>
-    </View>
+    </Modal>
   );
 };
-
-// Page Loading Component for full screen loading
-export const PageLoader = ({ visible, text = 'Loading...' }) => (
-  <LoadingSpinner
-    visible={visible}
-    text={text}
-    size="large"
-    overlay={true}
-    color={colors.primary.main}
-  />
-);
-
-// Inline Loading Component for sections
-export const InlineLoader = ({ visible, text, size = 'small', color }) => (
-  <LoadingSpinner
-    visible={visible}
-    text={text}
-    size={size}
-    overlay={false}
-    color={color}
-  />
-);
-
-const styles = StyleSheet.create({
-  overlayContainer: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    backgroundColor: 'rgba(248, 250, 252, 0.95)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    zIndex: 1000,
-  },
-  inlineContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingVertical: spacing.md,
-  },
-  content: {
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  spinner: {
-    borderWidth: 3,
-    borderRadius: 50,
-    marginBottom: spacing.sm,
-  },
-  loadingText: {
-    ...createTextStyle('body2', colors.text.secondary),
-    textAlign: 'center',
-  },
-});
 
 export default LoadingSpinner;
