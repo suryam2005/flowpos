@@ -3,6 +3,18 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getItemAsync, setItemAsync, deleteItemAsync } from '../utils/secureStorage';
 import { AppState } from 'react-native';
 import tokenManager from '../services/TokenManager';
+import { 
+  triggerSubscriptionFetchAfterLogin, 
+  clearSubscriptionCacheOnLogout 
+} from './SubscriptionContext';
+import {
+  triggerAppSettingsFetchAfterLogin,
+  clearAppSettingsCacheOnLogout
+} from './AppSettingsContext';
+import {
+  triggerStoreSettingsFetchAfterLogin,
+  clearStoreSettingsCacheOnLogout
+} from './StoreSettingsContext';
 
 const AuthContext = createContext();
 
@@ -179,6 +191,21 @@ export const AuthProvider = ({ children }) => {
       setUser(response.user);
       setIsAuthenticated(true);
       setPinSetupCompleted(true);
+      
+      // Trigger subscription fetch after successful password setup (non-blocking)
+      // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
+      console.log('📦 Triggering subscription fetch after password setup (non-blocking)...');
+      triggerSubscriptionFetchAfterLogin();
+      
+      // Trigger app settings fetch after successful password setup (non-blocking)
+      // This includes one-time migration check for existing users
+      console.log('⚙️ Triggering app settings fetch after password setup (non-blocking)...');
+      triggerAppSettingsFetchAfterLogin();
+      
+      // Trigger store settings fetch after successful password setup (non-blocking)
+      // This includes one-time migration check for existing users
+      console.log('🏪 Triggering store settings fetch after password setup (non-blocking)...');
+      triggerStoreSettingsFetchAfterLogin();
     }
 
     return response;
@@ -187,25 +214,47 @@ export const AuthProvider = ({ children }) => {
   const login = async (loginData) => {
     console.log('🔐 Starting login process...');
     
+    // Add build information for APK tracking
+    const enhancedLoginData = {
+      ...loginData,
+      appVersion: '1.0.0', // Should come from app.json or Constants
+      buildType: __DEV__ ? 'development' : 'production'
+    };
+    
     const response = await apiCall('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(loginData),
+      body: JSON.stringify(enhancedLoginData),
     });
 
     console.log('✅ Login API successful, storing data...');
 
-    // Store tokens and user data
+    // Store tokens and user data with enhanced security for APK
     await AsyncStorage.setItem('accessToken', response.access_token);
     await AsyncStorage.setItem('refreshToken', response.refresh_token);
     await AsyncStorage.setItem('authToken', response.access_token); // For backward compatibility
     await AsyncStorage.setItem('userData', JSON.stringify(response.user));
+    
+    // Store session information for APK builds
+    if (response.session) {
+      await AsyncStorage.setItem('sessionId', response.session.sessionId);
+      await AsyncStorage.setItem('deviceName', response.session.deviceName);
+    }
     
     // Store user_id and store_id for orders system
     await AsyncStorage.setItem('userId', response.user.id);
     if (response.store) {
       await AsyncStorage.setItem('storeId', response.store.id);
       await AsyncStorage.setItem('storeData', JSON.stringify(response.store));
-      console.log('🏪 Store data stored:', response.store.name);
+      console.log('🏪 Store data stored:', response.store.name || response.store.store_name);
+      
+      // CRITICAL: Set onboarding flags for returning users who have store data
+      // This ensures they don't get redirected to store setup on login
+      await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+      await AsyncStorage.setItem('storeSetupCompleted', 'true');
+      await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+      // Mark tour as seen for returning users - they don't need the tour
+      await AsyncStorage.setItem('hasSeenAppTour', 'true');
+      console.log('✅ Onboarding flags set for returning user with store');
     } else {
       console.log('ℹ️ No store found for user - will use user_id only');
     }
@@ -219,6 +268,21 @@ export const AuthProvider = ({ children }) => {
     setUser(response.user);
     setIsAuthenticated(true);
     setPinSetupCompleted(true);
+
+    // Trigger subscription fetch after successful login (non-blocking)
+    // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
+    console.log('📦 Triggering subscription fetch (non-blocking)...');
+    triggerSubscriptionFetchAfterLogin();
+    
+    // Trigger app settings fetch after successful login (non-blocking)
+    // This includes one-time migration check for existing users
+    console.log('⚙️ Triggering app settings fetch (non-blocking)...');
+    triggerAppSettingsFetchAfterLogin();
+    
+    // Trigger store settings fetch after successful login (non-blocking)
+    // This includes one-time migration check for existing users
+    console.log('🏪 Triggering store settings fetch (non-blocking)...');
+    triggerStoreSettingsFetchAfterLogin();
 
     console.log('🎉 Login complete!');
 
@@ -259,7 +323,15 @@ export const AuthProvider = ({ children }) => {
       if (response.store) {
         await AsyncStorage.setItem('storeId', response.store.id);
         await AsyncStorage.setItem('storeData', JSON.stringify(response.store));
-        console.log('🏪 Store data stored after password reset:', response.store.name);
+        console.log('🏪 Store data stored after password reset:', response.store.name || response.store.store_name);
+        
+        // CRITICAL: Set onboarding flags for returning users who have store data
+        await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+        await AsyncStorage.setItem('storeSetupCompleted', 'true');
+        await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+        // Mark tour as seen for returning users - they don't need the tour
+        await AsyncStorage.setItem('hasSeenAppTour', 'true');
+        console.log('✅ Onboarding flags set for returning user after password reset');
       } else {
         console.log('ℹ️ No store found after password reset - will use user_id only');
       }
@@ -268,6 +340,21 @@ export const AuthProvider = ({ children }) => {
       setUser(response.user);
       setIsAuthenticated(true);
       setPinSetupCompleted(true);
+      
+      // Trigger subscription fetch after password reset (non-blocking)
+      // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
+      console.log('📦 Triggering subscription fetch after password reset (non-blocking)...');
+      triggerSubscriptionFetchAfterLogin();
+      
+      // Trigger app settings fetch after password reset (non-blocking)
+      // This includes one-time migration check for existing users
+      console.log('⚙️ Triggering app settings fetch after password reset (non-blocking)...');
+      triggerAppSettingsFetchAfterLogin();
+      
+      // Trigger store settings fetch after password reset (non-blocking)
+      // This includes one-time migration check for existing users
+      console.log('🏪 Triggering store settings fetch after password reset (non-blocking)...');
+      triggerStoreSettingsFetchAfterLogin();
     }
 
     return response;
@@ -293,6 +380,18 @@ export const AuthProvider = ({ children }) => {
       if (response.success) {
         console.log('🗑️ Account deleted successfully, clearing all local data...');
         
+        // Clear subscription cache first (Requirements 7.1, 7.2)
+        console.log('🧹 Clearing subscription cache after account deletion...');
+        await clearSubscriptionCacheOnLogout();
+        
+        // Clear app settings cache (Requirements 7.1, 7.2 - App Settings Persistence)
+        console.log('🧹 Clearing app settings cache after account deletion...');
+        await clearAppSettingsCacheOnLogout();
+        
+        // Clear store settings cache (Store Settings Caching spec - Task 1)
+        console.log('🧹 Clearing store settings cache after account deletion...');
+        await clearStoreSettingsCacheOnLogout();
+        
         // Clear all AsyncStorage data
         await AsyncStorage.clear();
         
@@ -301,14 +400,6 @@ export const AuthProvider = ({ children }) => {
         setUser(null);
         setIsAuthenticated(false);
         setPinSetupCompleted(false);
-        
-        // Clear subscription cache
-        try {
-          const { clearSubscriptionCache } = require('../hooks/useSubscription');
-          clearSubscriptionCache();
-        } catch (error) {
-          console.log('Could not clear subscription cache:', error);
-        }
         
         console.log('✅ All local data cleared after account deletion');
         
@@ -506,6 +597,21 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
+      // Clear subscription cache first (Requirements 7.1, 7.2)
+      // This clears both in-memory state and AsyncStorage
+      console.log('🧹 Clearing subscription cache on logout...');
+      await clearSubscriptionCacheOnLogout();
+      
+      // Clear app settings cache (Requirements 7.1, 7.2 - App Settings Persistence)
+      // This clears both in-memory state and AsyncStorage, but NOT database values
+      console.log('🧹 Clearing app settings cache on logout...');
+      await clearAppSettingsCacheOnLogout();
+      
+      // Clear store settings cache (Store Settings Caching spec - Task 1)
+      // This clears both in-memory state and AsyncStorage, but NOT database values
+      console.log('🧹 Clearing store settings cache on logout...');
+      await clearStoreSettingsCacheOnLogout();
+      
       // Clear all stored data comprehensively (but preserve onboarding status)
       await AsyncStorage.multiRemove([
         'accessToken', 
@@ -539,13 +645,8 @@ export const AuthProvider = ({ children }) => {
       setIsAuthenticated(false);
       setPinSetupCompleted(false);
       
-      // Clear subscription cache to prevent stale data
-      try {
-        const { clearSubscriptionCache } = require('../hooks/useSubscription');
-        clearSubscriptionCache();
-      } catch (error) {
-        console.log('Could not clear subscription cache:', error);
-      }
+      // Note: Old subscription cache clearing via useSubscription hook is now replaced
+      // by clearSubscriptionCacheOnLogout() above which uses SubscriptionContext
       
       console.log('✅ Complete logout - all data cleared');
     }
@@ -619,6 +720,7 @@ export const AuthProvider = ({ children }) => {
     updateProfile,
     refreshUserData,
     getUserSubscriptionPlan,
+    updateUserData: setUser, // Direct setter for user data updates
     
     // Legacy Methods
     authenticate,

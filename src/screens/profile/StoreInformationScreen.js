@@ -14,13 +14,13 @@ import { Ionicons } from '@expo/vector-icons';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import ResponsiveText from '../../components/ResponsiveText';
 import { getDeviceInfo } from '../../utils/deviceUtils';
-import { useAuth } from '../../context/AuthContext';
+import { useStoreSettings } from '../../context/StoreSettingsContext';
 import { colors } from '../../styles/colors';
 import * as Sharing from 'expo-sharing';
 // Removed API import - now frontend-only
 
 const StoreInformationScreen = ({ navigation }) => {
-  const { user, getStore, updateStore } = useAuth();
+  const { storeSettings, getStoreProfile, updateStoreSettings } = useStoreSettings();
   const { isTablet } = getDeviceInfo();
   
   const [isLoading, setIsLoading] = useState(true);
@@ -37,6 +37,7 @@ const StoreInformationScreen = ({ navigation }) => {
     gst_number: ''
   });
   const [originalData, setOriginalData] = useState({});
+  const [validationErrors, setValidationErrors] = useState({});
 
   useEffect(() => {
     loadStoreData();
@@ -46,25 +47,28 @@ const StoreInformationScreen = ({ navigation }) => {
     try {
       setIsLoading(true);
       
-      console.log('🔄 Loading store data from backend...');
+      console.log('🔄 Loading store data from StoreSettingsContext...');
       
-      const storeInfo = await getStore();
+      // Get store info from StoreSettingsContext (single source of truth)
+      const storeProfile = getStoreProfile();
       
-      if (storeInfo) {
-        console.log('✅ Store data found, updating form...');
+      if (storeProfile && storeProfile.store_name) {
+        console.log('✅ Store data found in context, updating form...');
         const loadedData = {
-          store_name: storeInfo.store_name || '',
-          store_address: storeInfo.store_address || '',
-          store_phone: storeInfo.store_phone || '',
-          store_email: storeInfo.store_email || '',
-          store_website: storeInfo.store_website || '',
-          business_type: storeInfo.business_type || '',
-          gst_number: storeInfo.gst_number || ''
+          store_name: storeProfile.store_name || '',
+          store_address: storeProfile.store_address || '',
+          store_phone: storeSettings?.store_phone || '', // phone/email from storeSettings if available
+          store_email: storeSettings?.store_email || '',
+          store_website: storeProfile.store_website || '',
+          business_type: storeProfile.business_type || '',
+          gst_number: storeProfile.gst_number || ''
         };
         setStoreData(loadedData);
         setOriginalData(loadedData); // Save original data for cancel functionality
       } else {
-        console.log('⚠️ No store data found');
+        console.log('⚠️ No store data found in context - store may not be set up yet');
+        // No fallback to getStore() - StoreSettingsContext is the single source of truth
+        // If context is empty, the store hasn't been set up yet
       }
     } catch (error) {
       console.error('❌ Error loading store data:', error);
@@ -80,6 +84,7 @@ const StoreInformationScreen = ({ navigation }) => {
 
   const handleCancel = () => {
     setStoreData(originalData); // Restore original data
+    setValidationErrors({}); // Clear validation errors
     setIsEditing(false);
   };
 
@@ -138,6 +143,19 @@ Powered by FlowPOS`;
   };
 
   const handleSave = async () => {
+    // Comprehensive validation before save
+    const allErrors = {};
+    Object.keys(storeData).forEach(field => {
+      const fieldErrors = validateField(field, storeData[field]);
+      Object.assign(allErrors, fieldErrors);
+    });
+    
+    if (Object.keys(allErrors).length > 0) {
+      setValidationErrors(allErrors);
+      Alert.alert('Validation Error', 'Please fix the errors before saving');
+      return;
+    }
+
     if (!storeData.store_name.trim()) {
       Alert.alert('Validation Error', 'Store name is required');
       return;
@@ -146,16 +164,23 @@ Powered by FlowPOS`;
     try {
       setIsSaving(true);
       
-      console.log('💾 Saving store data to backend:', storeData);
+      console.log('💾 Saving store data via StoreSettingsContext:', storeData);
       
-      const updatedStore = await updateStore(storeData);
+      // Use StoreSettingsContext for write-through update (migrated from updateStore)
+      const result = await updateStoreSettings(storeData);
       
-      if (updatedStore) {
+      if (result.success) {
         setOriginalData(storeData); // Update original data
+        setValidationErrors({}); // Clear validation errors
         setIsEditing(false);
         Alert.alert('Success', 'Store information saved successfully');
       } else {
-        Alert.alert('Error', 'Failed to save store information');
+        // Handle specific errors from StoreSettingsContext
+        if (result.error === 'NO_NETWORK') {
+          Alert.alert('No Network', result.message || 'Network connection required to save settings.');
+        } else {
+          Alert.alert('Error', result.message || 'Failed to save store information');
+        }
       }
     } catch (error) {
       console.error('Error saving store data:', error);
@@ -165,10 +190,97 @@ Powered by FlowPOS`;
     }
   };
 
+  const validateField = (field, value) => {
+    const errors = {};
+    
+    switch (field) {
+      case 'store_name':
+        if (!value.trim()) {
+          errors.store_name = 'Store name is required';
+        } else if (value.trim().length < 2) {
+          errors.store_name = 'Store name must be at least 2 characters';
+        } else if (value.trim().length > 50) {
+          errors.store_name = 'Store name must be less than 50 characters';
+        }
+        break;
+        
+      case 'store_phone':
+        if (value.trim()) {
+          const phoneRegex = /^[6-9][0-9]{9}$/;
+          if (!phoneRegex.test(value.replace(/\s/g, ''))) {
+            errors.store_phone = 'Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9';
+          }
+        }
+        break;
+        
+      case 'store_email':
+        if (value.trim()) {
+          const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+          if (!emailRegex.test(value.trim())) {
+            errors.store_email = 'Enter a valid email address';
+          }
+        }
+        break;
+        
+      case 'store_website':
+        if (value.trim()) {
+          const urlRegex = /^https?:\/\/.+\..+/;
+          if (!urlRegex.test(value.trim())) {
+            errors.store_website = 'Enter a valid website URL (e.g., https://example.com)';
+          }
+        }
+        break;
+        
+      case 'gst_number':
+        if (value.trim()) {
+          const gstRegex = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z]{1}[1-9A-Z]{1}Z[0-9A-Z]{1}$/;
+          if (!gstRegex.test(value.trim().toUpperCase())) {
+            errors.gst_number = 'Enter a valid GST number (15 characters)';
+          }
+        }
+        break;
+        
+      case 'store_address':
+        if (value.trim() && value.trim().length > 300) {
+          errors.store_address = 'Address must be less than 300 characters';
+        }
+        break;
+        
+      case 'business_type':
+        if (value.trim() && value.trim().length > 50) {
+          errors.business_type = 'Business type must be less than 50 characters';
+        }
+        break;
+    }
+    
+    return errors;
+  };
+
   const updateField = (field, value) => {
+    // Handle phone number formatting
+    if (field === 'store_phone') {
+      // Only allow digits and limit to 10 characters
+      const cleanValue = value.replace(/\D/g, '').slice(0, 10);
+      value = cleanValue;
+    }
+    
+    // Handle GST number formatting
+    if (field === 'gst_number') {
+      value = value.toUpperCase().slice(0, 15);
+    }
+    
     setStoreData(prev => ({
       ...prev,
       [field]: value
+    }));
+    
+    // Real-time validation
+    const fieldErrors = validateField(field, value);
+    setValidationErrors(prev => ({
+      ...prev,
+      ...fieldErrors,
+      // Clear error if field is now valid
+      ...(Object.keys(fieldErrors).length === 0 && { [field]: undefined })
     }));
   };
 
@@ -178,20 +290,43 @@ Powered by FlowPOS`;
         {label}
       </ResponsiveText>
       {isEditing ? (
-        <TextInput
-          style={[
-            styles.input,
-            multiline && styles.multilineInput,
-            isTablet && styles.tabletInput
-          ]}
-          value={storeData[field]}
-          onChangeText={(value) => updateField(field, value)}
-          placeholder={placeholder}
-          placeholderTextColor={colors.text.disabled}
-          multiline={multiline}
-          numberOfLines={multiline ? 3 : 1}
-          keyboardType={keyboardType}
-        />
+        <View>
+          <TextInput
+            style={[
+              styles.input,
+              multiline && styles.multilineInput,
+              isTablet && styles.tabletInput,
+              validationErrors[field] && styles.inputError
+            ]}
+            value={storeData[field]}
+            onChangeText={(value) => updateField(field, value)}
+            placeholder={placeholder}
+            placeholderTextColor={colors.text.disabled}
+            multiline={multiline}
+            numberOfLines={multiline ? 3 : 1}
+            keyboardType={keyboardType}
+            maxLength={
+              field === 'store_name' ? 50 :
+              field === 'store_phone' ? 10 :
+              field === 'gst_number' ? 15 :
+              field === 'business_type' ? 50 :
+              field === 'store_address' ? 300 :
+              undefined
+            }
+          />
+          {validationErrors[field] && (
+            <Text style={styles.errorText}>{validationErrors[field]}</Text>
+          )}
+          {(field === 'store_name' || field === 'business_type' || field === 'store_address') && (
+            <Text style={styles.characterCount}>
+              {storeData[field].length}/{
+                field === 'store_name' ? 50 :
+                field === 'business_type' ? 50 :
+                field === 'store_address' ? 300 : 0
+              }
+            </Text>
+          )}
+        </View>
       ) : (
         <View style={styles.valueContainer}>
           <ResponsiveText variant="body" style={styles.value}>
@@ -316,7 +451,7 @@ Powered by FlowPOS`;
             </ResponsiveText>
             
             {renderField('Address', 'store_address', 'Enter your store address', true)}
-            {renderField('Phone Number', 'store_phone', '+91 9876543210', false, 'phone-pad')}
+            {renderField('Phone Number', 'store_phone', '9876543210', false, 'phone-pad')}
             {renderField('Email', 'store_email', 'store@example.com', false, 'email-address')}
             {renderField('Website', 'store_website', 'https://yourstore.com')}
           </View>
@@ -512,6 +647,21 @@ const styles = StyleSheet.create({
 
   bottomSpacing: {
     height: 40,
+  },
+  inputError: {
+    borderColor: colors.error.main,
+    borderWidth: 2,
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.error.main,
+    marginTop: 4,
+  },
+  characterCount: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    textAlign: 'right',
+    marginTop: 4,
   },
 });
 

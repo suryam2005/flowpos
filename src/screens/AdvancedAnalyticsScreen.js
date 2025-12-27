@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -16,6 +16,8 @@ import { Ionicons } from '@expo/vector-icons';
 import ordersService from '../services/OrdersService';
 import productsService from '../services/ProductsService';
 import { safeGoBack } from '../utils/navigationUtils';
+import { useStoreSettings } from '../context/StoreSettingsContext';
+import { useAuth } from '../context/AuthContext';
 
 import { colors } from '../styles/colors';
 import { analyticsStyles, spacing } from '../styles/analyticsStyles';
@@ -28,6 +30,10 @@ import { BarChart, LineChart, HorizontalBarChart, DonutChart, PieChart, Progress
 
 
 const AdvancedAnalyticsScreen = ({ navigation }) => {
+  // Get store settings from context
+  const { getStoreProfile } = useStoreSettings();
+  const { user } = useAuth();
+  
   // Tab state for 4-tab structure
   const [activeTab, setActiveTab] = useState('revenue'); // revenue, orders, products, insights
   
@@ -98,8 +104,14 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   
   // App tour guide
   const { showTour, completeTour } = useAppTour('AdvancedAnalytics');
+  
+  // Tour refs for dynamic positioning
+  const headerRef = useRef(null);
+  const filterSectionRef = useRef(null);
+  const summaryCardsRef = useRef(null);
 
   useEffect(() => {
+    // Load analytics data when period changes
     loadAdvancedAnalytics();
   }, [selectedPeriod]);
 
@@ -768,8 +780,8 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
 
   const generateDailyData = () => {
     if (!orders || orders.length === 0) {
-      // Generate sample data with different values for each day
-      const sampleData = [];
+      // Return empty data when no orders exist - no dummy data
+      const emptyData = [];
       const now = new Date();
       
       for (let i = 6; i >= 0; i--) {
@@ -777,21 +789,16 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         date.setDate(now.getDate() - i);
         const dayName = date.toLocaleDateString('en', { weekday: 'short', day: 'numeric' });
         
-        // Generate different sample values for each day
-        const baseRevenue = 1000 + (i * 200) + Math.floor(Math.random() * 500);
-        const baseOrders = 5 + i + Math.floor(Math.random() * 8);
-        const baseItems = baseOrders * (2 + Math.floor(Math.random() * 3));
-        
-        sampleData.push({
+        emptyData.push({
           date: date.toISOString().split('T')[0],
-          revenue: baseRevenue,
-          orders: baseOrders,
-          items: baseItems,
+          revenue: 0,
+          orders: 0,
+          items: 0,
           label: dayName
         });
       }
       
-      return sampleData;
+      return emptyData;
     }
     
     const dailyMap = {};
@@ -833,26 +840,22 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
 
   const generateWeeklyData = () => {
     if (!orders || orders.length === 0) {
-      // Generate sample data with different values for each week
-      const sampleData = [];
+      // Return empty data when no orders exist - no dummy data
+      const emptyData = [];
       
       for (let i = 7; i >= 0; i--) {
         const weekNum = 8 - i;
-        // Generate different sample values for each week
-        const baseRevenue = 3000 + (weekNum * 500) + Math.floor(Math.random() * 1000);
-        const baseOrders = 15 + (weekNum * 3) + Math.floor(Math.random() * 10);
-        const baseItems = baseOrders * (3 + Math.floor(Math.random() * 4));
         
-        sampleData.push({
+        emptyData.push({
           week: `W${weekNum}`,
-          revenue: baseRevenue,
-          orders: baseOrders,
-          items: baseItems,
+          revenue: 0,
+          orders: 0,
+          items: 0,
           label: `Week ${weekNum}`
         });
       }
       
-      return sampleData;
+      return emptyData;
     }
     
     const weeklyMap = {};
@@ -893,8 +896,8 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
 
   const generateMonthlyData = () => {
     if (!orders || orders.length === 0) {
-      // Generate sample data with different values for each month
-      const sampleData = [];
+      // Return empty data when no orders exist - no dummy data
+      const emptyData = [];
       const now = new Date();
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
       
@@ -903,30 +906,25 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         const monthName = months[date.getMonth()];
         const year = date.getFullYear().toString().slice(-2);
         
-        // Generate different sample values for each month
-        const baseRevenue = 8000 + (i * 1000) + Math.floor(Math.random() * 3000);
-        const baseOrders = 40 + (i * 8) + Math.floor(Math.random() * 20);
-        const baseItems = baseOrders * (4 + Math.floor(Math.random() * 6));
-        
-        sampleData.push({
+        emptyData.push({
           month: monthName,
-          revenue: baseRevenue,
-          orders: baseOrders,
-          items: baseItems,
+          revenue: 0,
+          orders: 0,
+          items: 0,
           label: `${monthName} '${year}`
         });
       }
       
-      return sampleData;
+      return emptyData;
     }
     
     const monthlyMap = {};
-    const now = new Date();
+    const currentDate = new Date();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     
     // Create last 12 months with meaningful labels
     for (let i = 11; i >= 0; i--) {
-      const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
       const monthName = months[date.getMonth()];
       const year = date.getFullYear().toString().slice(-2);
       
@@ -959,28 +957,23 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
 
   const generateYearlyData = () => {
     if (!orders || orders.length === 0) {
-      // Generate sample data with different values for each year
-      const sampleData = [];
+      // Return empty data when no orders exist - no dummy data
+      const emptyData = [];
       const now = new Date();
       
       for (let i = 4; i >= 0; i--) {
         const year = (now.getFullYear() - i).toString();
         
-        // Generate different sample values for each year
-        const baseRevenue = 50000 + (i * 15000) + Math.floor(Math.random() * 20000);
-        const baseOrders = 200 + (i * 50) + Math.floor(Math.random() * 100);
-        const baseItems = baseOrders * (5 + Math.floor(Math.random() * 8));
-        
-        sampleData.push({
+        emptyData.push({
           year: year,
-          revenue: baseRevenue,
-          orders: baseOrders,
-          items: baseItems,
+          revenue: 0,
+          orders: 0,
+          items: 0,
           label: year
         });
       }
       
-      return sampleData;
+      return emptyData;
     }
     
     const yearlyMap = {};
@@ -1216,8 +1209,8 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   const generateDetailedAnalyticsPDF = async (analyticsData) => {
     const { printToFileAsync } = await import('expo-print');
     
-    // Get store information
-    const storeInfo = await getStoreInfo();
+    // Get store information from context (synchronous now)
+    const storeInfo = getStoreInfo();
     
     // Generate comprehensive HTML
     const htmlContent = generateDetailedAnalyticsHTML(storeInfo, analyticsData);
@@ -1275,20 +1268,21 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     }
   };
 
-  const getStoreInfo = async () => {
+  const getStoreInfo = () => {
     try {
-      const AsyncStorage = (await import('@react-native-async-storage/async-storage')).default;
-      const storeData = await AsyncStorage.getItem('storeInfo');
-      if (storeData) {
-        const store = JSON.parse(storeData);
-        return {
-          name: store.store_name || store.name || 'FlowPOS Store',
-          address: store.store_address || store.address || 'Store Address',
-          phone: store.store_phone || store.phone || '+91 XXXXXXXXXX',
-          email: store.store_email || store.email || '',
-          gstNumber: store.gst_number || store.gstin || ''
-        };
-      }
+      // Get store info from context instead of AsyncStorage
+      const storeProfile = getStoreProfile();
+      // Phone and email come from AuthContext (user-bound)
+      const storePhone = user?.phone || '';
+      const storeEmail = user?.email || '';
+      
+      return {
+        name: storeProfile.store_name || 'FlowPOS Store',
+        address: storeProfile.store_address || 'Store Address',
+        phone: storePhone || '+91 XXXXXXXXXX',
+        email: storeEmail || '',
+        gstNumber: storeProfile.gst_number || ''
+      };
     } catch (error) {
       console.error('Error getting store info:', error);
     }
@@ -2374,7 +2368,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       
       <View style={styles.content}>
         {/* Header */}
-        <View style={styles.header}>
+        <View style={styles.header} ref={headerRef}>
           <View style={styles.headerTop}>
             <TouchableOpacity
               style={styles.backButton}
@@ -2401,7 +2395,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         </View>
 
         {/* Period Selector */}
-        <View style={styles.periodSelector}>
+        <View style={styles.periodSelector} ref={filterSectionRef}>
           {['daily', 'weekly', 'monthly', 'yearly'].map((view) => (
             <TouchableOpacity
               key={view}
@@ -2441,7 +2435,7 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         >
 
         {/* Stats Grid - 4 Cards in 2x2 Layout with consistent spacing */}
-        <View style={styles.statsGrid}>
+        <View style={styles.statsGrid} ref={summaryCardsRef}>
           <StatCard
             title={`${selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Week' : selectedPeriod === 'monthly' ? 'Month' : 'Year'} Revenue`}
             value={`₹${analytics.periodRevenue || 0}`}
@@ -2488,6 +2482,12 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
         visible={showTour}
         onComplete={completeTour}
         currentScreen="AdvancedAnalytics"
+        navigation={navigation}
+        tourRefs={{
+          header: headerRef,
+          filterSection: filterSectionRef,
+          summaryCards: summaryCardsRef,
+        }}
       />
     </SafeAreaView>
   );

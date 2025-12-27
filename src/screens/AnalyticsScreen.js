@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -271,10 +271,20 @@ const AnalyticsScreen = ({ navigation }) => {
   // App tour guide
   const { showTour, completeTour } = useAppTour('Analytics');
   
+  // Tour refs for dynamic positioning
+  const headerRef = useRef(null);
+  const tabBarRef = useRef(null);
+  const metricsSectionRef = useRef(null);
+  
   // No animations needed
 
   useEffect(() => {
-    loadAnalytics();
+    // Initialize feature service and load analytics
+    const init = async () => {
+      await featureService.initialize();
+      loadAnalytics();
+    };
+    init();
   }, []);
 
   // Optimized focus effect - no automatic refresh
@@ -765,21 +775,37 @@ const AnalyticsScreen = ({ navigation }) => {
       
       <View style={analyticsStyles.content}>
         {/* Header */}
-        <View style={analyticsStyles.header}>
+        <View style={analyticsStyles.header} ref={headerRef}>
           <Text style={analyticsStyles.title}>Analytics</Text>
           <TouchableOpacity
-            style={analyticsStyles.button}
+            style={[
+              analyticsStyles.button,
+              !featureService.canUseFeature('advanced_analytics') && { 
+                backgroundColor: colors.gray[100],
+                borderColor: colors.border.medium,
+              }
+            ]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              navigation.navigate('AdvancedAnalytics');
+              if (!featureService.canUseFeature('advanced_analytics')) {
+                featureService.showUpgradePrompt('advanced_analytics');
+              } else {
+                navigation.navigate('AdvancedAnalytics');
+              }
             }}
           >
-            <Text style={analyticsStyles.buttonText}>Advanced</Text>
+            {!featureService.canUseFeature('advanced_analytics') && (
+              <Ionicons name="lock-closed" size={14} color={colors.warning.main} style={{ marginRight: 4 }} />
+            )}
+            <Text style={[
+              analyticsStyles.buttonText,
+              !featureService.canUseFeature('advanced_analytics') && { color: colors.text.tertiary }
+            ]}>Advanced</Text>
           </TouchableOpacity>
         </View>
 
         {/* Tab Navigation */}
-        <View style={analyticsStyles.tabContainer}>
+        <View style={analyticsStyles.tabContainer} ref={tabBarRef}>
           <TouchableOpacity
             style={[
               analyticsStyles.tab,
@@ -836,7 +862,7 @@ const AnalyticsScreen = ({ navigation }) => {
         </View>
 
         {/* Tab Content */}
-        <View style={{ flex: 1 }}>
+        <View style={{ flex: 1 }} ref={metricsSectionRef}>
           {activeTab === 'revenue' && renderRevenueTab()}
           {activeTab === 'orders' && renderOrdersTab()}
           {activeTab === 'products' && renderProductsTab()}
@@ -848,6 +874,12 @@ const AnalyticsScreen = ({ navigation }) => {
         visible={showTour}
         currentScreen="Analytics"
         onComplete={completeTour}
+        navigation={navigation}
+        tourRefs={{
+          header: headerRef,
+          tabBar: tabBarRef,
+          metricsSection: metricsSectionRef,
+        }}
       />
     </SafeAreaView>
   );

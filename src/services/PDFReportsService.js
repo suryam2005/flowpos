@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
+import { getStoreProfileFromCache, getStoreSettingsFromCache } from '../context/StoreSettingsContext';
 
 class PDFReportsService {
   constructor() {
@@ -34,40 +35,40 @@ class PDFReportsService {
   }
 
   // Get store information with validation
+  // NOTE: AsyncStorage fallback removed as part of Task 12 cleanup
+  // StoreSettingsContext is now the ONLY read path for store settings
   async getStoreInfo() {
     try {
-      console.log('📊 [PDF Reports] Getting store information...');
+      console.log('📊 [PDF Reports] Getting store information from StoreSettingsContext...');
       
-      const storeData = await AsyncStorage.getItem('storeInfo');
-      if (storeData) {
-        const store = JSON.parse(storeData);
-        console.log('📊 [PDF Reports] Store data found:', {
-          hasName: !!store.store_name || !!store.name,
-          hasAddress: !!store.store_address || !!store.address,
-          hasPhone: !!store.store_phone || !!store.phone
-        });
-        
-        // Validate required fields
-        const storeInfo = {
-          name: store.store_name || store.name || null,
-          address: store.store_address || store.address || null,
-          phone: store.store_phone || store.phone || null,
-          email: store.store_email || store.email || '',
-          gstNumber: store.gst_number || store.gstin || ''
-        };
-        
-        // Check if essential store data is missing
-        if (!storeInfo.name || !storeInfo.address || !storeInfo.phone) {
-          console.warn('📊 [PDF Reports] Incomplete store data detected');
-          throw new Error('Store information is incomplete. Please complete your store setup in Settings.');
-        }
-        
-        console.log('✅ [PDF Reports] Store information validated successfully');
-        return storeInfo;
-      } else {
-        console.warn('📊 [PDF Reports] No store data found in storage');
-        throw new Error('Store information not found. Please complete your store setup in Settings.');
+      // Read from StoreSettingsContext cache (single source of truth)
+      const storeProfile = getStoreProfileFromCache();
+      const storeSettings = getStoreSettingsFromCache();
+      
+      console.log('📊 [PDF Reports] Store data from context:', {
+        hasName: !!storeProfile.store_name,
+        hasAddress: !!storeProfile.store_address,
+        hasGstNumber: !!storeProfile.gst_number
+      });
+      
+      // Build store info from context cache
+      // NOTE: store_phone and store_email are auth-bound, not in StoreSettingsContext
+      const storeInfo = {
+        name: storeProfile.store_name || null,
+        address: storeProfile.store_address || null,
+        phone: null, // Auth-bound, not available from StoreSettingsContext
+        email: null, // Auth-bound, not available from StoreSettingsContext
+        gstNumber: storeProfile.gst_number || ''
+      };
+      
+      // Check if essential store data is missing
+      if (!storeInfo.name || !storeInfo.address) {
+        console.warn('📊 [PDF Reports] Incomplete store data detected');
+        throw new Error('Store information is incomplete. Please complete your store setup in Settings.');
       }
+      
+      console.log('✅ [PDF Reports] Store information validated successfully');
+      return storeInfo;
     } catch (error) {
       console.error('❌ [PDF Reports] Error getting store info:', error);
       
@@ -145,15 +146,11 @@ class PDFReportsService {
     const totalProducts = products.length;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
 
-    // Calculate by payment method - FIXED: Detect all payment methods
+    // Calculate by payment method - Cash and UPI/QR only (Card removed)
     const paymentMethods = {
       cash: orders.filter(o => {
         const method = (o.paymentMethod || '').toLowerCase();
         return method.includes('cash');
-      }).length,
-      card: orders.filter(o => {
-        const method = (o.paymentMethod || '').toLowerCase();
-        return method.includes('card');
       }).length,
       upi: orders.filter(o => {
         const method = (o.paymentMethod || '').toLowerCase();
@@ -161,7 +158,7 @@ class PDFReportsService {
       }).length,
       other: orders.filter(o => {
         const method = (o.paymentMethod || '').toLowerCase();
-        return !method.includes('cash') && !method.includes('card') && !method.includes('upi') && !method.includes('qr');
+        return !method.includes('cash') && !method.includes('upi') && !method.includes('qr') && method !== '';
       }).length
     };
 
@@ -521,10 +518,6 @@ class PDFReportsService {
               <div class="payment-item">
                 <span class="payment-label">Cash Payments:</span>
                 <span class="payment-value">${metrics.paymentMethods.cash} orders</span>
-              </div>
-              <div class="payment-item">
-                <span class="payment-label">Card Payments:</span>
-                <span class="payment-value">${metrics.paymentMethods.card} orders</span>
               </div>
               <div class="payment-item">
                 <span class="payment-label">UPI/QR Payments:</span>

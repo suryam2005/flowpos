@@ -18,6 +18,9 @@ import Icon from '../components/SVGIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 import { getProductImageUrl } from '../utils/imageUtils';
+import { getAppSettingFromCache } from '../context/AppSettingsContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
+import { useAuth } from '../context/AuthContext';
 
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
@@ -41,6 +44,11 @@ const CartScreen = ({ navigation }) => {
   const { theme } = useTheme();
   const { items, updateQuantity, removeItem, clearCart, getTotal } = useCart();
   const { createOrder, loading: orderLoading } = useOrders();
+  
+  // Use StoreSettingsContext for payment methods and tax settings (migrated from AsyncStorage)
+  const { storeSettings, getPaymentSettings, getTaxSettings, getStoreProfile } = useStoreSettings();
+  const { user } = useAuth();
+  
   const [customerName, setCustomerName] = useState('');
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
@@ -57,12 +65,8 @@ const CartScreen = ({ navigation }) => {
   
   // No animations needed
 
-  useEffect(() => {
-    loadAvailablePaymentMethods();
-    loadCustomerDetailsRequirement();
-  }, []);
-
-  // Reload settings when screen comes into focus to prevent UI flash
+  // Load settings on mount and when screen comes into focus
+  // useFocusEffect runs on mount too, so no need for separate useEffect
   useFocusEffect(
     useCallback(() => {
       loadCustomerDetailsRequirement();
@@ -87,19 +91,42 @@ const CartScreen = ({ navigation }) => {
 
   const loadCustomerDetailsRequirement = async () => {
     try {
+      // Read requireCustomerDetails from AppSettingsContext cache first
+      const cachedSetting = getAppSettingFromCache('requireCustomerDetails');
+      
+      if (cachedSetting !== undefined) {
+        // Use cached value from AppSettingsContext
+        setRequireCustomerDetails(cachedSetting);
+        console.log('🛒 [CartScreen] requireCustomerDetails read from cache:', cachedSetting);
+        return;
+      }
+      
+      // Fallback to AsyncStorage if cache unavailable (backward compatibility)
       const setting = await AsyncStorage.getItem('requireCustomerDetails');
       if (setting !== null) {
         setRequireCustomerDetails(JSON.parse(setting));
+        console.log('🛒 [CartScreen] requireCustomerDetails fallback to AsyncStorage:', JSON.parse(setting));
+      } else {
+        // Default to true if no setting exists (existing behavior)
+        setRequireCustomerDetails(true);
+        console.log('🛒 [CartScreen] requireCustomerDetails using default: true');
       }
     } catch (error) {
       console.error('Error loading customer details requirement:', error);
+      // Keep default value (true) on error to maintain existing behavior
     }
   };
 
   // App tour guide
   const { showTour, completeTour } = useAppTour('Cart');
+  
+  // Tour refs for dynamic positioning
+  const customerSectionRef = useRef(null);
+  const itemsListRef = useRef(null);
+  const paymentSectionRef = useRef(null);
+  const completeButtonRef = useRef(null);
 
-  // Prevent back navigation during order completion
+  // Prevent back navigation only during order completion, not during form filling
   useBackPrevention(completingOrder, {
     message: 'Order is being processed. Please wait for completion to avoid data loss.',
     title: 'Processing Order',
@@ -114,16 +141,11 @@ const CartScreen = ({ navigation }) => {
       // Get payment methods based on subscription plan
       const planMethods = featureService.getAvailablePaymentMethods();
       
-      // Get configured methods from store settings
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      let configuredMethods = ['Cash', 'QR Pay']; // Default (Card payment removed)
+      // Get configured methods from StoreSettingsContext (migrated from AsyncStorage)
+      const paymentSettings = getPaymentSettings();
+      let configuredMethods = paymentSettings.payment_methods || ['Cash', 'QR Pay']; // Default (Card payment removed)
       
-      if (storeInfo) {
-        const parsedStore = JSON.parse(storeInfo);
-        if (parsedStore.paymentMethods && parsedStore.paymentMethods.length > 0) {
-          configuredMethods = parsedStore.paymentMethods;
-        }
-      }
+      console.log('🛒 [CartScreen] Payment methods from context:', configuredMethods);
       
       // Intersection of plan methods and configured methods
       const availableMethods = configuredMethods.filter(method => 
@@ -143,50 +165,68 @@ const CartScreen = ({ navigation }) => {
   const subtotal = getTotal();
   
   // Get GST settings from store setup
-  const [gstSettings, setGstSettings] = useState({ hasGST: false, percentage: 0, number: '' });
+  const [gstSettings, setGstSettings] = useState({ 
+    hasGST: false, 
+    percentage: 0, 
+    number: '',
+    includeTaxInPrice: false 
+  });
   
   useEffect(() => {
-    const loadGSTSettings = async () => {
+    const loadGSTSettings = () => {
       try {
-        // Load store data and tax settings
-        const [storeData, taxSettingsData] = await Promise.all([
-          AsyncStorage.getItem('storeInfo'),
-          AsyncStorage.getItem('taxSettings')
-        ]);
+        // Load tax settings from StoreSettingsContext (migrated from AsyncStorage)
+        const taxSettings = getTaxSettings();
+        const storeProfile = getStoreProfile();
         
-        if (storeData) {
-          const store = JSON.parse(storeData);
-          const taxSettings = taxSettingsData ? JSON.parse(taxSettingsData) : { enableGST: false, gstRate: 18 };
-          
-          // Check if GST is enabled and GST number exists
-          const hasGSTNumber = store.gstin && store.gstin.trim() !== '';
-          const isGSTEnabled = taxSettings.enableGST && hasGSTNumber;
-          const gstPercentage = taxSettings.gstRate || 18;
-          
-          console.log('CartScreen GST Settings:', {
-            hasGSTNumber,
-            isGSTEnabled,
-            gstPercentage,
-            gstNumber: store.gstin,
-            taxSettings,
-            storeData: store
-          });
-          
-          setGstSettings({
-            hasGST: isGSTEnabled,
-            percentage: gstPercentage,
-            number: store.gstin || ''
-          });
-        }
+        // Check if GST is enabled and GST number exists
+        const hasGSTNumber = storeProfile.gst_number && storeProfile.gst_number.trim() !== '';
+        const isGSTEnabled = taxSettings.enableGST && hasGSTNumber;
+        const gstPercentage = taxSettings.gstRate || 18;
+        const includeTaxInPrice = taxSettings.includeTaxInPrice || false;
+        
+        console.log('🛒 [CartScreen] GST Settings from context:', {
+          hasGSTNumber,
+          isGSTEnabled,
+          gstPercentage,
+          includeTaxInPrice,
+          gstNumber: storeProfile.gst_number,
+          taxSettings
+        });
+        
+        setGstSettings({
+          hasGST: isGSTEnabled,
+          percentage: gstPercentage,
+          number: storeProfile.gst_number || '',
+          includeTaxInPrice: includeTaxInPrice
+        });
       } catch (error) {
         console.error('Error loading GST settings:', error);
       }
     };
     loadGSTSettings();
-  }, []);
+  }, [storeSettings, getTaxSettings, getStoreProfile]); // Re-run when storeSettings changes
   
-  const gst = gstSettings.hasGST ? Math.round(subtotal * (gstSettings.percentage / 100)) : 0;
-  const total = subtotal + gst;
+  // Calculate GST based on includeTaxInPrice setting
+  let gst = 0;
+  let displaySubtotal = subtotal;
+  let total = subtotal;
+  
+  if (gstSettings.hasGST) {
+    if (gstSettings.includeTaxInPrice) {
+      // Tax is already included in price - extract it
+      // Formula: basePrice = totalPrice / (1 + taxRate/100)
+      const basePrice = subtotal / (1 + gstSettings.percentage / 100);
+      gst = Math.round(subtotal - basePrice);
+      displaySubtotal = Math.round(basePrice);
+      total = subtotal; // Total stays the same (price already includes tax)
+    } else {
+      // Tax is added on top of price
+      gst = Math.round(subtotal * (gstSettings.percentage / 100));
+      displaySubtotal = subtotal;
+      total = subtotal + gst;
+    }
+  }
 
   const generateOrderNumber = async () => {
     try {
@@ -373,19 +413,21 @@ const CartScreen = ({ navigation }) => {
         return;
       }
 
-      // Load store information for proper invoice data
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
-      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      // Load store information from context for proper invoice data
+      const storeProfile = getStoreProfile();
+      const actualStoreName = storeProfile.store_name || 'FlowPOS Store';
+      // Phone and email come from AuthContext (user-bound)
+      const storePhone = user?.phone || '';
+      const storeEmail = user?.email || '';
 
       // Prepare complete invoice data for WhatsApp service
       const invoiceData = {
         invoiceNumber: orderData.orderNumber || orderData.id,
         orderNumber: orderData.orderNumber || orderData.id,
         storeName: actualStoreName,
-        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
-        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
-        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
+        storeAddress: storeProfile.store_address || '',
+        storePhone: storePhone,
+        storeEmail: storeEmail,
         customerName: orderData.customerName || 'Walk-in Customer',
         phoneNumber: orderData.phoneNumber,
         date: new Date(orderData.timestamp).toLocaleDateString('en-IN'),
@@ -552,10 +594,11 @@ const CartScreen = ({ navigation }) => {
           tax: 0,
           notes: ''
         })),
-        subtotal,
+        subtotal: displaySubtotal,
         tax: gst,
         discount: 0,
         total,
+        taxIncludedInPrice: gstSettings.includeTaxInPrice,
         paymentMethod: paymentMethod || 'Cash',
         paymentStatus: 'completed',
         status: 'completed',
@@ -616,10 +659,12 @@ const CartScreen = ({ navigation }) => {
       }
 
       // Navigate to SimpleInvoicePreview instead of direct Invoice screen
-      // Load store info for complete invoice data
-      const storeInfoData = await AsyncStorage.getItem('storeInfo');
-      const parsedStoreInfo = storeInfoData ? JSON.parse(storeInfoData) : {};
-      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      // Load store info from context for complete invoice data
+      const storeProfile = getStoreProfile();
+      const actualStoreName = storeProfile.store_name || 'FlowPOS Store';
+      // Phone and email come from AuthContext (user-bound)
+      const storePhone = user?.phone || '';
+      const storeEmail = user?.email || '';
       
       const invoiceOrderData = {
         id: savedOrder.id,
@@ -628,10 +673,11 @@ const CartScreen = ({ navigation }) => {
         customerName: finalCustomerName, // Use the final processed customer name
         phoneNumber: finalPhoneNumber, // Use the final processed phone number
         items: items,
-        subtotal,
+        subtotal: displaySubtotal,
         gst,
         total: total,
         grandTotal: total,
+        taxIncludedInPrice: gstSettings.includeTaxInPrice,
         paymentMethod,
         timestamp: savedOrder.timestamp,
         date: new Date(savedOrder.timestamp).toLocaleDateString(),
@@ -639,10 +685,10 @@ const CartScreen = ({ navigation }) => {
         status: 'completed',
         // FIXED: Include store information for invoice display (Issue 1 & 2)
         storeName: actualStoreName,
-        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
-        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
-        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
-        gstNumber: parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '',
+        storeAddress: storeProfile.store_address || '',
+        storePhone: storePhone,
+        storeEmail: storeEmail,
+        gstNumber: storeProfile.gst_number || '',
         ...(paymentDetails && {
           paymentDetails: {
             transactionId: paymentDetails.transactionId,
@@ -674,7 +720,8 @@ const CartScreen = ({ navigation }) => {
       // Immediate navigation without delay to prevent cart flash
       navigation.navigate('SimpleInvoicePreview', { 
         invoiceData: invoiceOrderData,
-        fromOrderCompletion: true
+        fromOrderCompletion: true,
+        showSkipOption: true // Enable skip countdown after order completion
       });
       
       // Loading state will be reset in finally block
@@ -694,10 +741,12 @@ const CartScreen = ({ navigation }) => {
       const finalCustomerName = (customerName && customerName.trim() !== '') ? customerName.trim() : 'Walk-in Customer';
       const finalPhoneNumber = (phoneNumber && phoneNumber.trim() !== '') ? phoneNumber.trim() : '';
       
-      // Load store info for error case too
-      const storeInfoData = await AsyncStorage.getItem('storeInfo');
-      const parsedStoreInfo = storeInfoData ? JSON.parse(storeInfoData) : {};
-      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      // Load store info from context for error case too
+      const storeProfileError = getStoreProfile();
+      const actualStoreNameError = storeProfileError.store_name || 'FlowPOS Store';
+      // Phone and email come from AuthContext (user-bound)
+      const storePhoneError = user?.phone || '';
+      const storeEmailError = user?.email || '';
       
       const invoiceOrderData = {
         id: orderId,
@@ -705,21 +754,22 @@ const CartScreen = ({ navigation }) => {
         customerName: finalCustomerName,
         phoneNumber: finalPhoneNumber,
         items: items,
-        subtotal,
+        subtotal: displaySubtotal,
         gst,
         total,
         grandTotal: total,
+        taxIncludedInPrice: gstSettings.includeTaxInPrice,
         paymentMethod,
         timestamp: new Date().toISOString(),
         date: new Date().toLocaleDateString(),
         time: new Date().toLocaleTimeString(),
         status: 'completed',
         // FIXED: Include store information for invoice display (Issue 1 & 2)
-        storeName: actualStoreName,
-        storeAddress: parsedStoreInfo.store_address || parsedStoreInfo.address || '',
-        storePhone: parsedStoreInfo.store_phone || parsedStoreInfo.phone || '',
-        storeEmail: parsedStoreInfo.store_email || parsedStoreInfo.email || '',
-        gstNumber: parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '',
+        storeName: actualStoreNameError,
+        storeAddress: storeProfileError.store_address || '',
+        storePhone: storePhoneError,
+        storeEmail: storeEmailError,
+        gstNumber: storeProfileError.gst_number || '',
       };
       
       clearCart();
@@ -866,7 +916,7 @@ const CartScreen = ({ navigation }) => {
         >
           {/* Customer Details Section */}
           {requireCustomerDetails && (
-            <View style={styles.customerSection}>
+            <View style={styles.customerSection} ref={customerSectionRef}>
             <Text style={styles.sectionTitle}>Customer Information</Text>
 
             <Text style={styles.inputLabel}>Customer Name <Text style={styles.requiredAsterisk}>*</Text></Text>
@@ -904,7 +954,7 @@ const CartScreen = ({ navigation }) => {
           )}
 
           {/* Cart Items Section */}
-          <View style={styles.cartItemsSection}>
+          <View style={styles.cartItemsSection} ref={itemsListRef}>
             <Text style={styles.sectionTitle}>Order Items</Text>
             <FlatList
               data={items}
@@ -916,7 +966,7 @@ const CartScreen = ({ navigation }) => {
           </View>
 
           {/* Payment Methods Section */}
-          <View style={styles.paymentSection}>
+          <View style={styles.paymentSection} ref={paymentSectionRef}>
             <Text style={styles.sectionTitle}>Payment Method</Text>
             <View style={styles.paymentMethods}>
               {availablePaymentMethods.map((method) => {
@@ -938,12 +988,16 @@ const CartScreen = ({ navigation }) => {
           <View style={styles.summarySection}>
             <Text style={styles.sectionTitle}>Order Summary</Text>
             <View style={styles.summaryRow}>
-              <Text style={styles.summaryLabel}>Subtotal:</Text>
-              <Text style={styles.summaryValue}>₹{subtotal}</Text>
+              <Text style={styles.summaryLabel}>
+                {gstSettings.includeTaxInPrice ? 'Base Amount:' : 'Subtotal:'}
+              </Text>
+              <Text style={styles.summaryValue}>₹{displaySubtotal}</Text>
             </View>
             {gstSettings.hasGST && (
               <View style={styles.summaryRow}>
-                <Text style={styles.summaryLabel}>GST ({gstSettings.percentage}%):</Text>
+                <Text style={styles.summaryLabel}>
+                  GST ({gstSettings.percentage}%){gstSettings.includeTaxInPrice ? ' (included):' : ':'}
+                </Text>
                 <Text style={styles.summaryValue}>₹{gst}</Text>
               </View>
             )}
@@ -956,6 +1010,7 @@ const CartScreen = ({ navigation }) => {
 
           <View style={styles.completeButtonContainer}>
             <TouchableOpacity
+              ref={completeButtonRef}
               style={[buttonStyles.success, (orderLoading || completingOrder) && buttonStyles.disabled]}
               onPress={handleCompleteOrder}
               disabled={orderLoading || completingOrder}
@@ -1004,6 +1059,12 @@ const CartScreen = ({ navigation }) => {
         currentScreen="Cart"
         onComplete={completeTour}
         navigation={navigation}
+        tourRefs={{
+          customerSection: customerSectionRef,
+          itemsList: itemsListRef,
+          paymentSection: paymentSectionRef,
+          completeButton: completeButtonRef,
+        }}
       />
     </SafeAreaView>
   );

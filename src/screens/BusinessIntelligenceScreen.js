@@ -19,7 +19,6 @@ const BusinessIntelligenceScreen = ({ navigation }) => {
     products: [],
     orders: [],
     revenue: { today: 0, week: 0, total: 0, orders: 0 },
-    storeInfo: null,
   });
   const [analytics, setAnalytics] = useState({});
   const [refreshing, setRefreshing] = useState(false);
@@ -36,19 +35,17 @@ const BusinessIntelligenceScreen = ({ navigation }) => {
     }
 
     try {
-      const [productsData, ordersData, revenueData, storeInfoData] = await Promise.all([
+      const [productsData, ordersData, revenueData] = await Promise.all([
         AsyncStorage.getItem('products'),
         AsyncStorage.getItem('orders'),
         AsyncStorage.getItem('revenue'),
-        AsyncStorage.getItem('storeInfo'),
       ]);
 
       const products = productsData ? JSON.parse(productsData) : [];
       const orders = ordersData ? JSON.parse(ordersData) : [];
       const revenue = revenueData ? JSON.parse(revenueData) : { today: 0, week: 0, total: 0, orders: 0 };
-      const storeInfo = storeInfoData ? JSON.parse(storeInfoData) : null;
 
-      setBusinessData({ products, orders, revenue, storeInfo });
+      setBusinessData({ products, orders, revenue });
       calculateAdvancedAnalytics({ products, orders, revenue });
     } catch (error) {
       console.error('Error loading business data:', error);

@@ -1,53 +1,89 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getTaxSettingsFromCache } from '../context/StoreSettingsContext';
 
 class GSTService {
   constructor() {
     this.taxSettings = {
-      enableGST: true,
+      enableGST: false, // Default to false - user must explicitly enable
       gstRate: 18,
       includeTaxInPrice: false,
     };
     this.initialized = false;
   }
 
+  /**
+   * Initialize GST service with settings from StoreSettingsContext
+   * 
+   * NOTE: AsyncStorage fallback removed as part of Task 12 cleanup
+   * StoreSettingsContext is now the ONLY read path for tax settings
+   */
   async initialize() {
-    if (this.initialized) return;
-    
-    try {
-      const settings = await AsyncStorage.getItem('taxSettings');
-      if (settings) {
-        this.taxSettings = { ...this.taxSettings, ...JSON.parse(settings) };
-      }
-      this.initialized = true;
-      console.log('✅ GSTService initialized with settings:', this.taxSettings);
-    } catch (error) {
-      console.error('❌ Error initializing GSTService:', error);
-    }
+    // Always refresh from cache to get latest settings
+    this.refreshFromCache();
+    this.initialized = true;
+    console.log('✅ GSTService initialized with settings from StoreSettingsContext:', this.taxSettings);
   }
 
+  /**
+   * Update GST settings
+   * 
+   * NOTE: This method is kept for backward compatibility but should be called
+   * through StoreSettingsContext.updateTaxSettings() for proper write-through behavior.
+   * Direct AsyncStorage writes are deprecated.
+   * 
+   * @deprecated Use StoreSettingsContext.updateTaxSettings() instead
+   */
   async updateSettings(newSettings) {
     try {
       this.taxSettings = { ...this.taxSettings, ...newSettings };
+      // NOTE: AsyncStorage write kept for backward compatibility during transition
+      // This should eventually be removed once all callers use StoreSettingsContext
       await AsyncStorage.setItem('taxSettings', JSON.stringify(this.taxSettings));
       console.log('✅ GST settings updated:', this.taxSettings);
+      console.warn('⚠️ [GSTService] Direct updateSettings() is deprecated. Use StoreSettingsContext.updateTaxSettings() instead.');
     } catch (error) {
       console.error('❌ Error updating GST settings:', error);
     }
   }
 
+  /**
+   * Refresh settings from StoreSettingsContext cache
+   * Call this when you need to ensure settings are up-to-date
+   * This is now called automatically by initialize() and getSettings()
+   */
+  refreshFromCache() {
+    try {
+      const cachedTaxSettings = getTaxSettingsFromCache();
+      if (cachedTaxSettings) {
+        this.taxSettings = { ...this.taxSettings, ...cachedTaxSettings };
+        console.log('✅ GSTService refreshed from StoreSettingsContext cache:', this.taxSettings);
+      }
+    } catch (error) {
+      console.error('❌ Error refreshing GSTService from cache:', error);
+    }
+  }
+
   getSettings() {
+    // Always refresh from cache to get latest settings
+    this.refreshFromCache();
     return { ...this.taxSettings };
   }
 
   isGSTEnabled() {
+    // Always refresh from cache to get latest settings
+    this.refreshFromCache();
     return this.taxSettings.enableGST;
   }
 
   getGSTRate() {
+    // Always refresh from cache to get latest settings
+    this.refreshFromCache();
     return this.taxSettings.gstRate || 18;
   }
 
   isTaxIncludedInPrice() {
+    // Always refresh from cache to get latest settings
+    this.refreshFromCache();
     return this.taxSettings.includeTaxInPrice;
   }
 

@@ -70,24 +70,24 @@ const InvoiceScreen = ({ route, navigation }) => {
   };
 
   const handleClose = () => {
-    // Check source screen parameter first, then navigation state
+    console.log('📄 [InvoiceScreen] handleClose called');
+    console.log('📄 [InvoiceScreen] sourceScreen:', sourceScreen);
+    
+    // Check source screen parameter first
     if (sourceScreen === 'Orders') {
-      navigation.navigate('Orders');
+      console.log('📄 [InvoiceScreen] Navigating back to Orders tab');
+      // Orders is inside Main Tab Navigator, so navigate to Main with Orders screen
+      navigation.navigate('Main', { screen: 'Orders' });
       return;
     }
     
-    // Check if we came from Orders screen by looking at navigation state
-    const routes = navigation.getState()?.routes || [];
-    const previousRoute = routes[routes.length - 2];
-    
-    if (previousRoute?.name === 'Orders') {
-      // Navigate back to Orders screen
-      navigation.navigate('Orders');
-    } else if (navigation.canGoBack()) {
-      // Go back to previous screen if possible
+    // Try goBack first if possible
+    if (navigation.canGoBack()) {
+      console.log('📄 [InvoiceScreen] Using navigation.goBack()');
       navigation.goBack();
     } else {
-      // Only fallback to POS if no other option
+      // Fallback to POS
+      console.log('📄 [InvoiceScreen] Fallback to POS');
       navigation.navigate('Main', { screen: 'POS' });
     }
   };
@@ -120,6 +120,7 @@ const InvoiceScreen = ({ route, navigation }) => {
       onClose={handleClose}
       onSendWhatsApp={handleSendWhatsApp}
       refreshTrigger={refreshTrigger}
+      showBackButton={true}
     />
   );
 };

@@ -354,13 +354,12 @@ class CSVExportService {
         console.log('✅ [CSV Export] Generated sample orders for sales summary');
       }
 
-      // Calculate summary metrics
+      // Calculate summary metrics - Cash and UPI/QR only (Card removed)
       const summary = {
         totalOrders: orders.length,
         totalRevenue: orders.reduce((sum, order) => sum + (order.total || 0), 0),
         avgOrderValue: 0,
         cashPayments: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('cash')).length,
-        cardPayments: orders.filter(o => (o.paymentMethod || '').toLowerCase().includes('card')).length,
         upiPayments: orders.filter(o => {
           const method = (o.paymentMethod || '').toLowerCase();
           return method.includes('upi') || method.includes('qr');
@@ -375,7 +374,6 @@ class CSVExportService {
         { 'Metric': 'Total Revenue (₹)', 'Value': summary.totalRevenue },
         { 'Metric': 'Average Order Value (₹)', 'Value': summary.avgOrderValue },
         { 'Metric': 'Cash Payments', 'Value': summary.cashPayments },
-        { 'Metric': 'Card Payments', 'Value': summary.cardPayments },
         { 'Metric': 'UPI/QR Payments', 'Value': summary.upiPayments },
         { 'Metric': 'Period', 'Value': period.charAt(0).toUpperCase() + period.slice(1) },
         { 'Metric': 'Export Date', 'Value': new Date().toLocaleDateString() }

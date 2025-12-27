@@ -19,67 +19,97 @@ import { colors } from '../styles/colors';
 import LoadingOverlay from './LoadingOverlay';
 import WhatsAppService from '../services/WhatsAppService';
 import InvoiceService from '../services/InvoiceService'; // CONSOLIDATED: Use unified service
+import { useStoreSettings } from '../context/StoreSettingsContext';
+import { useAuth } from '../context/AuthContext';
 
 const SimpleInvoicePreview = ({ 
   visible, 
   invoiceData, 
   onClose,
-  refreshTrigger // Add prop to trigger refresh from parent
+  refreshTrigger, // Add prop to trigger refresh from parent
+  showSkipOption = false, // New prop to show skip countdown
+  showBackButton = false // New prop to show back button (for Orders screen)
 }) => {
   const [isGenerating, setIsGenerating] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState(null);
   const [showSendButton, setShowSendButton] = useState(true);
-  // Receipt settings loaded from AsyncStorage
-  const [receiptSettings, setReceiptSettings] = useState({
-    showAddress: true,
-    showPhone: true,
-    showEmail: false,
-    showGST: true
-  });
+  const [skipCountdown, setSkipCountdown] = useState(10);
+  const [showSkipButton, setShowSkipButton] = useState(false);
+  
+  // Use StoreSettingsContext for receipt settings (replaces AsyncStorage reads)
+  const { storeSettings, getReceiptSettings, getStoreProfile } = useStoreSettings();
+  const { user } = useAuth();
+  
+  // Store refs for functions to avoid stale closures in useEffect
+  const getReceiptSettingsRef = useRef(getReceiptSettings);
+  const getStoreProfileRef = useRef(getStoreProfile);
+  
+  // Keep refs in sync
+  useEffect(() => {
+    getReceiptSettingsRef.current = getReceiptSettings;
+    getStoreProfileRef.current = getStoreProfile;
+  }, [getReceiptSettings, getStoreProfile]);
+  
   // Enriched invoice data with store information
   const [enrichedInvoiceData, setEnrichedInvoiceData] = useState(null);
   const invoiceRef = useRef();
+  const isMountedRef = useRef(true);
+  const timerRef = useRef(null);
+
+  // Track component mount state
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, []);
 
   // Load receipt settings and enrich invoice data on mount
+  // Uses refs to avoid infinite loop from function dependencies
   useEffect(() => {
-    const loadSettingsAndEnrichData = async () => {
+    const enrichInvoiceData = async () => {
       try {
-        // Load receipt settings from AsyncStorage
-        const [receiptSettingsData, showStoreNameSetting, storeInfoData] = await Promise.all([
-          AsyncStorage.getItem('receiptSettings'),
-          AsyncStorage.getItem('showStoreNameOnInvoice'),
-          AsyncStorage.getItem('storeInfo')
-        ]);
-
-        // Parse receipt settings
-        const parsedReceiptSettings = receiptSettingsData ? JSON.parse(receiptSettingsData) : {};
-        const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
+        // Get store profile from context using ref (replaces AsyncStorage.getItem('storeInfo'))
+        const storeProfile = getStoreProfileRef.current();
         
+        // Get receipt settings using ref
+        const receiptSettings = getReceiptSettingsRef.current();
+        
+        // Get showStoreName setting from AppSettingsContext cache
+        const { getAppSettingFromCache } = require('../context/AppSettingsContext');
+        const cachedShowStoreName = getAppSettingFromCache('showStoreNameOnInvoice');
+        const showStoreName = cachedShowStoreName !== undefined ? cachedShowStoreName : true;
+        
+        // Receipt settings already come from context with proper boolean handling
         const settings = {
-          showAddress: parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true,
-          showPhone: parsedReceiptSettings.showPhone !== undefined ? parsedReceiptSettings.showPhone : true,
-          showEmail: parsedReceiptSettings.showEmail !== undefined ? parsedReceiptSettings.showEmail : false,
-          showGST: parsedReceiptSettings.showGST !== undefined ? parsedReceiptSettings.showGST : true,
+          ...receiptSettings,
           showStoreName
         };
         
-        setReceiptSettings(settings);
-        console.log('📄 [SimpleInvoicePreview] Loaded receipt settings:', settings);
+        console.log('📄 [SimpleInvoicePreview] Using receipt settings from context:', settings);
 
-        // Enrich invoice data with store information
-        if (invoiceData && storeInfoData) {
-          const storeInfo = JSON.parse(storeInfoData);
-          const actualStoreName = storeInfo.store_name || storeInfo.name || 'FlowPOS Store';
+        // Enrich invoice data with store information from context
+        if (invoiceData && storeSettings) {
+          const actualStoreName = storeProfile.store_name || 'FlowPOS Store';
+          
+          // Get store phone/email from AuthContext (user-bound fields)
+          const storePhone = user?.phone || '';
+          const storeEmail = user?.email || '';
           
           const enriched = {
             ...invoiceData,
             // Apply store name setting
             storeName: settings.showStoreName ? actualStoreName : 'FlowPOS Store',
-            // Add store contact details
-            storeAddress: storeInfo.store_address || storeInfo.address || '',
-            storePhone: storeInfo.store_phone || storeInfo.phone || '',
-            storeEmail: storeInfo.store_email || storeInfo.email || '',
-            gstNumber: storeInfo.gst_number || storeInfo.gstin || '',
+            // Add store contact details from context
+            storeAddress: storeProfile.store_address || '',
+            // Phone/email are auth-bound, from AuthContext
+            storePhone: storePhone,
+            storeEmail: storeEmail,
+            gstNumber: storeProfile.gst_number || '',
             // Include receipt settings for display logic
             receiptSettings: settings
           };
@@ -96,15 +126,15 @@ const SimpleInvoicePreview = ({
           setEnrichedInvoiceData(invoiceData);
         }
       } catch (error) {
-        console.error('❌ [SimpleInvoicePreview] Error loading settings:', error);
+        console.error('❌ [SimpleInvoicePreview] Error enriching invoice data:', error);
         setEnrichedInvoiceData(invoiceData);
       }
     };
 
     if (visible && invoiceData) {
-      loadSettingsAndEnrichData();
+      enrichInvoiceData();
     }
-  }, [visible, invoiceData, refreshTrigger]);
+  }, [visible, invoiceData, refreshTrigger, storeSettings, user]); // Removed receiptSettings and getStoreProfile - use refs instead
 
   const generateInvoiceImage = async () => {
     try {
@@ -160,7 +190,72 @@ const SimpleInvoicePreview = ({
 
   // Use enriched data's receipt settings or fall back to state-loaded settings
 
-  // Check WhatsApp status on component mount and when visibility changes
+  // Handle skip - CANCEL auto-redirect and stay on screen
+  const handleSkip = () => {
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+      timerRef.current = null;
+    }
+    if (isMountedRef.current) {
+      setShowSkipButton(false);
+      setSkipCountdown(0);
+    }
+    // Don't call onClose - user wants to STAY on this screen
+  };
+
+  // Auto-redirect countdown timer for returning to POS after order completion
+  useEffect(() => {
+    if (showSkipOption && visible) {
+      if (isMountedRef.current) {
+        setShowSkipButton(true);
+        setSkipCountdown(10);
+      }
+      
+      timerRef.current = setInterval(() => {
+        if (!isMountedRef.current) {
+          if (timerRef.current) {
+            clearInterval(timerRef.current);
+            timerRef.current = null;
+          }
+          return;
+        }
+        
+        setSkipCountdown(prev => {
+          if (prev <= 1) {
+            if (timerRef.current) {
+              clearInterval(timerRef.current);
+              timerRef.current = null;
+            }
+            // Auto-navigate to POS after countdown
+            if (isMountedRef.current) {
+              setShowSkipButton(false);
+            }
+            // Use setTimeout to avoid state update during render
+            setTimeout(() => {
+              if (isMountedRef.current) {
+                onClose();
+              }
+            }, 0);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+    } else {
+      if (isMountedRef.current) {
+        setShowSkipButton(false);
+        setSkipCountdown(10);
+      }
+    }
+
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
+  }, [showSkipOption, visible, onClose]);
+
   useEffect(() => {
     const checkWhatsAppStatus = async () => {
       try {
@@ -181,16 +276,8 @@ const SimpleInvoicePreview = ({
           return;
         }
         
-        // FIXED: Only auto-send if FlowPOS is ready AND selected as the current method
-        if (status.currentMethod === 'flowpos' && status.flowposReady) {
-          console.log('📱 [SimpleInvoicePreview] FlowPOS selected and ready - hiding send button and auto-sending');
-          setShowSendButton(false);
-          // Auto-send if phone number is available
-          if (invoiceData?.phoneNumber) {
-            handleAutoSendWhatsApp();
-          }
-        } else if (status.currentMethod === 'device') {
-          // Show send button only for device WhatsApp when send invoice is enabled
+        // Show send button only for device WhatsApp when send invoice is enabled
+        if (status.currentMethod === 'device') {
           console.log('📱 [SimpleInvoicePreview] Device WhatsApp selected - showing send button');
           setShowSendButton(true);
         } else {
@@ -204,28 +291,40 @@ const SimpleInvoicePreview = ({
     };
 
     if (visible && invoiceData) {
-      // CONSOLIDATED: No need to load receipt settings separately
       checkWhatsAppStatus();
     }
   }, [visible, invoiceData, refreshTrigger]);
 
   const handleAutoSendWhatsApp = async () => {
     try {
-      console.log('📱 Auto-sending via FlowPOS WhatsApp...');
+      // Use enriched data which has proper store information from context
+      const data = enrichedInvoiceData || invoiceData;
+      
+      console.log('📱 Auto-sending via FlowPOS WhatsApp with enriched data:', {
+        storeName: data.storeName,
+        customerName: data.customerName,
+        phoneNumber: data.phoneNumber
+      });
       
       const result = await WhatsAppService.sendInvoiceMessage(
-        invoiceData.phoneNumber,
+        data.phoneNumber,
         {
-          ...invoiceData,
-          orderNumber: invoiceData.invoiceNumber,
-          items: invoiceData.items || []
+          ...data,
+          orderNumber: data.invoiceNumber || data.orderNumber,
+          items: data.items || [],
+          // Ensure all store info is passed
+          storeName: data.storeName,
+          storeAddress: data.storeAddress,
+          storePhone: data.storePhone,
+          storeEmail: data.storeEmail,
+          gstNumber: data.gstNumber
         }
       );
 
       if (result.success) {
         Alert.alert(
           'Invoice Sent Automatically! ✅',
-          `Invoice has been sent to ${invoiceData.customerName} via FlowPOS WhatsApp successfully.`,
+          `Invoice has been sent to ${data.customerName} via FlowPOS WhatsApp successfully.`,
           [{ text: 'Great!', style: 'default' }]
         );
       }
@@ -237,7 +336,10 @@ const SimpleInvoicePreview = ({
   };
 
   const handleSendWhatsApp = async () => {
-    if (!invoiceData.phoneNumber || !invoiceData.phoneNumber.trim()) {
+    // Use enriched data which has proper store information from context
+    const data = enrichedInvoiceData || invoiceData;
+    
+    if (!data.phoneNumber || !data.phoneNumber.trim()) {
       Alert.alert(
         'No Phone Number',
         'Customer phone number is required to send invoice via WhatsApp.',
@@ -250,15 +352,29 @@ const SimpleInvoicePreview = ({
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
 
     try {
-      console.log('📱 Starting WhatsApp send process...');
+      console.log('📱 [SimpleInvoicePreview] Starting WhatsApp send process with enriched data:', {
+        storeName: data.storeName,
+        storeAddress: data.storeAddress,
+        storePhone: data.storePhone,
+        storeEmail: data.storeEmail,
+        gstNumber: data.gstNumber,
+        customerName: data.customerName,
+        phoneNumber: data.phoneNumber
+      });
       
-      // Try to send via selected method
+      // Try to send via selected method - use enriched data with all store info
       const result = await WhatsAppService.sendInvoiceMessage(
-        invoiceData.phoneNumber,
+        data.phoneNumber,
         {
-          ...invoiceData,
-          orderNumber: invoiceData.invoiceNumber,
-          items: invoiceData.items || []
+          ...data,
+          orderNumber: data.invoiceNumber || data.orderNumber,
+          items: data.items || [],
+          // Ensure all store info is passed
+          storeName: data.storeName,
+          storeAddress: data.storeAddress,
+          storePhone: data.storePhone,
+          storeEmail: data.storeEmail,
+          gstNumber: data.gstNumber
         }
       );
 
@@ -266,7 +382,7 @@ const SimpleInvoicePreview = ({
         const methodText = result.method === 'flowpos' ? 'FlowPOS WhatsApp' : 'Device WhatsApp';
         Alert.alert(
           'Invoice Sent! ✅',
-          `Invoice has been sent to ${invoiceData.customerName} via ${methodText} successfully.`,
+          `Invoice has been sent to ${data.customerName} via ${methodText} successfully.`,
           [{ text: 'Great!', style: 'default' }]
         );
         
@@ -303,12 +419,102 @@ const SimpleInvoicePreview = ({
 
 
 
+  // Enhanced contact information component with standardized alignment and SVG icons
+  const renderContactInformation = () => {
+    // Use receipt settings from enriched data, or get fresh from context
+    const settings = enrichedInvoiceData?.receiptSettings || getReceiptSettingsRef.current();
+    
+    const contactFields = [
+      {
+        show: settings.showAddress,
+        value: enrichedInvoiceData?.storeAddress || invoiceData.storeAddress,
+        icon: 'location-outline',
+        label: 'Address'
+      },
+      {
+        show: settings.showPhone,
+        value: enrichedInvoiceData?.storePhone || invoiceData.storePhone,
+        icon: 'call-outline',
+        label: 'Phone'
+      },
+      {
+        show: settings.showEmail,
+        value: enrichedInvoiceData?.storeEmail || invoiceData.storeEmail,
+        icon: 'mail-outline',
+        label: 'Email'
+      },
+      {
+        show: settings.showGST,
+        value: enrichedInvoiceData?.gstNumber || invoiceData.gstNumber,
+        icon: 'document-text-outline',
+        label: 'GST',
+        prefix: 'GST: '
+      }
+    ];
+
+    const visibleFields = contactFields.filter(field => 
+      field.show && field.value && field.value.trim() !== ''
+    );
+
+    if (visibleFields.length === 0) return null;
+
+    return (
+      <View style={styles.storeContactSection}>
+        {visibleFields.map((field, index) => (
+          <View key={field.label} style={[
+            styles.contactRow,
+            index === visibleFields.length - 1 && styles.contactRowLast
+          ]}>
+            <View style={styles.contactIconContainer}>
+              <Icon name={field.icon} size={18} color="#6b7280" />
+            </View>
+            <Text style={styles.contactText}>
+              {field.prefix || ''}{field.value}
+            </Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   if (!visible || !invoiceData) return null;
 
   return (
     <SafeAreaView style={styles.container}>
+      {/* Auto-redirect countdown banner with Skip option */}
+      {showSkipButton && (
+        <View style={styles.countdownBanner}>
+          <Text style={styles.countdownText}>
+            Returning to POS in {skipCountdown}s
+          </Text>
+          <TouchableOpacity
+            style={styles.skipButton}
+            onPress={handleSkip}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.skipButtonText}>Stay Here</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       <View style={styles.header}>
-        <View style={styles.headerRight} />
+        <View style={styles.headerLeft}>
+          {showBackButton && (
+            <TouchableOpacity
+              style={styles.backButton}
+              onPress={() => {
+                console.log('📄 [SimpleInvoicePreview] Back button pressed');
+                if (onClose) {
+                  onClose();
+                }
+              }}
+              activeOpacity={0.7}
+              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            >
+              <Ionicons name="arrow-back" size={24} color={colors.text.primary} />
+            </TouchableOpacity>
+          )}
+        </View>
         <Text style={styles.headerTitle}>E-Bill</Text>
         <View style={styles.headerRight} />
       </View>
@@ -328,7 +534,7 @@ const SimpleInvoicePreview = ({
           </View>
 
           {/* Store Name - use enriched data */}
-          {(enrichedInvoiceData?.storeName || invoiceData.storeName) && receiptSettings.showStoreName !== false && (
+          {(enrichedInvoiceData?.storeName || invoiceData.storeName) && enrichedInvoiceData?.receiptSettings?.showStoreName !== false && (
             <View style={styles.storeNameSection}>
               <Text style={styles.storeName}>
                 {enrichedInvoiceData?.storeName || invoiceData.storeName}
@@ -336,52 +542,25 @@ const SimpleInvoicePreview = ({
             </View>
           )}
 
-          {/* Store Contact Information - use enriched data with receipt settings */}
-          {((receiptSettings.showAddress && (enrichedInvoiceData?.storeAddress || invoiceData.storeAddress)) ||
-           (receiptSettings.showPhone && (enrichedInvoiceData?.storePhone || invoiceData.storePhone)) ||
-           (receiptSettings.showEmail && (enrichedInvoiceData?.storeEmail || invoiceData.storeEmail)) ||
-           (receiptSettings.showGST && (enrichedInvoiceData?.gstNumber || invoiceData.gstNumber))) ? (
-            <View style={styles.storeContactSection}>
-              {receiptSettings.showAddress && (enrichedInvoiceData?.storeAddress || invoiceData.storeAddress) && (
-                <View style={styles.contactRow}>
-                  <Icon name="location-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>{enrichedInvoiceData?.storeAddress || invoiceData.storeAddress}</Text>
-                </View>
-              )}
-              {receiptSettings.showPhone && (enrichedInvoiceData?.storePhone || invoiceData.storePhone) && (
-                <View style={styles.contactRow}>
-                  <Icon name="call-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>{enrichedInvoiceData?.storePhone || invoiceData.storePhone}</Text>
-                </View>
-              )}
-              {receiptSettings.showEmail && (enrichedInvoiceData?.storeEmail || invoiceData.storeEmail) && (
-                <View style={styles.contactRow}>
-                  <Icon name="mail-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>{enrichedInvoiceData?.storeEmail || invoiceData.storeEmail}</Text>
-                </View>
-              )}
-              {receiptSettings.showGST && (enrichedInvoiceData?.gstNumber || invoiceData.gstNumber) && (
-                <View style={styles.contactRow}>
-                  <Icon name="document-text-outline" size={20} color="#6b7280" />
-                  <Text style={styles.contactText}>GST: {enrichedInvoiceData?.gstNumber || invoiceData.gstNumber}</Text>
-                </View>
-              )}
-            </View>
-          ) : null}
+          {/* Store Contact Information - use standardized component */}
+          {renderContactInformation()}
 
           {/* Customer Info Section */}
           <View style={styles.billedToSection}>
             <Text style={styles.billedToLabel}>Billed to</Text>
             <View style={styles.customerInfo}>
               <View style={styles.customerIcon}>
-                <Icon name="person-outline" size={24} color="#6b7280" />
+                <Icon name="person-outline" size={20} color="#6b7280" />
               </View>
               <View style={styles.customerDetails}>
                 <Text style={styles.customerName}>
                   {invoiceData.customerName}
                 </Text>
                 {invoiceData.phoneNumber && (
-                  <Text style={styles.customerPhone}>+91 {invoiceData.phoneNumber}</Text>
+                  <View style={styles.customerPhoneRow}>
+                    <Icon name="call-outline" size={16} color="#6b7280" />
+                    <Text style={styles.customerPhone}>+91 {invoiceData.phoneNumber}</Text>
+                  </View>
                 )}
               </View>
             </View>
@@ -396,7 +575,7 @@ const SimpleInvoicePreview = ({
               invoiceData.items.map((item, index) => (
                 <View key={index} style={styles.itemRow}>
                   <View style={styles.itemIcon}>
-                    <Icon name="cube-outline" size={20} color="#6b7280" />
+                    <Icon name="cube-outline" size={18} color="#6b7280" />
                   </View>
                   <View style={styles.itemInfo}>
                     <Text style={styles.itemName}>
@@ -429,7 +608,7 @@ const SimpleInvoicePreview = ({
                   invoiceData.paymentMethod === 'Card' ? 'card-outline' : 
                   invoiceData.paymentMethod === 'QR Pay' ? 'qr-code-outline' : 'cash-outline'
                 } 
-                size={20} 
+                size={18} 
                 color="#6b7280" 
               />
             </View>
@@ -495,6 +674,32 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.background.primary,
   },
+  countdownBanner: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: colors.primary.main,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  countdownText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: '#ffffff',
+  },
+  skipButton: {
+    backgroundColor: 'rgba(255,255,255,0.2)',
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1,
+    borderColor: 'rgba(255,255,255,0.4)',
+  },
+  skipButtonText: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#ffffff',
+  },
   header: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -507,15 +712,21 @@ const styles = StyleSheet.create({
   },
   backButton: {
     padding: 8,
+    minWidth: 40,
+    minHeight: 40,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
-
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
     color: colors.text.primary,
   },
+  headerLeft: {
+    width: 40,
+  },
   headerRight: {
-    width: 36,
+    width: 40,
   },
   content: {
     flex: 1,
@@ -564,22 +775,34 @@ const styles = StyleSheet.create({
     lineHeight: 22,
   },
   storeContactSection: {
-    alignItems: 'center',
+    alignItems: 'flex-start',
     marginBottom: 20,
-    paddingHorizontal: 20,
+    width: '100%',
   },
   contactRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 6,
+    alignItems: 'flex-start',
+    marginBottom: 8,
+    width: '100%',
+    minHeight: 22,
+  },
+  contactRowLast: {
+    marginBottom: 0,
+  },
+  contactIconContainer: {
+    width: 22,
+    height: 22,
     justifyContent: 'center',
+    alignItems: 'flex-start',
+    marginRight: 8,
+    flexShrink: 0,
   },
   contactText: {
     fontSize: 14,
     color: '#6b7280',
-    marginLeft: 8,
-    textAlign: 'center',
-    lineHeight: 18,
+    lineHeight: 20,
+    flex: 1,
+    textAlign: 'left',
   },
   thankYouTitle: {
     fontSize: 22,
@@ -628,6 +851,12 @@ const styles = StyleSheet.create({
   customerPhone: {
     fontSize: 14,
     color: '#6b7280',
+    marginLeft: 6,
+  },
+  customerPhoneRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 2,
   },
   itemRow: {
     flexDirection: 'row',

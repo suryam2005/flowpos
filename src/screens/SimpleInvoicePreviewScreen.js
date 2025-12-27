@@ -1,23 +1,19 @@
-import React, { useEffect, useState, useRef } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, BackHandler } from 'react-native';
 import SimpleInvoicePreview from '../components/SimpleInvoicePreview';
 import InvoiceService from '../services/InvoiceService';
 import { colors } from '../styles/colors';
 
 const SimpleInvoicePreviewScreen = ({ route, navigation }) => {
-  const { invoiceData: rawInvoiceData, fromOrderCompletion = true } = route.params;
+  const { 
+    invoiceData: rawInvoiceData, 
+    fromOrderCompletion = true
+  } = route.params;
   const [processedInvoiceData, setProcessedInvoiceData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
-  const [countdown, setCountdown] = useState(10);
-  const timerRef = useRef(null);
-  const countdownRef = useRef(null);
 
   // Navigate to POS screen (used for both auto-redirect and back button)
   const navigateToPOS = () => {
-    // Clear timers
-    if (timerRef.current) clearTimeout(timerRef.current);
-    if (countdownRef.current) clearInterval(countdownRef.current);
-    
     // Reset navigation stack and go to POS
     navigation.reset({
       index: 0,
@@ -41,33 +37,6 @@ const SimpleInvoicePreviewScreen = ({ route, navigation }) => {
       return () => backHandler.remove();
     }
   }, [fromOrderCompletion, navigation]);
-
-  // Auto-redirect to POS after 10 seconds (only for order completion flow)
-  useEffect(() => {
-    if (fromOrderCompletion && !isLoading) {
-      // Start countdown
-      countdownRef.current = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(countdownRef.current);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
-
-      // Auto-redirect after 10 seconds
-      timerRef.current = setTimeout(() => {
-        console.log('⏱️ [SimpleInvoicePreviewScreen] Auto-redirecting to POS after 10 seconds');
-        navigateToPOS();
-      }, 10000);
-
-      return () => {
-        if (timerRef.current) clearTimeout(timerRef.current);
-        if (countdownRef.current) clearInterval(countdownRef.current);
-      };
-    }
-  }, [fromOrderCompletion, isLoading]);
 
   // Process invoice data through InvoiceService for consistency with OrdersScreen flow
   useEffect(() => {
@@ -129,16 +98,8 @@ const SimpleInvoicePreviewScreen = ({ route, navigation }) => {
         visible={true}
         invoiceData={processedInvoiceData}
         onClose={handleClose}
+        showSkipOption={fromOrderCompletion}
       />
-      
-      {/* Auto-redirect countdown indicator */}
-      {fromOrderCompletion && countdown > 0 && (
-        <View style={styles.countdownContainer}>
-          <Text style={styles.countdownText}>
-            Returning to POS in {countdown}s
-          </Text>
-        </View>
-      )}
     </View>
   );
 };
@@ -157,55 +118,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text.secondary,
     textAlign: 'center',
-  },
-  countdownContainer: {
-    position: 'absolute',
-    top: 60,
-    left: 0,
-    right: 0,
-    alignItems: 'center',
-    zIndex: 100,
-  },
-  countdownText: {
-    backgroundColor: colors.primary.main,
-    color: colors.background.surface,
-    paddingHorizontal: 16,
-    paddingVertical: 8,
-    borderRadius: 20,
-    fontSize: 14,
-    fontWeight: '500',
-    overflow: 'hidden',
-  },
-  navigationContainer: {
-    position: 'absolute',
-    bottom: 20,
-    left: 20,
-    right: 20,
-    flexDirection: 'row',
-    gap: 12,
-  },
-  navButton: {
-    flex: 1,
-    paddingVertical: 16,
-    paddingHorizontal: 20,
-    borderRadius: 12,
-    alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-    elevation: 8,
-  },
-  ordersButton: {
-    backgroundColor: colors.primary.main,
-  },
-  posButton: {
-    backgroundColor: colors.success.main,
-  },
-  navButtonText: {
-    color: colors.background.surface,
-    fontSize: 16,
-    fontWeight: '600',
   },
 });
 

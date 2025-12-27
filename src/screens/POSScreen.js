@@ -16,7 +16,8 @@ import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
 import CustomAlert from '../components/CustomAlert';
 import { webScrollFix, webContainerFix, webScrollableContainer } from '../styles/webStyles';
-import { useRealtimeProducts, useRealtimeStoreInfo } from '../hooks/useRealtimeData';
+import { useRealtimeProducts } from '../hooks/useRealtimeData';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import ResponsiveText from '../components/ResponsiveText';
 import featureService from '../services/FeatureService';
 import ImprovedTourGuide from '../components/ImprovedTourGuide';
@@ -41,24 +42,31 @@ const POSScreen = ({ navigation, route }) => {
   // Track if initial load is done
   const initialLoadDone = useRef(false);
   
+  // Tour refs for dynamic positioning
+  const headerRef = useRef(null);
+  const productGridRef = useRef(null);
+  const cartBarRef = useRef(null);
+  const completeOrderButtonRef = useRef(null);
+  
   // Responsive layout - no fixed calculations, use flex instead
   
   // Real-time data hooks
   const { data: products, refresh: refreshProducts } = useRealtimeProducts();
-  const { data: storeInfo, refresh: refreshStoreInfo } = useRealtimeStoreInfo();
+  
+  // Get store settings from StoreSettingsContext (single source of truth)
+  const { getStoreProfile } = useStoreSettings();
+  const storeProfile = getStoreProfile();
   
   // Get store name - always display, independent of settings
-  // Priority: user settings → profile → store name → fallback: "My Store"
-  const storeName = storeInfo?.store_name || storeInfo?.name || 'My Store';
+  const storeName = storeProfile?.store_name || 'My Store';
 
   // Initialize feature service and trigger initial load
   useEffect(() => {
     featureService.initialize();
     
     // Trigger initial products fetch
-    console.log('🏪 [POS] Initial mount - fetching products and store info');
+    console.log('🏪 [POS] Initial mount - fetching products');
     refreshProducts();
-    refreshStoreInfo(); // Also fetch store info on mount
     initialLoadDone.current = true;
   }, []);
 
@@ -339,7 +347,7 @@ const POSScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={[styles.container, webContainerFix]}>
       <View style={styles.content}>
-        <View style={styles.header}>
+        <View style={styles.header} ref={headerRef}>
           <ResponsiveText variant="title" style={styles.title}>
             {storeName}
           </ResponsiveText>
@@ -387,7 +395,7 @@ const POSScreen = ({ navigation, route }) => {
         )}
       </View>
 
-      <View style={[{ flex: 1 }, webScrollableContainer]}>
+      <View style={[{ flex: 1 }, webScrollableContainer]} ref={productGridRef}>
         {products.length === 0 ? (
           renderEmptyState()
         ) : (
@@ -417,7 +425,7 @@ const POSScreen = ({ navigation, route }) => {
       </View>
 
       {getItemCount() > 0 && (
-        <View style={styles.cartSummary}>
+        <View style={styles.cartSummary} ref={cartBarRef}>
           <View style={styles.cartSummaryContent}>
             <View style={styles.cartInfo}>
               <ResponsiveText variant="caption" style={styles.cartItems}>
@@ -437,6 +445,7 @@ const POSScreen = ({ navigation, route }) => {
                 <Ionicons name="trash-outline" size={24} color={colors.error.main} />
               </TouchableOpacity>
               <TouchableOpacity
+                ref={completeOrderButtonRef}
                 style={buttonStyles.success}
                 onPress={() => navigation.navigate('Cart')}
                 activeOpacity={0.8}
@@ -466,6 +475,7 @@ const POSScreen = ({ navigation, route }) => {
         currentScreen="POS"
         onComplete={completeTour}
         navigation={navigation}
+        hasProducts={products.length > 0}
       />
       </View>
     </SafeAreaView>

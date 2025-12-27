@@ -23,6 +23,8 @@ import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
 import WhatsAppService from '../services/WhatsAppService';
 import PDFReportsService from '../services/PDFReportsService';
+import { useStoreSettings } from '../context/StoreSettingsContext';
+import { useAuth } from '../context/AuthContext';
 
 const OrdersScreen = ({ navigation }) => {
   const { 
@@ -35,6 +37,8 @@ const OrdersScreen = ({ navigation }) => {
     isOnline,
     syncOrders 
   } = useOrders();
+  const { getStoreProfile } = useStoreSettings();
+  const { user } = useAuth();
   const [refreshing, setRefreshing] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState(null);
 
@@ -45,6 +49,10 @@ const OrdersScreen = ({ navigation }) => {
   
   // App tour guide
   const { showTour, completeTour } = useAppTour('Orders');
+  
+  // Tour refs for dynamic positioning
+  const headerRef = useRef(null);
+  const ordersListRef = useRef(null);
 
   // Track if initial load is done
   const initialLoadDone = useRef(false);
@@ -191,23 +199,20 @@ const OrdersScreen = ({ navigation }) => {
       // Show loading state
       setIsLoadingData(true);
       
-      // Load store information for WhatsApp message
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
-      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
-      const storeAddress = parsedStoreInfo.store_address || parsedStoreInfo.address || '';
-      const storePhone = parsedStoreInfo.store_phone || parsedStoreInfo.phone || '';
-      const storeEmail = parsedStoreInfo.store_email || parsedStoreInfo.email || '';
+      // Load store information from context for WhatsApp message
+      const storeProfile = getStoreProfile();
+      const actualStoreName = storeProfile.store_name || 'FlowPOS Store';
+      const storeAddress = storeProfile.store_address || '';
+      // Phone and email come from AuthContext (user-bound)
+      const storePhone = user?.phone || '';
+      const storeEmail = user?.email || '';
       
       console.log('🏪 [OrdersScreen] Store info loaded for WhatsApp:', {
-        storeInfoExists: !!storeInfo,
-        parsedStoreInfo,
+        storeProfile,
         actualStoreName,
         storeAddress,
         storePhone,
-        storeEmail,
-        store_name: parsedStoreInfo.store_name,
-        name: parsedStoreInfo.name
+        storeEmail
       });
 
       // Generate invoice PDF/image
@@ -270,13 +275,12 @@ const OrdersScreen = ({ navigation }) => {
 
   const sendViaDeviceWhatsApp = async (order) => {
     try {
-      // Load store information
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
-      const actualStoreName = parsedStoreInfo.store_name || parsedStoreInfo.name || 'FlowPOS Store';
+      // Load store information from context
+      const storeProfile = getStoreProfile();
+      const actualStoreName = storeProfile.store_name || 'FlowPOS Store';
       
       console.log('🏪 [OrdersScreen] Store info loaded for device WhatsApp:', {
-        storeInfoExists: !!storeInfo,
+        storeProfile,
         actualStoreName
       });
 
@@ -325,13 +329,16 @@ const OrdersScreen = ({ navigation }) => {
     // Don't show if send invoice feature is disabled
     if (whatsappStatus && !whatsappStatus.sendInvoiceEnabled) return false;
     
-    // FIXED: Don't show if FlowPOS WhatsApp is selected and ready (auto-sends)
+    // FUTURE: When auto-send is enabled, hide button for FlowPOS method
+    // TODO: Uncomment this when Twilio credentials are configured and auto-send is enabled
+    /*
     if (whatsappStatus && whatsappStatus.currentMethod === 'flowpos' && whatsappStatus.flowposReady) {
-      return false;
+      return false; // Hide button for auto-send
     }
+    */
     
-    // Show only for device WhatsApp when send invoice is enabled
-    return whatsappStatus && whatsappStatus.currentMethod === 'device' && whatsappStatus.sendInvoiceEnabled;
+    // CURRENT: Show send button for both methods (FlowPOS and device) since auto-send is disabled
+    return whatsappStatus && whatsappStatus.sendInvoiceEnabled;
   };
 
   const renderOrder = ({ item, index }) => {
@@ -437,7 +444,7 @@ const OrdersScreen = ({ navigation }) => {
       {(isLoading || isLoadingData) && <LoadingSpinner />}
 
       <View style={styles.content}>
-        <View style={styles.header}>
+        <View style={styles.header} ref={headerRef}>
           <Text style={styles.title}>Orders</Text>
           <Text style={styles.subtitle}>
             {orders.length} {orders.length === 1 ? 'order' : 'orders'}
@@ -450,7 +457,7 @@ const OrdersScreen = ({ navigation }) => {
           </View>
         )}
 
-        <View style={{ flex: 1, opacity: 1 }}>
+        <View style={{ flex: 1, opacity: 1 }} ref={ordersListRef}>
           {orders.length === 0 ? (
             renderEmptyState()
           ) : (
@@ -481,6 +488,11 @@ const OrdersScreen = ({ navigation }) => {
         visible={showTour}
         currentScreen="Orders"
         onComplete={completeTour}
+        navigation={navigation}
+        tourRefs={{
+          header: headerRef,
+          ordersList: ordersListRef,
+        }}
       />
     </SafeAreaView>
   );

@@ -23,32 +23,47 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [countdown, setCountdown] = useState(0);
+  const [countdown, setCountdown] = useState(180); // 3 minutes = 180 seconds
+  const [resendAttempts, setResendAttempts] = useState(0);
+  const [maxAttempts] = useState(3);
+  const [showExpiryModal, setShowExpiryModal] = useState(false);
   
   const inputRefs = useRef([]);
 
-  // Prevent back navigation during OTP verification
-  useBackPrevention(isLoading, {
-    message: 'OTP verification is in progress. Please wait for completion.',
-    title: 'Verifying OTP',
-    hardBlock: true
+  // ALWAYS block back navigation on OTP screen - user must complete verification
+  // This prevents the issue of going back and triggering resend OTP again
+  useBackPrevention(true, {
+    message: 'Please complete OTP verification. Going back will require you to restart the password reset process.',
+    title: 'Complete Verification',
+    hardBlock: true, // Always hard block - no back allowed
+    showAlert: true,
   });
 
+  // Enhanced timer with expiry handling and visibility
   useEffect(() => {
-    // Start countdown for resend
-    setCountdown(60);
-    const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+    if (countdown > 0) {
+      const timer = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            // Show expiry modal when timer reaches 0
+            setShowExpiryModal(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
 
-    return () => clearInterval(timer);
-  }, []);
+      return () => clearInterval(timer);
+    }
+  }, [countdown]);
+
+  // Format timer display (MM:SS)
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   const handleOtpChange = (index, value) => {
     if (value.length > 1) return; // Prevent multiple characters
@@ -104,25 +119,23 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
   };
 
   const handleResendOTP = async () => {
-    if (countdown > 0) return;
+    if (countdown > 0 || resendAttempts >= maxAttempts || isResending) return;
     
     setIsResending(true);
     try {
       await forgotPassword(email);
       
-      Alert.alert('Code Sent', 'A new verification code has been sent to your email');
+      // Increment attempt counter
+      setResendAttempts(prev => prev + 1);
       
-      // Reset countdown
-      setCountdown(60);
-      const timer = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      // Reset countdown to 3 minutes
+      setCountdown(180);
+      setShowExpiryModal(false);
+      
+      Alert.alert(
+        'Code Sent', 
+        `A new verification code has been sent to your email. Attempts remaining: ${maxAttempts - resendAttempts - 1}`
+      );
       
     } catch (error) {
       console.error('Resend OTP error:', error);
@@ -140,12 +153,7 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
+          <View style={styles.placeholder} />
           <Text style={styles.title}>Verify Code</Text>
           <View style={styles.placeholder} />
         </View>
@@ -184,11 +192,11 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
             </View>
           </View>
 
-          {/* Verify Button */}
+          {/* Verify Button - Always active, validation on press */}
           <TouchableOpacity
-            style={[styles.verifyButton, (otp.join('').length !== 6 || isLoading) && styles.buttonDisabled]}
+            style={styles.verifyButton}
             onPress={() => handleVerifyOTP()}
-            disabled={otp.join('').length !== 6 || isLoading}
+            disabled={isLoading}
           >
             <Text style={styles.verifyButtonText}>Verify Code</Text>
           </TouchableOpacity>
@@ -310,9 +318,6 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     alignItems: 'center',
     marginBottom: 20,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
   },
   verifyButtonText: {
     color: '#fff',

@@ -9,25 +9,26 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { colors } from '../styles/colors';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { safeGoBack } from '../utils/navigationUtils';
+import { useStoreSettings } from '../context/StoreSettingsContext';
+import { useAuth } from '../context/AuthContext';
 
 import pdfReportsService from '../services/PDFReportsService';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
 
 const PDFReportsScreen = ({ navigation }) => {
   const [reportTypes, setReportTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [generatingType, setGeneratingType] = useState(null);
-
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('PDFReports');
+  
+  // Get store settings from context
+  const { getStoreProfile } = useStoreSettings();
+  const { user } = useAuth();
 
   useEffect(() => {
+    // Load report types on mount
     loadReportTypes();
   }, []);
 
@@ -48,11 +49,13 @@ const PDFReportsScreen = ({ navigation }) => {
       setGenerating(true);
       setGeneratingType(reportType.id);
       
-      // Debug: Check if store info exists before generation
+      // Debug: Check if store info exists before generation (using context)
       console.log('🔍 [PDF Reports] Checking store information before generation...');
       try {
-        const storeData = await AsyncStorage.getItem('storeInfo');
-        if (!storeData) {
+        const storeProfile = getStoreProfile();
+        const storePhone = user?.phone || '';
+        
+        if (!storeProfile.store_name) {
           Alert.alert(
             'Store Setup Required',
             'Please complete your store setup in Settings before generating reports.',
@@ -64,10 +67,9 @@ const PDFReportsScreen = ({ navigation }) => {
           return;
         }
         
-        const store = JSON.parse(storeData);
-        const hasRequiredInfo = (store.store_name || store.name) && 
-                               (store.store_address || store.address) && 
-                               (store.store_phone || store.phone);
+        const hasRequiredInfo = storeProfile.store_name && 
+                               storeProfile.store_address && 
+                               storePhone;
         
         if (!hasRequiredInfo) {
           Alert.alert(
@@ -294,13 +296,6 @@ const PDFReportsScreen = ({ navigation }) => {
 
       {/* Loading Overlay */}
       {generating && <LoadingSpinner />}
-
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
-        visible={showTour}
-        onComplete={completeTour}
-        currentScreen="PDFReports"
-      />
     </SafeAreaView>
   );
 };

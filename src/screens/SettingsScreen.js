@@ -15,47 +15,52 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { clearAllAppData } from '../utils/dataUtils';
 import { safeGoBack } from '../utils/navigationUtils';
-import { useAppTour } from '../hooks/useAppTour';
 import { colors } from '../styles/colors';
 import { spacing } from '../styles/spacingStyles';
 import featureService from '../services/FeatureService';
 import { useAuth } from '../context/AuthContext';
+import { useAppSettingsContext } from '../context/AppSettingsContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout } = useAuth();
-  const [autoPaymentDetection, setAutoPaymentDetection] = useState(true);
-  const [notifications, setNotifications] = useState(true);
-  const [requireCustomerDetails, setRequireCustomerDetails] = useState(true);
+  const { settings, getSetting, updateSetting, isLoading: settingsLoading, refreshSettings } = useAppSettingsContext();
+  const { getReceiptSettings, updateReceiptSettings } = useStoreSettings();
+  
+  // Local state for UI (initialized to null - will be set from context)
+  // Using null as initial state to distinguish "not loaded" from "loaded as false"
+  const [autoPaymentDetection, setAutoPaymentDetection] = useState(null);
+  const [notifications, setNotifications] = useState(null);
+  const [requireCustomerDetails, setRequireCustomerDetails] = useState(null);
   
   // Invoice Settings
-  const [showStoreNameOnInvoice, setShowStoreNameOnInvoice] = useState(true);
+  const [showStoreNameOnInvoice, setShowStoreNameOnInvoice] = useState(null);
   
-  // Receipt Settings (moved from Store Settings)
+  // Receipt Settings (now from StoreSettingsContext)
   const [receiptSettings, setReceiptSettings] = useState({
     showAddress: true,
     showPhone: true,
     showEmail: false,
     showGST: true,
-    footerMessage: 'Thank you for your business!',
   });
   
   // WhatsApp Settings
-  const [whatsappMethod, setWhatsappMethod] = useState('flowpos');
-  const [sendInvoiceEnabled, setSendInvoiceEnabled] = useState(true);
+  const [whatsappMethod, setWhatsappMethod] = useState(null);
+  const [sendInvoiceEnabled, setSendInvoiceEnabled] = useState(null);
 
-  // App tour guide
-  const { startTour, skipAllTours } = useAppTour('Settings');
-
+  // Load settings from context on mount and when settings change
   useEffect(() => {
-    loadSettings();
+    loadSettingsFromContext();
+    loadReceiptSettings(); // Receipt settings still from AsyncStorage
     initializeFeatureService();
-  }, []);
+  }, [settings]);
 
-  // Reload settings when screen comes into focus to prevent UI flash
+  // Reload settings when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      loadSettings(); // Reload all settings when screen comes into focus
-    }, [])
+      loadSettingsFromContext();
+      loadReceiptSettings();
+    }, [settings])
   );
 
   const initializeFeatureService = async () => {
@@ -66,105 +71,211 @@ const SettingsScreen = ({ navigation }) => {
     }
   };
 
-  const loadSettings = async () => {
+  /**
+   * Load the 6 cached settings from AppSettingsContext
+   * These settings are persisted to database and cached locally
+   * 
+   * IMPORTANT: We distinguish between:
+   * - null: settings object is null (not loaded yet, keep local state as null for loading UI)
+   * - {}: empty object (loaded from backend, but user hasn't set any settings - use defaults)
+   * - {key: value}: settings loaded from backend (use actual values)
+   */
+  const loadSettingsFromContext = () => {
+    // If settings object is null, context hasn't loaded yet - don't override local state
+    // This prevents showing wrong values before backend data arrives
+    if (settings === null) {
+      console.log('[SettingsScreen] Settings not loaded yet, keeping current state');
+      return;
+    }
+    
+    // Read from context cache (no async needed - already in memory)
+    const autoDetection = getSetting('autoPaymentDetection');
+    const notificationsValue = getSetting('notifications');
+    const customerDetailsRequired = getSetting('requireCustomerDetails');
+    const invoiceStoreName = getSetting('showStoreNameOnInvoice');
+    const whatsappMethodValue = getSetting('whatsappMethod');
+    const sendInvoiceValue = getSetting('sendInvoiceEnabled');
+    
+    console.log('[SettingsScreen] Loading settings from context:', {
+      autoDetection,
+      notificationsValue,
+      customerDetailsRequired,
+      invoiceStoreName,
+      whatsappMethodValue,
+      sendInvoiceValue
+    });
+    
+    // Update local state from context
+    // If value is undefined (not set in DB), default to true for better UX
+    // If value is explicitly false, use false
+    setAutoPaymentDetection(autoDetection !== undefined ? autoDetection : true);
+    setNotifications(notificationsValue !== undefined ? notificationsValue : true);
+    setRequireCustomerDetails(customerDetailsRequired !== undefined ? customerDetailsRequired : true);
+    setShowStoreNameOnInvoice(invoiceStoreName !== undefined ? invoiceStoreName : true);
+    setWhatsappMethod(whatsappMethodValue !== undefined ? whatsappMethodValue : 'flowpos');
+    setSendInvoiceEnabled(sendInvoiceValue !== undefined ? sendInvoiceValue : true);
+  };
+
+  /**
+   * Load receipt settings from StoreSettingsContext
+   * Receipt settings are now part of the store settings cache
+   */
+  const loadReceiptSettings = () => {
     try {
-      const [autoDetection, notificationsValue, customerDetailsRequired, invoiceStoreName, whatsappMethodValue, sendInvoiceValue, receiptSettingsValue] = await Promise.all([
-        AsyncStorage.getItem('autoPaymentDetection'),
-        AsyncStorage.getItem('notifications'),
-        AsyncStorage.getItem('requireCustomerDetails'),
-        AsyncStorage.getItem('showStoreNameOnInvoice'),
-        AsyncStorage.getItem('whatsappMethod'),
-        AsyncStorage.getItem('sendInvoiceEnabled'),
-        AsyncStorage.getItem('receiptSettings')
-      ]);
-      
-      if (autoDetection !== null) {
-        setAutoPaymentDetection(JSON.parse(autoDetection));
-      }
-      if (notificationsValue !== null) {
-        setNotifications(JSON.parse(notificationsValue));
-      }
-      if (customerDetailsRequired !== null) {
-        setRequireCustomerDetails(JSON.parse(customerDetailsRequired));
-      }
-      if (invoiceStoreName !== null) {
-        setShowStoreNameOnInvoice(JSON.parse(invoiceStoreName));
-      }
-      if (whatsappMethodValue !== null) {
-        setWhatsappMethod(whatsappMethodValue);
-      }
-      if (sendInvoiceValue !== null) {
-        setSendInvoiceEnabled(JSON.parse(sendInvoiceValue));
-      }
-      if (receiptSettingsValue !== null) {
-        setReceiptSettings(JSON.parse(receiptSettingsValue));
-      }
+      // Get receipt settings from context with proper boolean handling
+      const contextReceiptSettings = getReceiptSettings();
+      setReceiptSettings(contextReceiptSettings);
     } catch (error) {
-      console.error('Error loading settings:', error);
+      console.error('Error loading receipt settings:', error);
     }
   };
 
-  const saveSetting = async (key, value) => {
-    try {
-      await AsyncStorage.setItem(key, JSON.stringify(value));
-    } catch (error) {
-      console.error('Error saving setting:', error);
-    }
-  };
 
 
-
-  const handleAutoPaymentDetectionToggle = (value) => {
+  /**
+   * Handle auto payment detection toggle
+   * Uses write-through cache update via context
+   */
+  const handleAutoPaymentDetectionToggle = async (value) => {
+    const previousValue = autoPaymentDetection;
+    // Optimistic UI update
     setAutoPaymentDetection(value);
-    saveSetting('autoPaymentDetection', value);
+    
+    // Write-through to backend via context
+    const success = await updateSetting('autoPaymentDetection', value);
+    if (!success) {
+      // Revert on failure
+      setAutoPaymentDetection(previousValue);
+      Alert.alert('Error', 'Failed to save setting. Please try again.');
+    }
   };
 
-  const handleNotificationsToggle = (value) => {
+  /**
+   * Handle notifications toggle
+   * Uses write-through cache update via context
+   */
+  const handleNotificationsToggle = async (value) => {
+    const previousValue = notifications;
+    // Optimistic UI update
     setNotifications(value);
-    saveSetting('notifications', value);
+    
+    // Write-through to backend via context
+    const success = await updateSetting('notifications', value);
+    if (!success) {
+      // Revert on failure
+      setNotifications(previousValue);
+      Alert.alert('Error', 'Failed to save setting. Please try again.');
+    }
   };
 
-
-
-  const handleRequireCustomerDetailsToggle = (value) => {
+  /**
+   * Handle require customer details toggle
+   * Uses write-through cache update via context
+   */
+  const handleRequireCustomerDetailsToggle = async (value) => {
+    const previousValue = requireCustomerDetails;
+    // Optimistic UI update
     setRequireCustomerDetails(value);
-    saveSetting('requireCustomerDetails', value);
+    
+    // Write-through to backend via context
+    const success = await updateSetting('requireCustomerDetails', value);
+    if (!success) {
+      // Revert on failure
+      setRequireCustomerDetails(previousValue);
+      Alert.alert('Error', 'Failed to save setting. Please try again.');
+    }
   };
 
+  /**
+   * Handle show store name on invoice toggle
+   * Uses write-through cache update via context
+   */
   const handleShowStoreNameToggle = async (value) => {
+    const previousValue = showStoreNameOnInvoice;
+    // Optimistic UI update
     setShowStoreNameOnInvoice(value);
-    await saveSetting('showStoreNameOnInvoice', value);
+    
+    // Write-through to backend via context
+    const success = await updateSetting('showStoreNameOnInvoice', value);
+    if (!success) {
+      // Revert on failure
+      setShowStoreNameOnInvoice(previousValue);
+      Alert.alert('Error', 'Failed to save setting. Please try again.');
+    }
   };
 
+  /**
+   * Handle WhatsApp method change
+   * Uses write-through cache update via context
+   */
   const handleWhatsAppMethodChange = async (method) => {
+    const previousValue = whatsappMethod;
+    // Optimistic UI update
     setWhatsappMethod(method);
-    await AsyncStorage.setItem('whatsappMethod', method);
+    
+    // Write-through to backend via context
+    const success = await updateSetting('whatsappMethod', method);
+    if (!success) {
+      // Revert on failure
+      setWhatsappMethod(previousValue);
+      Alert.alert('Error', 'Failed to save setting. Please try again.');
+      return;
+    }
     
     // Also update the WhatsApp service
     const WhatsAppService = require('../services/WhatsAppService').default;
     await WhatsAppService.setWhatsAppMethod(method);
   };
 
+  /**
+   * Handle send invoice toggle
+   * Uses write-through cache update via context
+   */
   const handleSendInvoiceToggle = async (value) => {
+    const previousValue = sendInvoiceEnabled;
+    // Optimistic UI update
     setSendInvoiceEnabled(value);
-    await saveSetting('sendInvoiceEnabled', value);
+    
+    // Write-through to backend via context
+    const success = await updateSetting('sendInvoiceEnabled', value);
+    if (!success) {
+      // Revert on failure
+      setSendInvoiceEnabled(previousValue);
+      Alert.alert('Error', 'Failed to save setting. Please try again.');
+      return;
+    }
     
     // Also update the WhatsApp service
     const WhatsAppService = require('../services/WhatsAppService').default;
     await WhatsAppService.setSendInvoiceEnabled(value);
   };
 
-  // Handle receipt setting changes with immediate save
+  /**
+   * Handle receipt setting changes with write-through to backend
+   * Receipt settings are now part of StoreSettingsContext
+   */
   const handleReceiptSettingChange = async (settingKey, value) => {
     const newReceiptSettings = { ...receiptSettings, [settingKey]: value };
     setReceiptSettings(newReceiptSettings);
     
     try {
-      // Save immediately to AsyncStorage
-      await AsyncStorage.setItem('receiptSettings', JSON.stringify(newReceiptSettings));
-      console.log(`✅ Receipt setting ${settingKey} updated to ${value}`);
+      // Write-through to backend via StoreSettingsContext
+      const result = await updateReceiptSettings({ [settingKey]: value });
+      if (result.success) {
+        console.log(`✅ Receipt setting ${settingKey} updated to ${value}`);
+      } else {
+        // Revert on failure
+        setReceiptSettings(receiptSettings);
+        if (result.error === 'NO_NETWORK') {
+          Alert.alert('No Network', 'Please check your internet connection and try again.');
+        } else {
+          Alert.alert('Error', 'Failed to save receipt setting. Please try again.');
+        }
+      }
     } catch (error) {
       console.error('Error saving receipt setting:', error);
+      // Revert on error
+      setReceiptSettings(receiptSettings);
     }
   };
 
@@ -286,34 +397,44 @@ const SettingsScreen = ({ navigation }) => {
     );
   };
 
-  const SettingItem = ({ title, description, value, onToggle, disabled = false, isPremium = false }) => (
-    <View style={[styles.settingItem, disabled && styles.settingItemDisabled]}>
-      <View style={styles.settingInfo}>
-        <View style={styles.settingTitleRow}>
-          <Text style={[styles.settingTitle, disabled && styles.settingTitleDisabled]}>
-            {title}
+  const SettingItem = ({ title, description, value, onToggle, disabled = false, isPremium = false }) => {
+    // Handle null value (settings not loaded yet) - show as false and disabled
+    const isLoading = value === null;
+    const effectiveValue = value === null ? false : value;
+    const effectiveDisabled = disabled || isLoading;
+    
+    return (
+      <View style={[styles.settingItem, effectiveDisabled && styles.settingItemDisabled]}>
+        <View style={styles.settingInfo}>
+          <View style={styles.settingTitleRow}>
+            <Text style={[styles.settingTitle, effectiveDisabled && styles.settingTitleDisabled]}>
+              {title}
+            </Text>
+            {isPremium && (
+              <View style={styles.premiumBadge}>
+                <Ionicons name="diamond" size={12} color="#FFD700" />
+                <Text style={styles.premiumText}>PRO</Text>
+              </View>
+            )}
+            {isLoading && (
+              <Text style={styles.loadingText}>Loading...</Text>
+            )}
+          </View>
+          <Text style={[styles.settingDescription, effectiveDisabled && styles.settingDescriptionDisabled]}>
+            {description}
           </Text>
-          {isPremium && (
-            <View style={styles.premiumBadge}>
-              <Ionicons name="diamond" size={12} color="#FFD700" />
-              <Text style={styles.premiumText}>PRO</Text>
-            </View>
-          )}
         </View>
-        <Text style={[styles.settingDescription, disabled && styles.settingDescriptionDisabled]}>
-          {description}
-        </Text>
+        <Switch
+          value={effectiveValue}
+          onValueChange={effectiveDisabled ? undefined : onToggle}
+          trackColor={{ false: colors.gray[100], true: effectiveDisabled ? colors.gray[100] : colors.primary.main }}
+          thumbColor={effectiveValue ? (effectiveDisabled ? colors.gray[400] : colors.background.surface) : colors.background.surface}
+          ios_backgroundColor={colors.gray[100]}
+          disabled={effectiveDisabled}
+        />
       </View>
-      <Switch
-        value={value}
-        onValueChange={disabled ? undefined : onToggle}
-        trackColor={{ false: colors.gray[100], true: disabled ? colors.gray[100] : colors.primary.main }}
-        thumbColor={value ? (disabled ? colors.gray[400] : colors.background.surface) : colors.background.surface}
-        ios_backgroundColor={colors.gray[100]}
-        disabled={disabled}
-      />
-    </View>
-  );
+    );
+  };
 
   const SettingItemWithNavigation = ({ title, description, value, onToggle, onNavigate }) => (
     <TouchableOpacity 
@@ -337,6 +458,48 @@ const SettingsScreen = ({ navigation }) => {
       </View>
     </TouchableOpacity>
   );
+
+  // Locked Badge Component for premium features
+  const LockedBadge = () => (
+    <View style={styles.lockedBadge}>
+      <Ionicons name="lock-closed" size={12} color={colors.warning.main} />
+      <Text style={styles.lockedText}>Upgrade</Text>
+    </View>
+  );
+
+  // Feature Button with lock check
+  const FeatureButton = ({ title, icon, featureKey, onPress }) => {
+    const isLocked = !featureService.canUseFeature(featureKey);
+    
+    const handlePress = () => {
+      if (isLocked) {
+        featureService.showUpgradePrompt(featureKey);
+      } else {
+        onPress();
+      }
+    };
+    
+    return (
+      <TouchableOpacity 
+        style={[styles.actionButton, isLocked && styles.actionButtonLocked]}
+        onPress={handlePress}
+        activeOpacity={0.8}
+      >
+        <View style={styles.featureButtonContent}>
+          <Ionicons 
+            name={icon} 
+            size={20} 
+            color={isLocked ? colors.text.tertiary : colors.primary.main} 
+            style={styles.iconStyle} 
+          />
+          <Text style={[styles.actionButtonText, isLocked && styles.actionButtonTextLocked]}>
+            {title}
+          </Text>
+        </View>
+        {isLocked && <LockedBadge />}
+      </TouchableOpacity>
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -373,40 +536,68 @@ const SettingsScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>WhatsApp Settings</Text>
           
-          {/* Send Invoice Setting - Master Toggle */}
-          <View style={styles.settingRow}>
-            <View style={styles.settingInfo}>
-              <Text style={styles.settingTitle}>Send Invoice via WhatsApp</Text>
-              <Text style={styles.settingDescription}>
-                Enable or disable invoice sending functionality
-              </Text>
-            </View>
-            <Switch
-              value={sendInvoiceEnabled}
-              onValueChange={handleSendInvoiceToggle}
-              trackColor={{ false: colors.gray[300], true: colors.primary.light }}
-              thumbColor={sendInvoiceEnabled ? colors.primary.main : colors.gray[400]}
-            />
-          </View>
+          {/* Check if WhatsApp feature is available */}
+          {!featureService.canUseFeature('whatsapp_integration') ? (
+            <TouchableOpacity 
+              style={[styles.settingItem, styles.settingItemDisabled]}
+              onPress={() => featureService.showUpgradePrompt('whatsapp_integration')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.settingInfo}>
+                <View style={styles.settingTitleRow}>
+                  <Text style={styles.settingTitle}>Send Invoice via WhatsApp</Text>
+                  <LockedBadge />
+                </View>
+                <Text style={styles.settingDescription}>
+                  Upgrade to Growth plan to send invoices via WhatsApp
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+            </TouchableOpacity>
+          ) : (
+            <>
+              {/* Send Invoice Setting - Master Toggle */}
+              <View style={[styles.settingRow, sendInvoiceEnabled === null && styles.settingItemDisabled]}>
+                <View style={styles.settingInfo}>
+                  <View style={styles.settingTitleRow}>
+                    <Text style={[styles.settingTitle, sendInvoiceEnabled === null && styles.settingTitleDisabled]}>
+                      Send Invoice via WhatsApp
+                    </Text>
+                    {sendInvoiceEnabled === null && (
+                      <Text style={styles.loadingText}>Loading...</Text>
+                    )}
+                  </View>
+                  <Text style={[styles.settingDescription, sendInvoiceEnabled === null && styles.settingDescriptionDisabled]}>
+                    Enable or disable invoice sending functionality
+                  </Text>
+                </View>
+                <Switch
+                  value={sendInvoiceEnabled === null ? false : sendInvoiceEnabled}
+                  onValueChange={sendInvoiceEnabled === null ? undefined : handleSendInvoiceToggle}
+                  trackColor={{ false: colors.gray[300], true: sendInvoiceEnabled === null ? colors.gray[300] : colors.primary.light }}
+                  thumbColor={sendInvoiceEnabled ? colors.primary.main : colors.gray[400]}
+                  disabled={sendInvoiceEnabled === null}
+                />
+              </View>
 
-          {/* WhatsApp Method Selection - Only show when Send Invoice is enabled */}
-          {sendInvoiceEnabled && (
-            <View style={styles.whatsappMethodSection}>
-              <Text style={styles.whatsappMethodTitle}>WhatsApp Method</Text>
-              <Text style={styles.whatsappMethodDescription}>Choose how to send invoices via WhatsApp</Text>
-              
-              <TouchableOpacity
-                style={[
-                  styles.whatsappMethodOption,
-                  whatsappMethod === 'flowpos' && styles.whatsappMethodSelected
-                ]}
-                onPress={() => handleWhatsAppMethodChange('flowpos')}
-                activeOpacity={0.7}
-              >
-                <View style={styles.whatsappMethodContent}>
-                  <View style={styles.whatsappMethodInfo}>
-                    <Text style={styles.whatsappMethodName}>FlowPOS WhatsApp (Recommended)</Text>
-                    <Text style={styles.whatsappMethodDesc}>Automatic sending via FlowPOS servers</Text>
+              {/* WhatsApp Method Selection - Only show when Send Invoice is enabled and not null */}
+              {sendInvoiceEnabled === true && (
+                <View style={styles.whatsappMethodSection}>
+                  <Text style={styles.whatsappMethodTitle}>WhatsApp Method</Text>
+                  <Text style={styles.whatsappMethodDescription}>Choose how to send invoices via WhatsApp</Text>
+                  
+                  <TouchableOpacity
+                    style={[
+                      styles.whatsappMethodOption,
+                      whatsappMethod === 'flowpos' && styles.whatsappMethodSelected
+                    ]}
+                    onPress={() => handleWhatsAppMethodChange('flowpos')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.whatsappMethodContent}>
+                      <View style={styles.whatsappMethodInfo}>
+                        <Text style={styles.whatsappMethodName}>FlowPOS WhatsApp (Recommended)</Text>
+                        <Text style={styles.whatsappMethodDesc}>Automatic sending via FlowPOS servers</Text>
                   </View>
                   <View style={[
                     styles.whatsappMethodRadio,
@@ -436,38 +627,69 @@ const SettingsScreen = ({ navigation }) => {
               </TouchableOpacity>
             </View>
           )}
+            </>
+          )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Invoice Settings</Text>
           
-          <SettingItem
-            title="Show Store Name on Invoice"
-            description="Display your store name on all invoices"
-            value={showStoreNameOnInvoice}
-            onToggle={handleShowStoreNameToggle}
-          />
+          {/* Custom branding feature check */}
+          {!featureService.canUseFeature('custom_branding') ? (
+            <TouchableOpacity 
+              style={[styles.settingItem, styles.settingItemDisabled]}
+              onPress={() => featureService.showUpgradePrompt('customizable_invoice')}
+              activeOpacity={0.8}
+            >
+              <View style={styles.settingInfo}>
+                <View style={styles.settingTitleRow}>
+                  <Text style={styles.settingTitle}>Invoice Customization</Text>
+                  <LockedBadge />
+                </View>
+                <Text style={styles.settingDescription}>
+                  Upgrade to Growth plan to customize your invoices
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={20} color={colors.text.tertiary} />
+            </TouchableOpacity>
+          ) : (
+            <>
+              <SettingItem
+                title="Show Store Name on Invoice"
+                description="Display your store name on all invoices"
+                value={showStoreNameOnInvoice}
+                onToggle={handleShowStoreNameToggle}
+              />
 
-          <SettingItem
-            title="Show Store Address"
-            description="Display store address on invoices and receipts"
-            value={receiptSettings.showAddress}
-            onToggle={(value) => handleReceiptSettingChange('showAddress', value)}
-          />
+              <SettingItem
+                title="Show Store Address"
+                description="Display store address on invoices and receipts"
+                value={receiptSettings.showAddress}
+                onToggle={(value) => handleReceiptSettingChange('showAddress', value)}
+              />
 
-          <SettingItem
-            title="Show Email"
-            description="Display store email on invoices and receipts"
-            value={receiptSettings.showEmail}
-            onToggle={(value) => handleReceiptSettingChange('showEmail', value)}
-          />
+              <SettingItem
+                title="Show Phone Number"
+                description="Display store phone number on invoices and receipts"
+                value={receiptSettings.showPhone}
+                onToggle={(value) => handleReceiptSettingChange('showPhone', value)}
+              />
 
-          <SettingItem
-            title="Show GST Number"
-            description="Display GST number on invoices and receipts"
-            value={receiptSettings.showGST}
-            onToggle={(value) => handleReceiptSettingChange('showGST', value)}
-          />
+              <SettingItem
+                title="Show Email"
+                description="Display store email on invoices and receipts"
+                value={receiptSettings.showEmail}
+                onToggle={(value) => handleReceiptSettingChange('showEmail', value)}
+              />
+
+              <SettingItem
+                title="Show GST Number"
+                description="Display GST number on invoices and receipts"
+                value={receiptSettings.showGST}
+                onToggle={(value) => handleReceiptSettingChange('showGST', value)}
+              />
+            </>
+          )}
         </View>
 
 
@@ -475,32 +697,26 @@ const SettingsScreen = ({ navigation }) => {
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Features</Text>
           
-          <TouchableOpacity 
-            style={styles.actionButton}
+          <FeatureButton
+            title="Export Data (CSV)"
+            icon="download-outline"
+            featureKey="data_export"
             onPress={() => navigation.navigate('DataExport')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="download-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
-            <Text style={styles.actionButtonText}>Export Data (CSV)</Text>
-          </TouchableOpacity>
+          />
           
-          <TouchableOpacity 
-            style={styles.actionButton}
+          <FeatureButton
+            title="PDF Reports"
+            icon="document-text-outline"
+            featureKey="pdf_reports"
             onPress={() => navigation.navigate('PDFReports')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="document-text-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
-            <Text style={styles.actionButtonText}>PDF Reports</Text>
-          </TouchableOpacity>
+          />
           
-          <TouchableOpacity 
-            style={styles.actionButton}
+          <FeatureButton
+            title="Performance Insights"
+            icon="analytics-outline"
+            featureKey="performance_insights"
             onPress={() => navigation.navigate('PerformanceInsights')}
-            activeOpacity={0.8}
-          >
-            <Ionicons name="analytics-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
-            <Text style={styles.actionButtonText}>Performance Insights</Text>
-          </TouchableOpacity>
+          />
           
           <TouchableOpacity 
             style={styles.actionButton}
@@ -842,6 +1058,13 @@ const styles = StyleSheet.create({
     color: '#B8860B',
     letterSpacing: 0.5,
   },
+  loadingText: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: colors.text.secondary,
+    marginLeft: 8,
+    fontStyle: 'italic',
+  },
   iconStyle: {
     marginRight: spacing.sm, // 8px - standardized
   },
@@ -900,6 +1123,36 @@ const styles = StyleSheet.create({
   whatsappMethodRadioSelected: {
     borderColor: colors.primary.main,
     backgroundColor: colors.primary.main,
+  },
+  // Locked feature styles
+  lockedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warning.background,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+    borderRadius: 10,
+    marginLeft: 8,
+    gap: 4,
+    borderWidth: 1,
+    borderColor: colors.warning.border,
+  },
+  lockedText: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: colors.warning.main,
+  },
+  actionButtonLocked: {
+    backgroundColor: colors.gray[50],
+    borderColor: colors.border.medium,
+  },
+  actionButtonTextLocked: {
+    color: colors.text.tertiary,
+  },
+  featureButtonContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
   },
 });
 

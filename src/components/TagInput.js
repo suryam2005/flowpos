@@ -7,7 +7,7 @@ import {
   ScrollView,
   StyleSheet,
 } from 'react-native';
-import { generateProductTags, getSuggestedTags, isValidTag, formatTag } from '../utils/tagGenerator';
+import { generateProductTags, getSuggestedTags, formatTag } from '../utils/tagGenerator';
 
 const TagInput = ({ 
   tags = [], 
@@ -17,6 +17,9 @@ const TagInput = ({
   placeholder = 'Add tags...',
   maxTags = 10 
 }) => {
+  // Ensure tags is always an array
+  const safeTags = Array.isArray(tags) ? tags : [];
+  
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -26,10 +29,11 @@ const TagInput = ({
     setInputValue(text);
     
     if (text.length >= 2) {
-      const newSuggestions = getSuggestedTags(text, tags);
+      const newSuggestions = getSuggestedTags(text, 10).filter(s => !safeTags.includes(s));
       setSuggestions(newSuggestions);
       setShowSuggestions(newSuggestions.length > 0);
     } else {
+      setSuggestions([]);
       setShowSuggestions(false);
     }
   };
@@ -37,18 +41,32 @@ const TagInput = ({
   const addTag = (tag) => {
     const formattedTag = formatTag(tag);
     
-    if (!isValidTag(formattedTag) || tags.includes(formattedTag) || tags.length >= maxTags) {
+    // Allow any tag that's at least 1 character after formatting
+    if (!formattedTag || formattedTag.length < 1) {
+      console.log('🏷️ [TagInput] Tag rejected - empty after formatting:', tag);
+      return;
+    }
+    
+    if (safeTags.includes(formattedTag)) {
+      console.log('🏷️ [TagInput] Tag rejected - already exists:', formattedTag);
+      return;
+    }
+    
+    if (safeTags.length >= maxTags) {
+      console.log('🏷️ [TagInput] Tag rejected - max tags reached:', maxTags);
       return;
     }
 
-    const newTags = [...tags, formattedTag];
+    console.log('🏷️ [TagInput] Adding tag:', formattedTag);
+    const newTags = [...safeTags, formattedTag];
     onTagsChange(newTags);
     setInputValue('');
+    setSuggestions([]);
     setShowSuggestions(false);
   };
 
   const removeTag = (tagToRemove) => {
-    const newTags = tags.filter(tag => tag !== tagToRemove);
+    const newTags = safeTags.filter(tag => tag !== tagToRemove);
     onTagsChange(newTags);
   };
 
@@ -60,7 +78,7 @@ const TagInput = ({
 
   const generateAutoTags = () => {
     const autoTags = generateProductTags(productName, businessType, []);
-    const newTags = [...new Set([...tags, ...autoTags])].slice(0, maxTags);
+    const newTags = [...new Set([...safeTags, ...autoTags])].slice(0, maxTags);
     onTagsChange(newTags);
   };
 
@@ -78,14 +96,14 @@ const TagInput = ({
       </View>
 
       {/* Current Tags */}
-      {tags.length > 0 && (
+      {safeTags.length > 0 && (
         <ScrollView 
           horizontal 
           showsHorizontalScrollIndicator={false}
           style={styles.tagsContainer}
           contentContainerStyle={styles.tagsContent}
         >
-          {tags.map((tag, index) => (
+          {safeTags.map((tag, index) => (
             <View key={index} style={styles.tag}>
               <Text style={styles.tagText}>{tag}</Text>
               <TouchableOpacity
@@ -148,7 +166,7 @@ const TagInput = ({
 
       {/* Helper Text */}
       <Text style={styles.helperText}>
-        {tags.length}/{maxTags} tags • Tags help customers find your products
+        {safeTags.length}/{maxTags} tags • Tags help customers find your products
       </Text>
     </View>
   );
@@ -193,7 +211,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: '#dbeafe',
     borderRadius: 16,
-    paddingHorizontal: 12,
+    paddingLeft: 12,
+    paddingRight: 6,
     paddingVertical: 6,
     marginRight: 8,
     borderWidth: 1,
@@ -203,21 +222,21 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#1e40af',
     fontWeight: '500',
-    marginRight: 4,
+    marginRight: 6,
   },
   removeTagButton: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
+    width: 20,
+    height: 20,
+    borderRadius: 10,
     backgroundColor: '#1e40af',
     justifyContent: 'center',
     alignItems: 'center',
   },
   removeTagText: {
-    fontSize: 12,
+    fontSize: 14,
     color: '#ffffff',
-    fontWeight: '600',
-    lineHeight: 12,
+    fontWeight: '700',
+    lineHeight: 16,
     textAlign: 'center',
   },
   inputContainer: {

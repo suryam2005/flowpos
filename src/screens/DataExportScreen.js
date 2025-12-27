@@ -14,18 +14,14 @@ import { colors } from '../styles/colors';
 import LoadingSpinner from '../components/LoadingSpinner';
 import csvExportService from '../services/CSVExportService';
 import Icon from '../components/SVGIcons';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
 
 const DataExportScreen = ({ navigation }) => {
   const [exportTypes, setExportTypes] = useState([]);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState(false);
 
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('DataExport');
-
   useEffect(() => {
+    // Load export types on mount
     loadExportTypes();
   }, []);
 
@@ -234,13 +230,6 @@ const DataExportScreen = ({ navigation }) => {
 
       {/* Loading Overlay */}
       {exporting && <LoadingSpinner />}
-
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
-        visible={showTour}
-        onComplete={completeTour}
-        currentScreen="DataExport"
-      />
     </SafeAreaView>
   );
 };

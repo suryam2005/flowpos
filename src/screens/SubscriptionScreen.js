@@ -16,20 +16,21 @@ import { getDeviceInfo } from '../utils/deviceUtils';
 import { safeGoBack } from '../utils/navigationUtils';
 import { colors } from '../styles/colors';
 import { useAuth } from '../context/AuthContext';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
+import { apiCallWithFallback } from '../config/apiConfig';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import LoadingSpinner from '../components/LoadingSpinner';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
 
 const SubscriptionScreen = ({ navigation }) => {
-  const { user, refreshUserData, getUserSubscriptionPlan } = useAuth();
+  const { user, getUserSubscriptionPlan, updateUserData } = useAuth();
+  const { updateSubscriptionCache, refreshSubscription } = useSubscriptionContext();
   const [currentPlan, setCurrentPlan] = useState('free');
   const [usageStats, setUsageStats] = useState({});
   const [isLoading, setIsLoading] = useState(true);
+  const [isUpgrading, setIsUpgrading] = useState(false);
   const [showAllFeatures, setShowAllFeatures] = useState({});
+  const [trialInfo, setTrialInfo] = useState({ daysRemaining: 0, isExpired: false });
   const { isTablet } = getDeviceInfo();
-
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('Subscription');
 
   useEffect(() => {
     loadSubscriptionData();
@@ -38,12 +39,23 @@ const SubscriptionScreen = ({ navigation }) => {
   const loadSubscriptionData = async () => {
     setIsLoading(true);
     try {
-      // Get fresh user data from database
-      await refreshUserData();
-      
-      // Get current subscription plan from database
-      const dbPlan = await getUserSubscriptionPlan();
+      // Get current subscription plan from cached user data first
+      // Only refresh from database if needed (e.g., user explicitly requested)
+      const dbPlan = await getUserSubscriptionPlan(false); // Use cached data
       setCurrentPlan(dbPlan);
+      
+      // Calculate trial days remaining if on trial
+      if (dbPlan === 'trial' && user?.subscription_started_at) {
+        const startDate = new Date(user.subscription_started_at);
+        const now = new Date();
+        const trialEndDate = new Date(startDate.getTime() + 7 * 24 * 60 * 60 * 1000);
+        const remainingMs = trialEndDate.getTime() - now.getTime();
+        const daysRemaining = Math.max(0, Math.ceil(remainingMs / (24 * 60 * 60 * 1000)));
+        setTrialInfo({
+          daysRemaining,
+          isExpired: daysRemaining <= 0
+        });
+      }
       
       // Initialize feature service with real plan
       await featureService.initialize();
@@ -98,22 +110,97 @@ const SubscriptionScreen = ({ navigation }) => {
   };
 
   const handleUpgrade = (planType) => {
+    // Don't allow downgrade to expired_trial
+    if (planType === 'expired_trial') return;
+    
+    const planConfig = featureService.PLAN_CONFIGS[planType];
+    if (!planConfig) return;
+
     Alert.alert(
       'Upgrade Plan',
-      `Upgrade to ${featureService.PLAN_CONFIGS[planType].name} for ₹${featureService.PLAN_CONFIGS[planType].price}/month?`,
+      `Upgrade to ${planConfig.name} for ₹${planConfig.price}/month?`,
       [
         { text: 'Cancel', style: 'cancel' },
         {
           text: 'Upgrade Now',
-          onPress: () => {
-            // For demo purposes, simulate upgrade
-            featureService.upgradePlan(planType);
-            setCurrentPlan(planType);
-            loadSubscriptionData(); // Refresh data
+          onPress: async () => {
+            await performUpgrade(planType);
           }
         }
       ]
     );
+  };
+
+  const performUpgrade = async (planType) => {
+    setIsUpgrading(true);
+    try {
+      const token = await AsyncStorage.getItem('accessToken');
+      console.log('🔄 Upgrade attempt:', { planType, hasToken: !!token });
+      
+      if (!token) {
+        Alert.alert('Error', 'Please login again to upgrade your plan.');
+        setIsUpgrading(false);
+        return;
+      }
+
+      // Call backend to upgrade subscription
+      console.log('📡 Calling upgrade API...');
+      const response = await apiCallWithFallback('/subscription/upgrade', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ plan: planType })
+      });
+
+      console.log('📡 Response status:', response.status);
+      const data = await response.json();
+      console.log('📡 Response data:', data);
+
+      if (!response.ok || !data.success) {
+        throw new Error(data.message || 'Failed to upgrade subscription');
+      }
+
+      // Update local caches
+      // 1. Update SubscriptionContext cache
+      if (data.subscription) {
+        await updateSubscriptionCache(data.subscription);
+      }
+
+      // 2. Update user data in AuthContext
+      const updatedUserData = {
+        ...user,
+        subscription_plan: planType,
+        subscription_status: 'active'
+      };
+      await AsyncStorage.setItem('userData', JSON.stringify(updatedUserData));
+      if (updateUserData) {
+        updateUserData(updatedUserData);
+      }
+
+      // 3. Update FeatureService
+      await featureService.upgradePlan(planType);
+
+      // Update local state
+      setCurrentPlan(planType);
+
+      Alert.alert(
+        'Success! 🎉',
+        `You've been upgraded to ${featureService.PLAN_CONFIGS[planType].name}. Enjoy your new features!`,
+        [{ text: 'OK' }]
+      );
+
+    } catch (error) {
+      console.error('❌ Upgrade error:', error);
+      Alert.alert(
+        'Upgrade Failed',
+        error.message || 'Failed to upgrade subscription. Please try again.',
+        [{ text: 'OK' }]
+      );
+    } finally {
+      setIsUpgrading(false);
+    }
   };
 
   const getFeaturesToDisplay = (planType, planConfig) => {
@@ -436,9 +523,24 @@ const SubscriptionScreen = ({ navigation }) => {
             }
           </Text>
           {currentPlan === 'trial' && (
-            <Text style={styles.trialExpiryText}>
-              Upgrade anytime to unlock all features
-            </Text>
+            <View style={styles.trialInfoContainer}>
+              {trialInfo.isExpired ? (
+                <View style={styles.trialExpiredBadge}>
+                  <Ionicons name="warning" size={16} color={colors.error.main} />
+                  <Text style={styles.trialExpiredText}>Trial Expired - Upgrade to continue</Text>
+                </View>
+              ) : (
+                <View style={styles.trialDaysBadge}>
+                  <Ionicons name="time-outline" size={16} color={colors.warning.main} />
+                  <Text style={styles.trialDaysText}>
+                    {trialInfo.daysRemaining} day{trialInfo.daysRemaining !== 1 ? 's' : ''} remaining
+                  </Text>
+                </View>
+              )}
+              <Text style={styles.trialFeatureText}>
+                🎉 All features unlocked during trial!
+              </Text>
+            </View>
           )}
         </View>
 
@@ -452,11 +554,21 @@ const SubscriptionScreen = ({ navigation }) => {
           </ResponsiveText>
           
           <View style={styles.plansGrid}>
-            {Object.entries(featureService.PLAN_CONFIGS).map(([planType, planConfig]) =>
-              renderPlanCard(planType, planConfig)
-            )}
+            {Object.entries(featureService.PLAN_CONFIGS)
+              .filter(([planType]) => planType !== 'expired_trial') // Don't show expired_trial in list
+              .map(([planType, planConfig]) =>
+                renderPlanCard(planType, planConfig)
+              )}
           </View>
         </View>
+
+        {/* Upgrading Overlay */}
+        {isUpgrading && (
+          <View style={styles.upgradingOverlay}>
+            <LoadingSpinner />
+            <Text style={styles.upgradingText}>Upgrading your plan...</Text>
+          </View>
+        )}
 
         {/* Benefits */}
         <View style={styles.benefitsContainer}>
@@ -503,13 +615,6 @@ const SubscriptionScreen = ({ navigation }) => {
           </TouchableOpacity>
         </View>
       </ScrollView>
-
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
-        visible={showTour}
-        onComplete={completeTour}
-        currentScreen="Subscription"
-      />
     </SafeAreaView>
   );
 };
@@ -593,6 +698,44 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginTop: 4,
     textAlign: 'center',
+  },
+  trialInfoContainer: {
+    marginTop: 12,
+    alignItems: 'center',
+    gap: 8,
+  },
+  trialDaysBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.warning.background,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  trialDaysText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.warning.main,
+  },
+  trialExpiredBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: colors.error.background,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    gap: 6,
+  },
+  trialExpiredText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.error.main,
+  },
+  trialFeatureText: {
+    fontSize: 12,
+    color: colors.success.main,
+    fontWeight: '500',
   },
   usageContainer: {
     backgroundColor: colors.background.surface,
@@ -877,6 +1020,23 @@ const styles = StyleSheet.create({
   seeMoreText: {
     fontSize: 14,
     color: colors.primary.main,
+    fontWeight: '500',
+  },
+  upgradingOverlay: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(255, 255, 255, 0.9)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  upgradingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: colors.text.primary,
     fontWeight: '500',
   },
 });

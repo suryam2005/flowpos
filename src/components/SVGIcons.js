@@ -787,6 +787,182 @@ const SVGIcons = {
         }} />
       </View>
     </View>
+  ),
+
+  // Location/Address icon
+  LocationIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Location pin shape */}
+      <View style={{
+        width: size * 0.6,
+        height: size * 0.8,
+        borderRadius: size * 0.3,
+        borderBottomLeftRadius: 0,
+        borderBottomRightRadius: 0,
+        borderWidth: 1.5,
+        borderColor: color,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+        transform: [{ rotate: '45deg' }]
+      }}>
+        {/* Center dot */}
+        <View style={{
+          width: size * 0.2,
+          height: size * 0.2,
+          borderRadius: size * 0.1,
+          backgroundColor: color
+        }} />
+      </View>
+    </View>
+  ),
+
+  // Phone/Call icon
+  CallIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Phone handset */}
+      <View style={{
+        width: size * 0.7,
+        height: size * 0.8,
+        borderWidth: 1.5,
+        borderColor: color,
+        borderRadius: size * 0.15,
+        backgroundColor: 'transparent',
+        transform: [{ rotate: '15deg' }]
+      }}>
+        {/* Speaker (top) */}
+        <View style={{
+          width: size * 0.4,
+          height: size * 0.1,
+          backgroundColor: color,
+          borderRadius: size * 0.05,
+          alignSelf: 'center',
+          marginTop: size * 0.1
+        }} />
+        {/* Microphone (bottom) */}
+        <View style={{
+          width: size * 0.4,
+          height: size * 0.1,
+          backgroundColor: color,
+          borderRadius: size * 0.05,
+          alignSelf: 'center',
+          position: 'absolute',
+          bottom: size * 0.1,
+          left: size * 0.15
+        }} />
+      </View>
+    </View>
+  ),
+
+  // Email/Mail icon
+  MailIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Envelope body */}
+      <View style={{
+        width: size * 0.8,
+        height: size * 0.6,
+        borderWidth: 1.5,
+        borderColor: color,
+        borderRadius: 2,
+        backgroundColor: 'transparent'
+      }}>
+        {/* Envelope flap (top triangle) */}
+        <View style={{
+          position: 'absolute',
+          top: -1.5,
+          left: -1.5,
+          right: -1.5,
+          height: size * 0.3,
+          overflow: 'hidden'
+        }}>
+          <View style={{
+            width: 0,
+            height: 0,
+            borderLeftWidth: size * 0.4,
+            borderRightWidth: size * 0.4,
+            borderTopWidth: size * 0.25,
+            borderLeftColor: 'transparent',
+            borderRightColor: 'transparent',
+            borderTopColor: color,
+            alignSelf: 'center'
+          }} />
+        </View>
+      </View>
+    </View>
+  ),
+
+  // Document/GST icon (enhanced version)
+  DocumentTextIcon: ({ size = 20, color = '#000', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      <View style={{
+        width: size * 0.7,
+        height: size * 0.9,
+        borderWidth: 1.5,
+        borderColor: color,
+        borderRadius: 2,
+        backgroundColor: 'transparent',
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingVertical: size * 0.1
+      }}>
+        {/* Document lines */}
+        <View style={{
+          width: size * 0.5,
+          height: 1,
+          backgroundColor: color,
+          marginBottom: size * 0.08
+        }} />
+        <View style={{
+          width: size * 0.4,
+          height: 1,
+          backgroundColor: color,
+          marginBottom: size * 0.08
+        }} />
+        <View style={{
+          width: size * 0.45,
+          height: 1,
+          backgroundColor: color,
+          marginBottom: size * 0.08
+        }} />
+        <View style={{
+          width: size * 0.35,
+          height: 1,
+          backgroundColor: color
+        }} />
+      </View>
+      {/* Corner fold */}
+      <View style={{
+        position: 'absolute',
+        top: size * 0.05,
+        right: size * 0.15,
+        width: 0,
+        height: 0,
+        borderLeftWidth: size * 0.12,
+        borderBottomWidth: size * 0.12,
+        borderLeftColor: 'transparent',
+        borderBottomColor: color
+      }} />
+    </View>
   )
 };
 
@@ -813,6 +989,10 @@ const Icon = ({ name, size = 20, color = '#000', style }) => {
     'calendar-outline': SVGIcons.CalendarIcon,
     'currency-outline': SVGIcons.CurrencyIcon,
     'users-outline': SVGIcons.UsersIcon,
+    'location-outline': SVGIcons.LocationIcon,
+    'call-outline': SVGIcons.CallIcon,
+    'mail-outline': SVGIcons.MailIcon,
+    'document-text-outline': SVGIcons.DocumentTextIcon,
     // Updated icons using standardized SVG components
     'cash-outline': ({ size, color, style }) => <CashIcon size={size} color={color} style={style} />,
     'card-outline': ({ size, color, style }) => <CreditCardIcon size={size} color={color} style={style} />,

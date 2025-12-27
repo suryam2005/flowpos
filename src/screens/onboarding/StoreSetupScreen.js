@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import CustomAlert from '../../components/CustomAlert';
 import { colors, componentColors } from '../../styles/colors';
 import { createButtonStyle, createButtonTextStyle, createCardStyle, createInputStyle } from '../../styles/theme';
+import { getCurrencySymbol, getSupportedCurrencies } from '../../utils/currencyUtils';
 
 const StoreSetupScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -37,7 +38,6 @@ const StoreSetupScreen = ({ navigation }) => {
     gstNumber: '',
     gstPercentage: '',
     currency: 'INR',
-    currencySymbol: '₹',
 
     // Step 3: Payment Setup
     upiId: '',
@@ -83,12 +83,8 @@ const StoreSetupScreen = ({ navigation }) => {
     'Other',
   ];
 
-  const currencies = [
-    { code: 'INR', symbol: '₹', name: 'Indian Rupee' },
-    { code: 'USD', symbol: '$', name: 'US Dollar' },
-    { code: 'EUR', symbol: '€', name: 'Euro' },
-    { code: 'GBP', symbol: '£', name: 'British Pound' },
-  ];
+  // Use centralized currency utility
+  const currencies = getSupportedCurrencies();
 
   const validateStep = (stepIndex) => {
     const step = steps[stepIndex];
@@ -206,7 +202,6 @@ const StoreSetupScreen = ({ navigation }) => {
         upiId3: storeData.upiId3,
         paymentMethods: storeData.paymentMethods,
         currency: storeData.currency,
-        currencySymbol: storeData.currencySymbol,
         timezone: storeData.timezone,
         setupCompleted: true,
         setupDate: new Date().toISOString(),
@@ -346,7 +341,6 @@ const StoreSetupScreen = ({ navigation }) => {
                     ]}
                     onPress={() => {
                       updateStoreData('currency', currency.code);
-                      updateStoreData('currencySymbol', currency.symbol);
                     }}
                     activeOpacity={0.8}
                   >
@@ -422,7 +416,6 @@ const StoreSetupScreen = ({ navigation }) => {
               <View style={styles.paymentMethodsGrid}>
                 {[
                   { id: 'Cash', label: 'Cash', icon: 'cash-outline' },
-                  { id: 'Card', label: 'Card', icon: 'card-outline' },
                   { id: 'QR Pay', label: 'UPI/QR Pay', icon: 'qr-code-outline' },
                 ].map((method) => (
                   <TouchableOpacity
@@ -450,7 +443,7 @@ const StoreSetupScreen = ({ navigation }) => {
                     }}
                     activeOpacity={0.8}
                   >
-                    <Ionicons name={method.icon} size={24} color={paymentMethods.includes(method.id) ? colors.primary.main : colors.text.secondary} />
+                    <Ionicons name={method.icon} size={24} color={storeData.paymentMethods.includes(method.id) ? colors.primary.main : colors.text.secondary} />
                     <Text style={[
                       styles.paymentMethodText,
                       storeData.paymentMethods.includes(method.id) && styles.paymentMethodTextSelected
@@ -537,7 +530,7 @@ const StoreSetupScreen = ({ navigation }) => {
               </View>
               <View style={styles.summaryItem}>
                 <Text style={styles.summaryLabel}>Currency:</Text>
-                <Text style={styles.summaryValue}>{storeData.currencySymbol} {storeData.currency}</Text>
+                <Text style={styles.summaryValue}>{getCurrencySymbol(storeData.currency)} {storeData.currency}</Text>
               </View>
               {storeData.gstNumber && (
                 <View style={styles.summaryItem}>

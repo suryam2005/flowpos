@@ -1,80 +1,89 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export const useAppTour = (screenName) => {
   const [showTour, setShowTour] = useState(false);
   const [isFirstTime, setIsFirstTime] = useState(false);
 
-  useEffect(() => {
-    checkTourStatus();
-  }, [screenName]);
-
-  const checkTourStatus = async () => {
+  const checkTourStatus = useCallback(async () => {
     try {
-      // Check if user has globally skipped all tours
-      const tourSkippedGlobally = await AsyncStorage.getItem('tourSkippedGlobally');
-      if (tourSkippedGlobally) {
-        console.log(`🎯 [${screenName}] Tours globally skipped - not showing tour`);
-        return;
-      }
-
       // Check if user has completed onboarding
       const hasCompletedOnboarding = await AsyncStorage.getItem('hasCompletedOnboarding');
       console.log(`🎯 [${screenName}] Tour check - hasCompletedOnboarding:`, hasCompletedOnboarding);
       
       if (!hasCompletedOnboarding) {
         console.log(`🎯 [${screenName}] Tour blocked - onboarding not completed`);
-        return; // Don't show tour until onboarding is complete
+        return;
       }
 
-      // Check if we're continuing a tour from another screen
+      // Check if user has already seen the app tour (skip for returning users)
+      const hasSeenAppTour = await AsyncStorage.getItem('hasSeenAppTour');
+      console.log(`🎯 [${screenName}] hasSeenAppTour:`, hasSeenAppTour);
+      
+      // If user has already seen the tour, don't show it again (unless continuing from another screen)
+      if (hasSeenAppTour === 'true') {
+        // Check if we're continuing a tour from another screen
+        const continueTourTo = await AsyncStorage.getItem('continueTourTo');
+        if (continueTourTo === screenName) {
+          console.log(`🎯 [${screenName}] Continuing tour from previous screen`);
+          await AsyncStorage.removeItem('continueTourTo');
+          setIsFirstTime(false);
+          
+          // Start tour after screen is ready
+          setTimeout(() => {
+            console.log(`🎯 [${screenName}] Starting continued tour now!`);
+            setShowTour(true);
+          }, 1000);
+        } else {
+          console.log(`🎯 [${screenName}] Tour already seen - skipping`);
+        }
+        return;
+      }
+
+      // NEW USER: Check if we're continuing a tour from another screen
       const continueTourTo = await AsyncStorage.getItem('continueTourTo');
       if (continueTourTo === screenName) {
         console.log(`🎯 [${screenName}] Continuing tour from previous screen`);
         await AsyncStorage.removeItem('continueTourTo');
-        setIsFirstTime(false);
+        setIsFirstTime(true);
+        
+        // Start tour after screen is ready
         setTimeout(() => {
           console.log(`🎯 [${screenName}] Starting continued tour now!`);
           setShowTour(true);
-        }, 800);
+        }, 1000);
         return;
       }
 
-      // Check if user has seen the overall app tour
-      const hasSeenAppTour = await AsyncStorage.getItem('hasSeenAppTour');
-      console.log(`🎯 [${screenName}] hasSeenAppTour:`, hasSeenAppTour);
-      
-      // Check if user has seen tour for this specific screen
-      const completedTours = await AsyncStorage.getItem('completedTours');
-      const tours = completedTours ? JSON.parse(completedTours) : {};
-      console.log(`🎯 [${screenName}] completedTours:`, tours);
-      
-      // Show tour if:
-      // 1. User hasn't seen any app tour yet, OR
-      // 2. User hasn't seen tour for this specific screen
-      const shouldShowTour = !hasSeenAppTour || !tours[screenName];
-      console.log(`🎯 [${screenName}] shouldShowTour:`, shouldShowTour);
-      
-      if (shouldShowTour) {
-        setIsFirstTime(!hasSeenAppTour);
-        console.log(`🎯 [${screenName}] Starting tour in 1.5 seconds...`);
-        // Small delay to ensure screen is fully loaded
+      // NEW USER: Show tour for first time
+      // Only show tour on POS screen for new users (entry point)
+      if (screenName === 'POS') {
+        setIsFirstTime(true);
+        console.log(`🎯 [${screenName}] New user detected - starting tour in 1.5 seconds...`);
+        
+        // Delay to ensure screen is fully loaded
         setTimeout(() => {
           console.log(`🎯 [${screenName}] Tour starting now!`);
           setShowTour(true);
         }, 1500);
+      } else {
+        console.log(`🎯 [${screenName}] Not POS screen - waiting for tour continuation`);
       }
     } catch (error) {
       console.error('Error checking tour status:', error);
     }
-  };
+  }, [screenName]);
 
-  const startTour = () => {
+  useEffect(() => {
+    checkTourStatus();
+  }, [checkTourStatus]);
+
+  const startTour = useCallback(() => {
     console.log(`🎯 [${screenName}] startTour called - showing tour`);
     setShowTour(true);
-  };
+  }, [screenName]);
 
-  const completeTour = async () => {
+  const completeTour = useCallback(async () => {
     try {
       setShowTour(false);
       
@@ -84,63 +93,55 @@ export const useAppTour = (screenName) => {
       tours[screenName] = true;
       await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
       
-      // If this is the first tour, mark app tour as seen
-      if (isFirstTime) {
-        await AsyncStorage.setItem('hasSeenAppTour', 'true');
-      }
+      // Mark app tour as seen
+      await AsyncStorage.setItem('hasSeenAppTour', 'true');
       
       console.log(`🎯 [${screenName}] Tour completed and saved`);
     } catch (error) {
       console.error('Error completing tour:', error);
     }
-  };
+  }, [screenName]);
 
-  const skipAllTours = async () => {
+  const skipAllTours = useCallback(async () => {
     try {
-      console.log(`🎯 [${screenName}] skipAllTours called - marking all tours as completed`);
+      console.log(`🎯 [${screenName}] skipAllTours called`);
       
       // Mark overall app tour as seen
       await AsyncStorage.setItem('hasSeenAppTour', 'true');
       
-      // Mark all screen tours as completed (core features only)
-      const allScreens = [
-        'POS', 'Cart', 'Manage', 'Orders', 'Analytics', 'Settings', 
-        'WhatsAppSetup', 'PerformanceInsights', 'StorageManagement',
-        'AdvancedAnalytics', 'DataExport', 'PDFReports', 'Subscription'
-      ];
-      const tours = {};
-      allScreens.forEach(screen => {
-        tours[screen] = true;
-      });
-      await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
+      // Clear any pending tour continuation
+      await AsyncStorage.removeItem('continueTourTo');
       
-      // Also set a global skip flag
-      await AsyncStorage.setItem('tourSkippedGlobally', 'true');
+      // Mark this screen's tour as completed
+      const completedTours = await AsyncStorage.getItem('completedTours');
+      const tours = completedTours ? JSON.parse(completedTours) : {};
+      tours[screenName] = true;
+      await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
       
       // Hide current tour
       setShowTour(false);
       
-      console.log(`🎯 [${screenName}] All tours skipped successfully`);
+      console.log(`🎯 [${screenName}] Tour skipped - all tours marked as seen`);
     } catch (error) {
-      console.error('Error skipping tours:', error);
+      console.error('Error skipping tour:', error);
     }
-  };
+  }, [screenName]);
 
-  const resetTours = async () => {
+  const resetTours = useCallback(async () => {
     try {
       console.log(`🎯 [${screenName}] resetTours called - clearing all tour data`);
       
       await AsyncStorage.multiRemove([
         'hasSeenAppTour',
         'completedTours', 
-        'tourSkippedGlobally'
+        'continueTourTo'
       ]);
       
       console.log(`🎯 [${screenName}] All tour data cleared`);
     } catch (error) {
       console.error('Error resetting tours:', error);
     }
-  };
+  }, [screenName]);
 
   return {
     showTour,

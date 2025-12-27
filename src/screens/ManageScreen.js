@@ -35,13 +35,15 @@ import { buttonStyles } from '../styles/buttonStyles';
 import { typography } from '../styles/typographyStyles';
 import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import { getProductImageUrl } from '../utils/imageUtils';
 import { useDataSync } from '../context/DataSyncContext';
 
 
 const ManageScreen = ({ navigation, route }) => {
   const { theme } = useTheme();
-  const { user, isAuthenticated, getStore } = useAuth();
+  const { user, isAuthenticated } = useAuth();
+  const { storeSettings, getStoreProfile } = useStoreSettings();
   const { fetchFreshData, subscribe, products: syncedProducts } = useDataSync();
   const [products, setProducts] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
@@ -58,7 +60,12 @@ const ManageScreen = ({ navigation, route }) => {
   const [activeTab, setActiveTab] = useState('Products');
   
   // App tour guide
-  const { showTour, completeTour } = useAppTour('Manage');
+  const { showTour, completeTour, startTour } = useAppTour('Manage');
+  
+  // Tour refs for dynamic positioning
+  const headerRef = useRef(null);
+  const tabBarRef = useRef(null);
+  const contentAreaRef = useRef(null);
 
   // Note: Back prevention not needed for ManageScreen as modal handles its own navigation
   // The LoadingOverlay already prevents interaction during save operations
@@ -127,14 +134,22 @@ const ManageScreen = ({ navigation, route }) => {
       // Clear the param to prevent re-triggering
       navigation.setParams({ openAddModal: undefined });
     }
-  }, [route?.params, navigation, handleAddProduct]);
+    // Handle tour trigger from route params (when navigating from POS empty state)
+    if (route?.params?.startTour) {
+      console.log('🎯 [ManageScreen] Tour trigger received from route params');
+      setTimeout(() => {
+        startTour();
+      }, 1500);
+      navigation.setParams({ startTour: undefined });
+    }
+  }, [route?.params, navigation, handleAddProduct, startTour]);
 
   // Trigger DataSync refresh when modal closes (product updated)
   useEffect(() => {
     if (!modalVisible) {
       // Delay slightly to ensure state is updated
       setTimeout(() => {
-        console.log('🔄 Modal closed - triggering DataSync refresh');
+        // console.log('🔄 Modal closed - triggering DataSync refresh');
         fetchFreshData(true); // Force refresh
       }, 200);
     }
@@ -213,12 +228,14 @@ const ManageScreen = ({ navigation, route }) => {
       // Also save to AsyncStorage for compatibility
       await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
       
-      // Check store setup via backend API
-      const storeData = await getStore();
-      if (storeData) {
+      // Check store setup via StoreSettingsContext (migrated from getStore())
+      const storeProfile = getStoreProfile();
+      const hasStoreSetup = storeProfile && storeProfile.store_name && storeProfile.store_name.trim() !== '';
+      
+      if (hasStoreSetup) {
         setStoreSetupCompleted(true);
-        setStoreInfo(storeData);
-        console.log('✅ Store setup completed, store data loaded:', storeData.store_name);
+        setStoreInfo(storeProfile);
+        console.log('✅ Store setup completed, store data loaded from context:', storeProfile.store_name);
       } else {
         setStoreSetupCompleted(false);
         setStoreInfo(null);
@@ -278,11 +295,12 @@ const ManageScreen = ({ navigation, route }) => {
       return; // Feature service will show upgrade prompt
     }
 
-    // Check if store setup is completed via backend
+    // Check if store setup is completed via StoreSettingsContext (migrated from getStore())
     try {
-      const storeData = await getStore();
+      const storeProfile = getStoreProfile();
+      const hasStoreSetup = storeProfile && storeProfile.store_name && storeProfile.store_name.trim() !== '';
       
-      if (!storeData) {
+      if (!hasStoreSetup) {
         Alert.alert(
           'Store Setup Required',
           'Please complete your store setup with business details before adding products. This helps create professional receipts and manage your business properly.',
@@ -392,16 +410,47 @@ const ManageScreen = ({ navigation, route }) => {
     // Enhanced validation
     if (!formData.name.trim()) {
       Alert.alert('Validation Error', 'Product name is required.');
+      setSaving(false);
       return;
     }
 
     if (formData.name.trim().length < 2) {
       Alert.alert('Validation Error', 'Product name must be at least 2 characters long.');
+      setSaving(false);
+      return;
+    }
+
+    // Check for duplicate product name (case-insensitive)
+    // Fetch fresh products list to ensure we have the latest data
+    let currentProducts = products;
+    try {
+      const freshProducts = await productsService.getProducts();
+      if (freshProducts && freshProducts.length > 0) {
+        currentProducts = freshProducts;
+      }
+    } catch (err) {
+      console.log('Using cached products for duplicate check');
+    }
+    
+    const productNameLower = formData.name.trim().toLowerCase();
+    const duplicateProduct = currentProducts.find(p => {
+      const isSameName = p.name && p.name.toLowerCase() === productNameLower;
+      const isDifferentProduct = !editingProduct || p.id !== editingProduct.id;
+      return isSameName && isDifferentProduct;
+    });
+    
+    if (duplicateProduct) {
+      Alert.alert(
+        'Duplicate Product', 
+        `A product with the name "${formData.name.trim()}" already exists. Please use a different name.`
+      );
+      setSaving(false);
       return;
     }
 
     if (!formData.price) {
       Alert.alert('Validation Error', 'Product price is required.');
+      setSaving(false);
       return;
     }
 
@@ -410,6 +459,7 @@ const ManageScreen = ({ navigation, route }) => {
 
     if (isNaN(price) || price <= 0) {
       Alert.alert('Validation Error', 'Please enter a valid price (greater than 0).');
+      setSaving(false);
       return;
     }
 
@@ -417,19 +467,30 @@ const ManageScreen = ({ navigation, route }) => {
     if (formData.trackStock) {
       if (!formData.stock) {
         Alert.alert('Validation Error', 'Stock quantity is required when stock tracking is enabled.');
+        setSaving(false);
         return;
       }
       stock = parseInt(formData.stock);
       if (isNaN(stock) || stock < 0) {
         Alert.alert('Validation Error', 'Please enter a valid stock quantity (0 or greater).');
+        setSaving(false);
         return;
       }
     }
 
-    // Generate tags if none provided
+    // For NEW products only: auto-generate tags if none provided
+    // For EXISTING products: respect user's choice (even if they removed all tags)
     let finalTags = formData.tags;
-    if (finalTags.length === 0) {
+    console.log('🏷️ [MANAGE] Tags before save:');
+    console.log('  formData.tags:', JSON.stringify(formData.tags));
+    console.log('  isEditing:', !!editingProduct);
+    
+    if (!editingProduct && finalTags.length === 0) {
+      // Only auto-generate for NEW products with no tags
       finalTags = generateProductTags(formData.name.trim(), businessType);
+      console.log('  Auto-generated tags for new product:', JSON.stringify(finalTags));
+    } else {
+      console.log('  Using user-provided tags (no auto-generation):', JSON.stringify(finalTags));
     }
 
     try {
@@ -492,6 +553,8 @@ const ManageScreen = ({ navigation, route }) => {
         console.log('formData.trackStock:', formData.trackStock, 'Type:', typeof formData.trackStock);
         console.log('updateData.track_stock:', updateData.track_stock, 'Type:', typeof updateData.track_stock);
         console.log('updateData.image_url:', updateData.image_url);
+        console.log('🏷️ updateData.tags:', JSON.stringify(updateData.tags));
+        console.log('🏷️ updateData.tags.length:', updateData.tags?.length);
         console.log('Full updateData:', JSON.stringify(updateData, null, 2));
         
         console.log('🟡 CALLING productsService.updateProduct...');
@@ -650,14 +713,14 @@ const ManageScreen = ({ navigation, route }) => {
   );
 };
 
-  // Load business type from store info
+  // Load business type from store settings context
   useEffect(() => {
-    const loadBusinessType = async () => {
+    const loadBusinessType = () => {
       try {
-        const storeData = await AsyncStorage.getItem('storeInfo');
-        if (storeData) {
-          const store = JSON.parse(storeData);
-          setBusinessType(store.businessType || 'restaurant');
+        // Get business type from StoreSettingsContext
+        const storeProfile = getStoreProfile();
+        if (storeProfile.business_type) {
+          setBusinessType(storeProfile.business_type);
         }
       } catch (error) {
         console.error('Error loading business type:', error);
@@ -665,7 +728,7 @@ const ManageScreen = ({ navigation, route }) => {
     };
     
     loadBusinessType();
-  }, []);
+  }, [getStoreProfile]);
 
   const handleDevClearData = () => {
     Alert.alert(
@@ -729,7 +792,7 @@ const ManageScreen = ({ navigation, route }) => {
       {(saving || isLoading) && <LoadingSpinner />}
       
       <View style={styles.content}>
-        <View style={styles.header}>
+        <View style={styles.header} ref={headerRef}>
           <TouchableOpacity
             style={styles.titleContainer}
             onLongPress={handleDevClearData}
@@ -762,7 +825,7 @@ const ManageScreen = ({ navigation, route }) => {
         </View>
       </View>
 
-      <View style={styles.tabBar}>
+      <View style={styles.tabBar} ref={tabBarRef}>
         {tabs.map((tab) => (
           <TouchableOpacity
             key={tab}
@@ -790,7 +853,7 @@ const ManageScreen = ({ navigation, route }) => {
 
       {activeTab === 'Products' && (
         <>
-          <View style={styles.productsHeader}>
+          <View style={styles.productsHeader} ref={contentAreaRef}>
             <View style={styles.productsHeaderLeft}>
               <Text style={styles.productsTitle}>Products</Text>
               {!storeSetupCompleted && (
@@ -956,7 +1019,7 @@ const ManageScreen = ({ navigation, route }) => {
                 {/* Product Image */}
                 <ProductImagePicker
                   image={formData.image}
-                  onImageChange={(image) => setFormData({ ...formData, image })}
+                  onImageChange={(image) => setFormData(prev => ({ ...prev, image }))}
                   productName={formData.name}
                   productId={editingProduct?.id || 'new'}
                   userId={user?.id || userInfo?.id}
@@ -966,7 +1029,12 @@ const ManageScreen = ({ navigation, route }) => {
                 {/* Product Tags */}
                 <TagInput
                   tags={formData.tags}
-                  onTagsChange={(tags) => setFormData({ ...formData, tags })}
+                  onTagsChange={(newTags) => {
+                    console.log('🏷️ [MANAGE] TagInput onTagsChange called:');
+                    console.log('  newTags:', JSON.stringify(newTags));
+                    console.log('  newTags.length:', newTags.length);
+                    setFormData(prev => ({ ...prev, tags: newTags }));
+                  }}
                   productName={formData.name}
                   businessType={businessType}
                 />
@@ -993,6 +1061,12 @@ const ManageScreen = ({ navigation, route }) => {
         visible={showTour}
         currentScreen="Manage"
         onComplete={completeTour}
+        navigation={navigation}
+        tourRefs={{
+          header: headerRef,
+          tabBar: tabBarRef,
+          contentArea: contentAreaRef,
+        }}
       />
 
       </View>

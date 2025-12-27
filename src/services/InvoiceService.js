@@ -9,11 +9,13 @@ import * as Print from 'expo-print';
 import * as Sharing from 'expo-sharing';
 import * as FileSystem from 'expo-file-system';
 import GSTService from './GSTService';
+import { getAppSettingFromCache } from '../context/AppSettingsContext';
+import { getStoreSettingsFromCache, getReceiptSettingsFromCache } from '../context/StoreSettingsContext';
 
 class InvoiceService {
   constructor() {
     this.cache = new Map();
-    this.cacheExpiry = 5 * 60 * 1000; // 5 minutes
+    this.cacheExpiry = 30 * 1000; // 30 seconds - reduced to ensure fresh settings
     this.initializeGST();
   }
 
@@ -113,19 +115,33 @@ class InvoiceService {
   }
 
   /**
-   * Load and cache store information
+   * Load store information
+   * Reads from StoreSettingsContext cache (single source of truth)
+   * 
+   * NOTE: Internal caching removed - context already handles caching
+   * This ensures settings changes are reflected immediately
    */
   async getStoreInformation() {
-    const cacheKey = 'store_info';
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
     try {
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
+      // Read from StoreSettingsContext cache (single source of truth)
+      const cachedStoreSettings = getStoreSettingsFromCache();
       
-      this.setCachedData(cacheKey, parsedStoreInfo);
-      return parsedStoreInfo;
+      // Build store info from context cache
+      // Returns empty values if context not yet initialized (will be populated after login)
+      const storeInfo = {
+        store_name: cachedStoreSettings?.store_name || '',
+        store_address: cachedStoreSettings?.store_address || '',
+        store_phone: '', // Auth-bound, not in StoreSettingsContext
+        store_email: '', // Auth-bound, not in StoreSettingsContext
+        gst_number: cachedStoreSettings?.gst_number || '',
+        currency: cachedStoreSettings?.currency || 'INR',
+        upi_id: cachedStoreSettings?.upi_id || '',
+        upi_id_2: cachedStoreSettings?.upi_id_2 || '',
+        upi_id_3: cachedStoreSettings?.upi_id_3 || ''
+      };
+      
+      console.log('📄 [InvoiceService] Store info read from StoreSettingsContext cache');
+      return storeInfo;
     } catch (error) {
       console.error('❌ [InvoiceService] Error loading store info:', error);
       return {};
@@ -134,30 +150,41 @@ class InvoiceService {
 
   /**
    * Load and cache receipt settings
+   * Uses getReceiptSettingsFromCache() for receipt display settings with proper boolean handling,
+   * and AppSettingsContext cache for showStoreNameOnInvoice
+   * 
+   * NOTE: Internal caching removed for settings - context already handles caching
+   * This ensures settings changes are reflected immediately
    */
   async getReceiptSettings() {
-    const cacheKey = 'receipt_settings';
-    const cached = this.getCachedData(cacheKey);
-    if (cached) return cached;
-
     try {
-      // Load receipt display settings
-      const receiptSettings = await AsyncStorage.getItem('receiptSettings');
-      const parsedReceiptSettings = receiptSettings ? JSON.parse(receiptSettings) : {};
+      // Use getReceiptSettingsFromCache() which applies proper boolean handling
+      // CRITICAL: This function uses !== undefined checks for booleans (undefined !== false)
+      // Returns defaults with proper boolean handling even if context not registered yet
+      const receiptDisplaySettings = getReceiptSettingsFromCache();
+      console.log('📄 [InvoiceService] Receipt settings read using getReceiptSettingsFromCache()');
 
-      // Load store name display setting
-      const showStoreNameSetting = await AsyncStorage.getItem('showStoreNameOnInvoice');
-      const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
+      // Read showStoreNameOnInvoice from AppSettingsContext cache first
+      // Falls back to AsyncStorage if cache is unavailable (backward compatibility)
+      let showStoreName;
+      const cachedShowStoreName = getAppSettingFromCache('showStoreNameOnInvoice');
+      
+      if (cachedShowStoreName !== undefined) {
+        // Use cached value from AppSettingsContext
+        showStoreName = cachedShowStoreName;
+        console.log('📄 [InvoiceService] showStoreNameOnInvoice read from cache:', showStoreName);
+      } else {
+        // Fallback to AsyncStorage if cache unavailable
+        const showStoreNameSetting = await AsyncStorage.getItem('showStoreNameOnInvoice');
+        showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
+        console.log('📄 [InvoiceService] showStoreNameOnInvoice fallback to AsyncStorage:', showStoreName);
+      }
 
       const settings = {
-        showAddress: parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true,
-        showPhone: parsedReceiptSettings.showPhone !== undefined ? parsedReceiptSettings.showPhone : true,
-        showEmail: parsedReceiptSettings.showEmail !== undefined ? parsedReceiptSettings.showEmail : false,
-        showGST: parsedReceiptSettings.showGST !== undefined ? parsedReceiptSettings.showGST : true,
+        ...receiptDisplaySettings,
         showStoreName
       };
 
-      this.setCachedData(cacheKey, settings);
       return settings;
     } catch (error) {
       console.error('❌ [InvoiceService] Error loading receipt settings:', error);
@@ -168,6 +195,66 @@ class InvoiceService {
         showGST: true,
         showStoreName: true
       };
+    }
+  }
+
+  /**
+   * Check if invoice sending is enabled
+   * Reads sendInvoiceEnabled from AppSettingsContext cache first,
+   * with fallback to AsyncStorage for backward compatibility
+   * 
+   * @returns {Promise<boolean>} Whether invoice sending is enabled
+   */
+  async isSendInvoiceEnabled() {
+    try {
+      // Read sendInvoiceEnabled from AppSettingsContext cache first
+      const cachedSendInvoiceEnabled = getAppSettingFromCache('sendInvoiceEnabled');
+      
+      if (cachedSendInvoiceEnabled !== undefined) {
+        // Use cached value from AppSettingsContext
+        console.log('📄 [InvoiceService] sendInvoiceEnabled read from cache:', cachedSendInvoiceEnabled);
+        return cachedSendInvoiceEnabled;
+      }
+      
+      // Fallback to AsyncStorage if cache unavailable (backward compatibility)
+      const sendInvoiceEnabledSetting = await AsyncStorage.getItem('sendInvoiceEnabled');
+      const sendInvoiceEnabled = sendInvoiceEnabledSetting !== null ? JSON.parse(sendInvoiceEnabledSetting) : true;
+      console.log('📄 [InvoiceService] sendInvoiceEnabled fallback to AsyncStorage:', sendInvoiceEnabled);
+      return sendInvoiceEnabled;
+    } catch (error) {
+      console.error('❌ [InvoiceService] Error reading sendInvoiceEnabled:', error);
+      // Return true as default to maintain existing behavior if setting unavailable
+      return true;
+    }
+  }
+
+  /**
+   * Get the WhatsApp method setting
+   * Reads whatsappMethod from AppSettingsContext cache first,
+   * with fallback to AsyncStorage for backward compatibility
+   * 
+   * @returns {Promise<string>} The WhatsApp method ('flowpos' or 'device')
+   */
+  async getWhatsAppMethod() {
+    try {
+      // Read whatsappMethod from AppSettingsContext cache first
+      const cachedWhatsappMethod = getAppSettingFromCache('whatsappMethod');
+      
+      if (cachedWhatsappMethod !== undefined) {
+        // Use cached value from AppSettingsContext
+        console.log('📄 [InvoiceService] whatsappMethod read from cache:', cachedWhatsappMethod);
+        return cachedWhatsappMethod;
+      }
+      
+      // Fallback to AsyncStorage if cache unavailable (backward compatibility)
+      const whatsappMethodSetting = await AsyncStorage.getItem('whatsappMethod');
+      const whatsappMethod = whatsappMethodSetting !== null ? whatsappMethodSetting : 'flowpos';
+      console.log('📄 [InvoiceService] whatsappMethod fallback to AsyncStorage:', whatsappMethod);
+      return whatsappMethod;
+    } catch (error) {
+      console.error('❌ [InvoiceService] Error reading whatsappMethod:', error);
+      // Return 'flowpos' as default to maintain existing behavior if setting unavailable
+      return 'flowpos';
     }
   }
 

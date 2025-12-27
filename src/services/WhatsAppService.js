@@ -1,6 +1,8 @@
 import { Linking } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '../config/apiConfig';
+import { getStoreSettingsFromCache, getReceiptSettingsFromCache, getStoreProfileFromCache } from '../context/StoreSettingsContext';
+import { getAppSettingFromCache } from '../context/AppSettingsContext';
 
 class WhatsAppService {
   constructor() {
@@ -11,13 +13,29 @@ class WhatsAppService {
 
   async loadSettings() {
     try {
-      const [method, sendEnabled] = await Promise.all([
-        AsyncStorage.getItem('whatsappMethod'),
-        AsyncStorage.getItem('sendInvoiceEnabled')
-      ]);
+      // Read from AppSettingsContext cache first (single source of truth)
+      const cachedMethod = getAppSettingFromCache('whatsappMethod');
+      const cachedSendEnabled = getAppSettingFromCache('sendInvoiceEnabled');
       
-      this.whatsappMethod = method || 'flowpos'; // Default to FlowPOS
-      this.sendInvoiceEnabled = sendEnabled !== null ? JSON.parse(sendEnabled) : true; // Default enabled
+      if (cachedMethod !== undefined) {
+        this.whatsappMethod = cachedMethod;
+        console.log('📱 [WhatsAppService] whatsappMethod read from cache:', cachedMethod);
+      } else {
+        // Fallback to AsyncStorage if cache unavailable
+        const method = await AsyncStorage.getItem('whatsappMethod');
+        this.whatsappMethod = method || 'flowpos';
+        console.log('📱 [WhatsAppService] whatsappMethod fallback to AsyncStorage:', this.whatsappMethod);
+      }
+      
+      if (cachedSendEnabled !== undefined) {
+        this.sendInvoiceEnabled = cachedSendEnabled;
+        console.log('📱 [WhatsAppService] sendInvoiceEnabled read from cache:', cachedSendEnabled);
+      } else {
+        // Fallback to AsyncStorage if cache unavailable
+        const sendEnabled = await AsyncStorage.getItem('sendInvoiceEnabled');
+        this.sendInvoiceEnabled = sendEnabled !== null ? JSON.parse(sendEnabled) : true;
+        console.log('📱 [WhatsAppService] sendInvoiceEnabled fallback to AsyncStorage:', this.sendInvoiceEnabled);
+      }
     } catch (error) {
       console.error('Error loading WhatsApp settings:', error);
     }
@@ -25,30 +43,37 @@ class WhatsAppService {
 
   async setWhatsAppMethod(method) {
     this.whatsappMethod = method;
+    // Also update AsyncStorage for backward compatibility
     await AsyncStorage.setItem('whatsappMethod', method);
   }
 
   async setSendInvoiceEnabled(enabled) {
     this.sendInvoiceEnabled = enabled;
+    // Also update AsyncStorage for backward compatibility
     await AsyncStorage.setItem('sendInvoiceEnabled', JSON.stringify(enabled));
   }
 
   getSendInvoiceEnabled() {
+    // Always read fresh from cache
+    const cached = getAppSettingFromCache('sendInvoiceEnabled');
+    if (cached !== undefined) {
+      this.sendInvoiceEnabled = cached;
+    }
     return this.sendInvoiceEnabled;
   }
 
   getWhatsAppMethod() {
+    // Always read fresh from cache
+    const cached = getAppSettingFromCache('whatsappMethod');
+    if (cached !== undefined) {
+      this.whatsappMethod = cached;
+    }
     return this.whatsappMethod;
   }
 
   // Check if FlowPOS backend service is ready
   async isFlowPOSReady() {
     try {
-      // TWILIO INTEGRATION TEMPORARILY DISABLED
-      // Always return false until Twilio is configured
-      return false;
-      
-      /*
       const token = await AsyncStorage.getItem('userToken');
       if (!token) return false;
 
@@ -62,7 +87,6 @@ class WhatsAppService {
 
       const result = await response.json();
       return result.success && result.data.ready;
-      */
     } catch (error) {
       console.error('Error checking FlowPOS WhatsApp status:', error);
       return false;
@@ -77,33 +101,41 @@ class WhatsAppService {
     return true; // Device WhatsApp is always available
   }
 
-  // Send invoice via FlowPOS backend (Twilio) - COMMENTED OUT UNTIL CONFIGURED
+  // Send invoice via FlowPOS backend (Twilio) - WITH FALLBACK TO DEVICE
   async sendViaFlowPOS(phoneNumber, invoiceData) {
     try {
-      // TWILIO INTEGRATION TEMPORARILY DISABLED
-      // Uncomment and configure when Twilio is ready
-      /*
       const token = await AsyncStorage.getItem('userToken');
       if (!token) {
         throw new Error('User not authenticated');
       }
 
-      // Get user settings for backend to apply same logic as device WhatsApp
-      const [showStoreNameSetting, receiptSettings] = await Promise.all([
-        AsyncStorage.getItem('showStoreNameOnInvoice'),
-        AsyncStorage.getItem('receiptSettings')
-      ]);
+      // Get user settings from context caches with AsyncStorage fallback
+      // This ensures settings are read correctly even if context not fully initialized
+      let showStoreNameOnInvoice = getAppSettingFromCache('showStoreNameOnInvoice');
+      if (showStoreNameOnInvoice === undefined) {
+        const storedValue = await AsyncStorage.getItem('showStoreNameOnInvoice');
+        showStoreNameOnInvoice = storedValue !== null ? JSON.parse(storedValue) : true;
+      }
       
-      const parsedReceiptSettings = receiptSettings ? JSON.parse(receiptSettings) : {};
+      // Get receipt settings from context cache with fallback
+      let receiptSettings = getReceiptSettingsFromCache();
+      const storeSettingsFromCache = getStoreSettingsFromCache();
+      if (!storeSettingsFromCache) {
+        const storedReceiptSettings = await AsyncStorage.getItem('receiptSettings');
+        if (storedReceiptSettings) {
+          const parsed = JSON.parse(storedReceiptSettings);
+          receiptSettings = {
+            showAddress: parsed.showAddress !== undefined ? parsed.showAddress : true,
+            showPhone: parsed.showPhone !== undefined ? parsed.showPhone : true,
+            showEmail: parsed.showEmail !== undefined ? parsed.showEmail : false,
+            showGST: parsed.showGST !== undefined ? parsed.showGST : true
+          };
+        }
+      }
       
       const userSettings = {
-        showStoreNameOnInvoice: showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true,
-        receiptSettings: {
-          showAddress: parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true,
-          showPhone: parsedReceiptSettings.showPhone !== undefined ? parsedReceiptSettings.showPhone : true,
-          showEmail: parsedReceiptSettings.showEmail !== undefined ? parsedReceiptSettings.showEmail : false,
-          showGST: parsedReceiptSettings.showGST !== undefined ? parsedReceiptSettings.showGST : true
-        }
+        showStoreNameOnInvoice,
+        receiptSettings
       };
 
       console.log('📱 [WhatsAppService] Sending to FlowPOS backend with settings:', {
@@ -113,11 +145,6 @@ class WhatsAppService {
         userSettings
       });
 
-      // TWILIO INTEGRATION TEMPORARILY DISABLED
-      // Return error to fallback to device WhatsApp
-      throw new Error('Twilio WhatsApp integration not configured yet');
-      
-      /*
       const response = await fetch(`${API_BASE_URL}/whatsapp/send-invoice`, {
         method: 'POST',
         headers: {
@@ -142,7 +169,6 @@ class WhatsAppService {
         messageId: result.data.messageId,
         method: 'flowpos'
       };
-      */
     } catch (error) {
       console.error('Error sending via FlowPOS WhatsApp:', error);
       throw error;
@@ -258,6 +284,8 @@ class WhatsAppService {
   }
 
   // Create invoice message with store name setting check and onboarding support
+  // NOTE: Reads from context caches with AsyncStorage fallback for reliability
+  // This ensures settings are read correctly even if context not fully initialized
   async createInvoiceMessage(invoiceData) {
     console.log('📱 [WhatsAppService] Creating invoice message with data:', {
       storeName: invoiceData.storeName,
@@ -271,22 +299,79 @@ class WhatsAppService {
       itemsCount: invoiceData.items?.length || 0
     });
 
-    // Get settings and store info for onboarding compatibility
-    const [showStoreNameSetting, receiptSettings, storeInfo] = await Promise.all([
-      AsyncStorage.getItem('showStoreNameOnInvoice'),
-      AsyncStorage.getItem('receiptSettings'),
-      AsyncStorage.getItem('storeInfo')
-    ]);
+    // Get settings from context caches (single source of truth)
+    // showStoreNameOnInvoice from AppSettingsContext
+    let showStoreNameSetting = getAppSettingFromCache('showStoreNameOnInvoice');
     
-    const parsedReceiptSettings = receiptSettings ? JSON.parse(receiptSettings) : {};
-    const parsedStoreInfo = storeInfo ? JSON.parse(storeInfo) : {};
+    // Fallback to AsyncStorage if cache returns undefined (context not initialized yet)
+    if (showStoreNameSetting === undefined) {
+      try {
+        const storedValue = await AsyncStorage.getItem('showStoreNameOnInvoice');
+        if (storedValue !== null) {
+          showStoreNameSetting = JSON.parse(storedValue);
+          console.log('📱 [WhatsAppService] showStoreNameOnInvoice fallback to AsyncStorage:', showStoreNameSetting);
+        }
+      } catch (e) {
+        console.warn('📱 [WhatsAppService] Error reading showStoreNameOnInvoice from AsyncStorage:', e.message);
+      }
+    }
+    const showStoreName = showStoreNameSetting !== undefined ? showStoreNameSetting : true;
+    
+    // Receipt settings from StoreSettingsContext with proper boolean handling
+    let receiptSettings = getReceiptSettingsFromCache();
+    
+    // Fallback to AsyncStorage if cache returns all defaults (context not initialized yet)
+    // Check if we got actual data or just defaults by checking if getSettings returns null
+    const storeSettingsFromCache = getStoreSettingsFromCache();
+    if (!storeSettingsFromCache) {
+      try {
+        const storedReceiptSettings = await AsyncStorage.getItem('receiptSettings');
+        if (storedReceiptSettings) {
+          const parsed = JSON.parse(storedReceiptSettings);
+          receiptSettings = {
+            showAddress: parsed.showAddress !== undefined ? parsed.showAddress : true,
+            showPhone: parsed.showPhone !== undefined ? parsed.showPhone : true,
+            showEmail: parsed.showEmail !== undefined ? parsed.showEmail : false,
+            showGST: parsed.showGST !== undefined ? parsed.showGST : true
+          };
+          console.log('📱 [WhatsAppService] receiptSettings fallback to AsyncStorage:', receiptSettings);
+        }
+      } catch (e) {
+        console.warn('📱 [WhatsAppService] Error reading receiptSettings from AsyncStorage:', e.message);
+      }
+    }
+    
+    // Store profile from StoreSettingsContext
+    let storeProfile = getStoreProfileFromCache();
+    
+    // Fallback to AsyncStorage if cache returns empty values (context not initialized yet)
+    if (!storeProfile.store_name && !storeSettingsFromCache) {
+      try {
+        const storedStoreInfo = await AsyncStorage.getItem('storeInfo');
+        if (storedStoreInfo) {
+          const parsed = JSON.parse(storedStoreInfo);
+          storeProfile = {
+            store_name: parsed.store_name || parsed.storeName || '',
+            store_address: parsed.store_address || parsed.storeAddress || '',
+            store_website: parsed.store_website || parsed.storeWebsite || '',
+            business_type: parsed.business_type || parsed.businessType || '',
+            gst_number: parsed.gst_number || parsed.gstNumber || '',
+            currency: parsed.currency || 'INR'
+          };
+          console.log('📱 [WhatsAppService] storeProfile fallback to AsyncStorage:', storeProfile);
+        }
+      } catch (e) {
+        console.warn('📱 [WhatsAppService] Error reading storeInfo from AsyncStorage:', e.message);
+      }
+    }
     
     console.log('🏪 [WhatsAppService] Settings debug:', {
       showStoreNameSetting,
-      receiptSettings: parsedReceiptSettings,
-      storeInfo: parsedStoreInfo,
+      receiptSettings,
+      storeProfile,
       inputStoreName: invoiceData.storeName,
-      hasStoreName: !!(invoiceData.storeName && invoiceData.storeName.trim() !== '')
+      hasStoreName: !!(invoiceData.storeName && invoiceData.storeName.trim() !== ''),
+      cacheAvailable: !!storeSettingsFromCache
     });
 
     const {
@@ -305,33 +390,28 @@ class WhatsAppService {
       total, // Fallback field
       paymentMethod
     } = invoiceData;
-
-    // Check if store name should be shown in WhatsApp message
-    const showStoreName = showStoreNameSetting !== null ? JSON.parse(showStoreNameSetting) : true;
     
-    // Enhanced store name logic with onboarding support
+    // Enhanced store name logic with context support
     let displayStoreName = 'FlowPOS Store';
     if (showStoreName) {
       if (storeName && storeName.trim() !== '') {
         displayStoreName = storeName.trim();
-      } else if (parsedStoreInfo.store_name && parsedStoreInfo.store_name.trim() !== '') {
-        displayStoreName = parsedStoreInfo.store_name.trim();
-      } else if (parsedStoreInfo.name && parsedStoreInfo.name.trim() !== '') {
-        displayStoreName = parsedStoreInfo.name.trim();
+      } else if (storeProfile.store_name && storeProfile.store_name.trim() !== '') {
+        displayStoreName = storeProfile.store_name.trim();
       }
     }
     
-    // Enhanced store info with onboarding support
-    const finalStoreAddress = storeAddress || parsedStoreInfo.store_address || parsedStoreInfo.address || '';
-    const finalStorePhone = storePhone || parsedStoreInfo.store_phone || parsedStoreInfo.phone || '';
-    const finalStoreEmail = storeEmail || parsedStoreInfo.store_email || parsedStoreInfo.email || '';
-    const finalGstNumber = gstNumber || parsedStoreInfo.gst_number || parsedStoreInfo.gstin || '';
+    // Enhanced store info with context support
+    const finalStoreAddress = storeAddress || storeProfile.store_address || '';
+    const finalStorePhone = storePhone || ''; // Auth-bound, not in StoreSettingsContext
+    const finalStoreEmail = storeEmail || ''; // Auth-bound, not in StoreSettingsContext
+    const finalGstNumber = gstNumber || storeProfile.gst_number || '';
     
-    // Get receipt settings with defaults
-    const showAddress = parsedReceiptSettings.showAddress !== undefined ? parsedReceiptSettings.showAddress : true;
-    const showPhone = parsedReceiptSettings.showPhone !== undefined ? parsedReceiptSettings.showPhone : true;
-    const showEmail = parsedReceiptSettings.showEmail !== undefined ? parsedReceiptSettings.showEmail : false;
-    const showGST = parsedReceiptSettings.showGST !== undefined ? parsedReceiptSettings.showGST : true;
+    // Get receipt settings with proper boolean handling (already applied by getReceiptSettingsFromCache)
+    const showAddress = receiptSettings.showAddress;
+    const showPhone = receiptSettings.showPhone;
+    const showEmail = receiptSettings.showEmail;
+    const showGST = receiptSettings.showGST;
     
     console.log('🏪 [WhatsAppService] Final display decisions:', {
       showStoreName,
@@ -345,23 +425,56 @@ class WhatsAppService {
 
     let message = `🧾 *Invoice from ${displayStoreName}*\n\n`;
     
+    // Enhanced WhatsApp message formatting with standardized contact info
+    const createContactInfoSection = (contactFields) => {
+      const visibleFields = contactFields.filter(field => 
+        field.show && field.value && field.value.trim() !== ''
+      );
+
+      if (visibleFields.length === 0) return '';
+
+      let contactInfo = '';
+      visibleFields.forEach((field, index) => {
+        contactInfo += `${field.emoji} ${field.prefix || ''}${field.value.trim()}`;
+        if (index < visibleFields.length - 1) {
+          contactInfo += '\n';
+        }
+      });
+
+      return contactInfo + '\n\n';
+    };
+
     // Add store contact information if enabled and available (using enhanced store info)
-    let contactInfo = '';
-    if (showAddress && finalStoreAddress && finalStoreAddress.trim() !== '') {
-      contactInfo += `📍 ${finalStoreAddress.trim()}\n`;
-    }
-    if (showPhone && finalStorePhone && finalStorePhone.trim() !== '') {
-      contactInfo += `📞 ${finalStorePhone.trim()}\n`;
-    }
-    if (showEmail && finalStoreEmail && finalStoreEmail.trim() !== '') {
-      contactInfo += `📧 ${finalStoreEmail.trim()}\n`;
-    }
-    if (showGST && finalGstNumber && finalGstNumber.trim() !== '') {
-      contactInfo += `📄 GST: ${finalGstNumber.trim()}\n`;
-    }
-    
+    const contactFields = [
+      {
+        show: showAddress,
+        value: finalStoreAddress,
+        emoji: '📍',
+        prefix: ''
+      },
+      {
+        show: showPhone,
+        value: finalStorePhone,
+        emoji: '📞',
+        prefix: ''
+      },
+      {
+        show: showEmail,
+        value: finalStoreEmail,
+        emoji: '📧',
+        prefix: ''
+      },
+      {
+        show: showGST,
+        value: finalGstNumber,
+        emoji: '📄',
+        prefix: 'GST: '
+      }
+    ];
+
+    const contactInfo = createContactInfoSection(contactFields);
     if (contactInfo) {
-      message += contactInfo + '\n';
+      message += contactInfo;
     }
     
     message += `📋 *Order Details:*\n`;

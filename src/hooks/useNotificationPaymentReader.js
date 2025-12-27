@@ -118,7 +118,7 @@ export const useNotificationPaymentReader = () => {
         // Manual confirmation
         console.log(`✅ Payment manually confirmed: ₹${paymentData.amount}`);
         
-      } else if (paymentData.confidence >= 85) {
+      } else if (paymentData.confidence >= 95) {
         // High confidence auto-confirmation
         Alert.alert(
           '✅ Payment Confirmed!',

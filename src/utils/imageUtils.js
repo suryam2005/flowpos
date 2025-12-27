@@ -13,7 +13,7 @@ const SUPABASE_STORAGE_URL = 'https://ywtllivhhicrkjbxteim.supabase.co/storage/v
  */
 export const getProductImageUrl = (product) => {
   if (!product) {
-    console.log('🖼️ [ImageUtils] No product provided');
+    // console.log('🖼️ [ImageUtils] No product provided');
     return null;
   }
   
@@ -21,33 +21,33 @@ export const getProductImageUrl = (product) => {
   const imageUrl = product.image_url || product.image;
   
   // Only log for products that should have images (reduce noise)
-  if (imageUrl || product.name?.includes('test') || product.name?.includes('Test')) {
-    console.log('🖼️ [ImageUtils] Product image check:', {
-      productName: product.name,
-      image_url: product.image_url,
-      image: product.image,
-      finalImageUrl: imageUrl,
-      productKeys: Object.keys(product)
-    });
-  }
+  // if (imageUrl || product.name?.includes('test') || product.name?.includes('Test')) {
+  //   console.log('🖼️ [ImageUtils] Product image check:', {
+  //     productName: product.name,
+  //     image_url: product.image_url,
+  //     image: product.image,
+  //     finalImageUrl: imageUrl,
+  //     productKeys: Object.keys(product)
+  //   });
+  // }
   
   if (!imageUrl) {
     // Only log missing images for first few products to avoid spam
-    if (Math.random() < 0.1) { // 10% chance to log
-      console.log('🖼️ [ImageUtils] No image URL found for product:', product.name);
-    }
+    // if (Math.random() < 0.1) { // 10% chance to log
+    //   console.log('🖼️ [ImageUtils] No image URL found for product:', product.name);
+    // }
     return null;
   }
   
   // If it's already a full URL, return as is
   if (imageUrl.startsWith('http')) {
-    console.log('🖼️ [ImageUtils] Using full URL:', imageUrl);
+    // console.log('🖼️ [ImageUtils] Using full URL:', imageUrl);
     return imageUrl;
   }
   
   // Otherwise, construct the Supabase URL
   const fullUrl = `${SUPABASE_STORAGE_URL}/${imageUrl}`;
-  console.log('🖼️ [ImageUtils] Constructed Supabase URL:', fullUrl);
+  // console.log('🖼️ [ImageUtils] Constructed Supabase URL:', fullUrl);
   return fullUrl;
 };
 

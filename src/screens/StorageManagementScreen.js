@@ -11,8 +11,6 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { colors } from '../styles/colors';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 import networkService from '../services/NetworkService';
@@ -27,9 +25,6 @@ const StorageManagementScreen = ({ navigation }) => {
 
   // Get current plan from user data or default to trial
   const currentPlan = user?.subscription_plan || 'trial';
-
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('StorageManagement');
 
   useEffect(() => {
     loadStorageData();
@@ -361,13 +356,6 @@ const StorageManagementScreen = ({ navigation }) => {
           </View>
         )}
       </ScrollView>
-
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
-        visible={showTour}
-        currentScreen="StorageManagement"
-        onComplete={completeTour}
-      />
     </View>
   );
 };

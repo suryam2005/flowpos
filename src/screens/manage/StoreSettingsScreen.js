@@ -8,187 +8,169 @@ import {
   TextInput,
   Alert,
   Switch,
-  Image,
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
 import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import * as ImagePicker from 'expo-image-picker';
-import * as FileSystem from 'expo-file-system';
 import * as Haptics from 'expo-haptics';
 import { Linking } from 'react-native';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { colors } from '../../styles/colors';
 import { useAuth } from '../../context/AuthContext';
+import { useStoreSettings } from '../../context/StoreSettingsContext';
 
 const StoreSettingsScreen = ({ navigation }) => {
-  const { user, getStore, updateStore } = useAuth();
+  const { user } = useAuth();
+  
+  // Use StoreSettingsContext for all store settings
+  const {
+    storeSettings,
+    isLoading: contextLoading,
+    getStoreProfile,
+    getPaymentSettings,
+    getTaxSettings,
+    getBusinessSettings,
+    updateStoreSettings: contextUpdateStoreSettings,
+    refreshSettings,
+  } = useStoreSettings();
+  
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   
-  // Enhanced store information with all fields from profile
+  // Store information state (excludes phone/email - they come from AuthContext)
   const [storeInfo, setStoreInfo] = useState({
     store_name: '',
     store_address: '',
-    store_phone: '',
-    store_email: '',
     store_website: '',
     business_type: '',
     gst_number: '',
-    // Local settings (not in backend)
     currency: 'INR',
-    currencySymbol: '₹',
     upiId: '',
     upiId2: '',
     upiId3: '',
+    paymentMethods: ['Cash', 'QR Pay'],
   });
   
   const [originalData, setOriginalData] = useState({});
 
   const [taxSettings, setTaxSettings] = useState({
-    enableGST: true,
+    enableGST: false,
     gstRate: 18,
     includeTaxInPrice: false,
   });
 
   const [receiptSettings, setReceiptSettings] = useState({
-    showLogo: false,
     showAddress: true,
     showPhone: true,
     showEmail: false,
     showGST: true,
-    footerMessage: 'Thank you for your business!',
   });
 
   const [businessSettings, setBusinessSettings] = useState({
-    lowStockThreshold: 5,
+    lowStockThreshold: 10,
     enableNotifications: true,
   });
 
+  // Load settings from context on mount and when context updates
   useEffect(() => {
-    loadSettings();
-  }, []);
+    loadSettingsFromContext();
+  }, [storeSettings]);
 
-  // Reload settings when screen comes into focus to prevent UI flash
+  // Reload settings when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      loadSettings(); // Reload store settings when screen comes into focus
-    }, [])
+      // Only refresh if we have stale data or no data
+      if (!storeSettings) {
+        refreshSettings();
+      }
+    }, [storeSettings, refreshSettings])
   );
 
-  const loadSettings = async () => {
-    try {
-      setIsLoading(true);
-      
-      // Load from backend first
-      await loadStoreDataFromBackend();
-      
-      // Then load local settings
-      const [tax, receipt, business, localStore] = await Promise.all([
-        AsyncStorage.getItem('taxSettings'),
-        AsyncStorage.getItem('receiptSettings'),
-        AsyncStorage.getItem('businessSettings'),
-        AsyncStorage.getItem('storeInfo'),
-      ]);
+  // Update loading state based on context
+  useEffect(() => {
+    if (!contextLoading) {
+      setIsLoading(false);
+    }
+  }, [contextLoading]);
 
-      if (tax) setTaxSettings(JSON.parse(tax));
-      if (receipt) setReceiptSettings(JSON.parse(receipt));
-      if (business) setBusinessSettings(JSON.parse(business));
+  /**
+   * Load settings from StoreSettingsContext into local state
+   * Uses getter functions with proper boolean handling
+   */
+  const loadSettingsFromContext = () => {
+    if (!storeSettings) {
+      setIsLoading(contextLoading);
+      return;
+    }
+
+    try {
+      // Get store profile (6 fields - excludes phone/email)
+      const profile = getStoreProfile();
       
-      // Merge local settings (currency, UPI, etc.) with backend data
-      if (localStore) {
-        const localData = JSON.parse(localStore);
-        setStoreInfo(prev => ({
-          ...prev,
-          currency: localData.currency || 'INR',
-          currencySymbol: localData.currencySymbol || '₹',
-          upiId: localData.upiId || '',
-          upiId2: localData.upiId2 || '',
-          upiId3: localData.upiId3 || '',
-        }));
-      }
+      // Get payment settings
+      const payment = getPaymentSettings();
+      
+      // Get tax settings with proper boolean handling
+      const tax = getTaxSettings();
+      
+      // Get business settings with proper boolean handling
+      const business = getBusinessSettings();
+      
+      // Get receipt settings from context (with proper boolean handling)
+      const receipt = storeSettings?.receipt_settings || {};
+      
+      // Build store info state
+      const storeData = {
+        store_name: profile.store_name || '',
+        store_address: profile.store_address || '',
+        store_website: profile.store_website || '',
+        business_type: profile.business_type || '',
+        gst_number: profile.gst_number || '',
+        currency: profile.currency || 'INR',
+        upiId: payment.upi_id || '',
+        upiId2: payment.upi_id_2 || '',
+        upiId3: payment.upi_id_3 || '',
+        paymentMethods: payment.payment_methods || ['Cash', 'QR Pay'],
+      };
+      
+      setStoreInfo(storeData);
+      setOriginalData(storeData);
+      
+      // Set tax settings with proper defaults
+      setTaxSettings({
+        enableGST: tax.enableGST,
+        gstRate: tax.gstRate,
+        includeTaxInPrice: tax.includeTaxInPrice,
+      });
+      
+      // Set receipt settings with proper boolean handling
+      setReceiptSettings({
+        showAddress: receipt.showAddress !== undefined ? receipt.showAddress : true,
+        showPhone: receipt.showPhone !== undefined ? receipt.showPhone : true,
+        showEmail: receipt.showEmail !== undefined ? receipt.showEmail : false,
+        showGST: receipt.showGST !== undefined ? receipt.showGST : true,
+      });
+      
+      // Set business settings with proper defaults
+      setBusinessSettings({
+        lowStockThreshold: business.lowStockThreshold,
+        enableNotifications: business.enableNotifications,
+      });
+      
+      setIsLoading(false);
+      console.log('✅ Settings loaded from StoreSettingsContext');
     } catch (error) {
-      console.error('Error loading settings:', error);
-      Alert.alert('Error', 'Failed to load store settings. Please try again.');
-    } finally {
+      console.error('Error loading settings from context:', error);
       setIsLoading(false);
     }
   };
 
-  const loadStoreDataFromBackend = async () => {
-    try {
-      console.log('🔄 Loading store data from backend via AuthContext...');
-      
-      const storeData = await getStore();
-      
-      if (storeData) {
-        console.log('✅ Store data found, updating form...');
-        const backendData = {
-          store_name: storeData.store_name || '',
-          store_address: storeData.store_address || '',
-          store_phone: storeData.store_phone || '',
-          store_email: storeData.store_email || '',
-          store_website: storeData.store_website || '',
-          business_type: storeData.business_type || '',
-          gst_number: storeData.gst_number || '',
-          // Additional fields from database
-          currency: storeData.currency || 'INR',
-          currencySymbol: storeData.currency_symbol || '₹',
-          upiId: storeData.upi_id || '',
-          upiId2: storeData.upi_id_2 || '',
-          upiId3: storeData.upi_id_3 || '',
-        };
-        
-        // Update settings from database if available with safe defaults
-        if (storeData.tax_settings && typeof storeData.tax_settings === 'object') {
-          setTaxSettings(prev => ({
-            ...prev,
-            ...storeData.tax_settings,
-            gstRate: storeData.tax_settings.gstRate || prev.gstRate || 18
-          }));
-        }
-        if (storeData.receipt_settings && typeof storeData.receipt_settings === 'object') {
-          setReceiptSettings(prev => ({
-            ...prev,
-            ...storeData.receipt_settings
-          }));
-        }
-        if (storeData.business_settings && typeof storeData.business_settings === 'object') {
-          setBusinessSettings(prev => ({
-            ...prev,
-            ...storeData.business_settings,
-            lowStockThreshold: storeData.business_settings.lowStockThreshold || prev.lowStockThreshold || 5
-          }));
-        }
-        
-        setStoreInfo(prev => ({ ...prev, ...backendData }));
-        setOriginalData(backendData);
-        
-        // Also save to AsyncStorage immediately for invoice access
-        const storeInfoWithCompat = {
-          ...backendData,
-          // Backward compatibility fields
-          name: backendData.store_name,
-          address: backendData.store_address,
-          phone: backendData.store_phone,
-          gstin: backendData.gst_number,
-          businessType: backendData.business_type, // For ProductOnboardingScreen
-        };
-        
-        await AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfoWithCompat));
-        console.log('✅ Store data loaded and saved to AsyncStorage:', storeInfoWithCompat);
-      } else {
-        console.log('⚠️ No store data found');
-      }
-    } catch (error) {
-      console.error('❌ Error loading store data from backend:', error);
-      // Don't show alert here, just log the error
-    }
-  };
-
+  /**
+   * Save settings using write-through pattern via StoreSettingsContext
+   * Handles NO_NETWORK error with user-friendly message
+   */
   const saveSettings = async () => {
     if (!user?.id) {
       Alert.alert('Error', 'User not authenticated. Please log in again.');
@@ -213,24 +195,6 @@ const StoreSettingsScreen = ({ navigation }) => {
         }
       }
 
-      // Validate email format if provided
-      if (storeInfo.store_email && storeInfo.store_email.trim()) {
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(storeInfo.store_email.trim())) {
-          Alert.alert('Validation Error', 'Please enter a valid email address.');
-          return;
-        }
-      }
-
-      // Validate phone number if provided
-      if (storeInfo.store_phone && storeInfo.store_phone.trim()) {
-        const phoneRegex = /^[0-9]{10}$/;
-        if (!phoneRegex.test(storeInfo.store_phone.replace(/\D/g, ''))) {
-          Alert.alert('Validation Error', 'Please enter a valid 10-digit phone number.');
-          return;
-        }
-      }
-
       // Validate website URL if provided
       if (storeInfo.store_website && storeInfo.store_website.trim()) {
         const urlRegex = /^https?:\/\/.+/;
@@ -241,85 +205,56 @@ const StoreSettingsScreen = ({ navigation }) => {
       }
 
       // Prepare data for backend (all store-related fields)
-      const backendData = {
+      // NOTE: phone/email are excluded - they're auth-bound in AuthContext
+      const updateData = {
         store_name: storeInfo.store_name.trim(),
         store_address: storeInfo.store_address?.trim() || '',
-        store_phone: storeInfo.store_phone?.trim() || '',
-        store_email: storeInfo.store_email?.trim() || '',
         store_website: storeInfo.store_website?.trim() || '',
         business_type: storeInfo.business_type?.trim() || '',
         gst_number: storeInfo.gst_number?.trim() || '',
-        // Additional fields
         currency: storeInfo.currency || 'INR',
-        currency_symbol: storeInfo.currencySymbol || '₹',
         upi_id: storeInfo.upiId?.trim() || '',
         upi_id_2: storeInfo.upiId2?.trim() || '',
         upi_id_3: storeInfo.upiId3?.trim() || '',
+        payment_methods: storeInfo.paymentMethods || ['Cash', 'QR Pay'],
         tax_settings: taxSettings,
         receipt_settings: receiptSettings,
         business_settings: businessSettings,
       };
 
-      // Save to backend via AuthContext with enhanced error handling
-      console.log('💾 Saving store data to backend via AuthContext...', backendData);
+      console.log('💾 Saving store data via StoreSettingsContext...', Object.keys(updateData));
       
-      let result;
-      try {
-        result = await updateStore(backendData);
-        console.log('📤 Store save successful:', result);
-      } catch (backendError) {
-        console.error('❌ Backend save failed:', backendError.message);
+      // Use write-through update from context (backend first, then cache)
+      const result = await contextUpdateStoreSettings(updateData);
+      
+      if (!result.success) {
+        // Handle specific error types
+        if (result.error === 'NO_NETWORK') {
+          Alert.alert(
+            'No Network Connection',
+            'Please check your internet connection and try again. Settings cannot be saved offline.',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
         
-        // Enhanced error handling for different failure scenarios
-        if (backendError.message.includes('Cannot connect to server') || 
-            backendError.message.includes('Network request failed') ||
-            backendError.message.includes('timeout')) {
-          // Network/connection issues - save locally and inform user
-          console.log('🔄 Network issue detected, saving locally...');
-          result = { success: true, offline: true };
-        } else if (backendError.message.includes('Authentication') || 
-                   backendError.message.includes('token')) {
-          // Auth issues - show specific error
+        if (result.error === 'NO_AUTH' || result.error === 'AUTH_ERROR') {
           Alert.alert('Authentication Error', 'Your session has expired. Please log in again.');
           return;
-        } else {
-          // Other backend errors - save locally as fallback
-          console.log('⚠️ Backend error, falling back to local save...');
-          result = { success: true, offline: true, error: backendError.message };
         }
+        
+        // Generic error
+        Alert.alert('Error', result.message || 'Failed to save settings. Please try again.');
+        return;
       }
 
-      // Prepare store info with backward compatibility
-      const storeInfoWithCompat = {
-        ...storeInfo,
-        // Backward compatibility fields
-        name: storeInfo.store_name,
-        address: storeInfo.store_address,
-        phone: storeInfo.store_phone,
-        gstin: storeInfo.gst_number,
-        businessType: storeInfo.business_type, // For ProductOnboardingScreen
-      };
-      
-
-
-      // Save local settings and all data to AsyncStorage
-      await Promise.all([
-        AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfoWithCompat)),
-        AsyncStorage.setItem('taxSettings', JSON.stringify(taxSettings)),
-        AsyncStorage.setItem('receiptSettings', JSON.stringify(receiptSettings)),
-        AsyncStorage.setItem('businessSettings', JSON.stringify(businessSettings)),
-      ]);
-
-      setOriginalData(backendData);
+      // Success - update local state
+      setOriginalData({ ...storeInfo });
       setIsEditing(false);
       
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+      Alert.alert('Success', 'Store settings saved successfully!');
       
-      const message = result?.offline 
-        ? 'Store settings saved locally! They will sync when you\'re online.'
-        : 'Store settings saved successfully!';
-      
-      Alert.alert('Success', message);
     } catch (error) {
       console.error('Error saving settings:', error);
       Alert.alert('Error', error.message || 'Failed to save settings. Please try again.');
@@ -329,13 +264,11 @@ const StoreSettingsScreen = ({ navigation }) => {
   };
 
   const handleCancel = () => {
-    setStoreInfo(prev => ({ ...prev, ...originalData }));
+    setStoreInfo({ ...originalData });
+    // Reset tax/receipt/business settings from context
+    loadSettingsFromContext();
     setIsEditing(false);
   };
-
-
-
-
 
   const handleUPITest = (upiId) => {
     if (!upiId) {
@@ -343,10 +276,8 @@ const StoreSettingsScreen = ({ navigation }) => {
       return;
     }
 
-    const amount = '10'; // Test with ₹10
+    const amount = '10';
     const note = encodeURIComponent(`Test payment to ${storeInfo.store_name || 'Store'}`);
-    
-    // Create UPI payment URL and open directly
     const upiUrl = `upi://pay?pa=${upiId}&pn=${encodeURIComponent(storeInfo.store_name || 'Store')}&am=${amount}&cu=INR&tn=${note}`;
     
     Linking.openURL(upiUrl).catch(() => {
@@ -365,7 +296,7 @@ const StoreSettingsScreen = ({ navigation }) => {
     </View>
   );
 
-    const renderInputField = (label, value, onChangeText, options = {}) => (
+  const renderInputField = (label, value, onChangeText, options = {}) => (
     <View style={styles.inputGroup}>
       <Text style={styles.inputLabel}>{label}</Text>
       <TextInput
@@ -384,7 +315,7 @@ const StoreSettingsScreen = ({ navigation }) => {
     </View>
   );
 
-    const renderSwitchField = (label, description, value, onValueChange) => (
+  const renderSwitchField = (label, description, value, onValueChange) => (
     <View style={styles.switchGroup}>
       <View style={styles.switchInfo}>
         <Text style={styles.switchLabel}>{label}</Text>
@@ -400,30 +331,6 @@ const StoreSettingsScreen = ({ navigation }) => {
       />
     </View>
   );
-
-  // Receipt settings switches that work independently of editing mode
-  const renderReceiptSwitchField = (label, description, value, onValueChange) => (
-    <View style={styles.switchGroup}>
-      <View style={styles.switchInfo}>
-        <Text style={styles.switchLabel}>{label}</Text>
-        {description && <Text style={styles.switchDescription}>{description}</Text>}
-      </View>
-      <Switch
-        value={value}
-        onValueChange={onValueChange}
-        disabled={false}
-        trackColor={{ false: colors.gray[100], true: colors.primary.main }}
-        thumbColor={value ? colors.background.surface : colors.background.surface}
-        ios_backgroundColor={colors.gray[100]}
-      />
-    </View>
-  );
-
-  // Handle receipt setting changes with immediate save
-  const handleReceiptSettingChange = async (settingKey, value) => {
-    // This function is moved to SettingsScreen - keeping for compatibility
-    console.log(`Receipt setting ${settingKey} should be changed in Settings screen`);
-  };
 
   if (isLoading) {
     return (
@@ -526,21 +433,11 @@ const StoreSettingsScreen = ({ navigation }) => {
                 setStoreInfo({ ...storeInfo, store_address: text }),
                 { multiline: true, numberOfLines: 3, editable: isEditing }
               )}
-              {renderInputField('Phone Number', storeInfo.store_phone, (text) =>
-                setStoreInfo({ ...storeInfo, store_phone: text }),
-                { keyboardType: 'phone-pad', editable: false }
-              )}
-              {renderInputField('Email', storeInfo.store_email, (text) =>
-                setStoreInfo({ ...storeInfo, store_email: text }),
-                { keyboardType: 'email-address', editable: false }
-              )}
               {renderInputField('Website', storeInfo.store_website, (text) =>
                 setStoreInfo({ ...storeInfo, store_website: text }),
                 { placeholder: 'https://yourstore.com', editable: isEditing }
               )}
               {renderInputField('GST Number (15 characters)', storeInfo.gst_number, (text) => {
-                // Validate GST format: 15 characters, alphanumeric
-                const gstRegex = /^[0-9A-Z]{15}$/;
                 const formattedText = text.toUpperCase().replace(/[^0-9A-Z]/g, '').slice(0, 15);
                 setStoreInfo({ ...storeInfo, gst_number: formattedText });
               }, { 
@@ -585,14 +482,14 @@ const StoreSettingsScreen = ({ navigation }) => {
         {/* Business Settings */}
         {renderSection('Business Settings', (
           <>
-            {renderInputField('Low Stock Threshold', (businessSettings.lowStockThreshold || 5).toString(), (text) => {
-              const threshold = parseInt(text) || 5;
+            {renderInputField('Low Stock Threshold', (businessSettings.lowStockThreshold || 10).toString(), (text) => {
+              const threshold = parseInt(text) || 10;
               if (threshold >= 1 && threshold <= 1000) {
                 setBusinessSettings({ ...businessSettings, lowStockThreshold: threshold });
               }
             }, { 
               keyboardType: 'numeric',
-              placeholder: '5'
+              placeholder: '10'
             })}
             {renderSwitchField(
               'Enable Notifications',
@@ -606,6 +503,61 @@ const StoreSettingsScreen = ({ navigation }) => {
         {/* Payment Settings */}
         {renderSection('Payment Settings', (
           <>
+            {/* Payment Methods Selection */}
+            <View style={styles.paymentSection}>
+              <Text style={styles.inputLabel}>Accepted Payment Methods</Text>
+              <Text style={styles.paymentDescription}>
+                Select which payment methods you want to accept at checkout
+              </Text>
+              <View style={styles.paymentMethodsGrid}>
+                {[
+                  { id: 'Cash', label: 'Cash', icon: 'cash-outline' },
+                  { id: 'QR Pay', label: 'UPI/QR Pay', icon: 'qr-code-outline' },
+                ].map((method) => {
+                  const isSelected = storeInfo.paymentMethods?.includes(method.id);
+                  return (
+                    <TouchableOpacity
+                      key={method.id}
+                      style={[
+                        styles.paymentMethodOption,
+                        isSelected && styles.paymentMethodOptionSelected,
+                        !isEditing && styles.paymentMethodOptionDisabled
+                      ]}
+                      onPress={isEditing ? () => {
+                        const currentMethods = storeInfo.paymentMethods || [];
+                        let newMethods;
+                        
+                        if (currentMethods.includes(method.id)) {
+                          newMethods = currentMethods.filter(m => m !== method.id);
+                          if (newMethods.length === 0) {
+                            newMethods = ['Cash'];
+                          }
+                        } else {
+                          newMethods = [...currentMethods, method.id];
+                        }
+                        
+                        setStoreInfo({ ...storeInfo, paymentMethods: newMethods });
+                      } : undefined}
+                      disabled={!isEditing}
+                      activeOpacity={0.8}
+                    >
+                      <Ionicons 
+                        name={method.icon} 
+                        size={24} 
+                        color={isSelected ? colors.primary.main : colors.text.secondary} 
+                      />
+                      <Text style={[
+                        styles.paymentMethodText,
+                        isSelected && styles.paymentMethodTextSelected
+                      ]}>
+                        {method.label}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </View>
+
             <View style={styles.paymentSection}>
               <Text style={styles.inputLabel}>Primary UPI ID</Text>
               <Text style={styles.paymentDescription}>
@@ -697,6 +649,7 @@ const StoreSettingsScreen = ({ navigation }) => {
   );
 };
 
+
 const styles = StyleSheet.create({
   container: {
     flex: 1,
@@ -736,7 +689,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 12,
   },
-
   editButton: {
     backgroundColor: colors.primary.main,
     paddingHorizontal: 16,
@@ -844,41 +796,6 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.text.secondary,
   },
-  currencyGroup: {
-    marginBottom: 16,
-  },
-  currencyOptions: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    gap: 8,
-  },
-  currencyOption: {
-    backgroundColor: colors.background.surface,
-    borderWidth: 1,
-    borderColor: '#d1d5db',
-    borderRadius: 8,
-    padding: 12,
-    minWidth: '48%',
-    alignItems: 'center',
-  },
-  currencyOptionSelected: {
-    borderColor: colors.primary.main,
-    backgroundColor: colors.gray[100],
-  },
-  currencyOptionText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: colors.text.secondary,
-    marginBottom: 2,
-  },
-  currencyOptionTextSelected: {
-    color: colors.primary.main,
-  },
-  currencyName: {
-    fontSize: 12,
-    color: colors.text.tertiary,
-  },
-
   paymentSection: {
     marginBottom: 24,
   },
@@ -955,13 +872,53 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   businessTypeOptionDisabled: {
-    // Keep selected state visible when disabled - use lighter styling for unselected
     opacity: 0.7,
     backgroundColor: colors.gray[50],
     borderColor: colors.gray[200],
   },
   businessTypeOptionTextDisabled: {
     color: colors.gray[400],
+  },
+  paymentMethodsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 8,
+  },
+  paymentMethodOption: {
+    backgroundColor: colors.background.surface,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '45%',
+    flexDirection: 'row',
+    gap: 8,
+    shadowColor: colors.shadow.default,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.05,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  paymentMethodOptionSelected: {
+    borderColor: colors.primary.main,
+    backgroundColor: colors.primary.background,
+    borderWidth: 2,
+  },
+  paymentMethodOptionDisabled: {
+    opacity: 0.7,
+  },
+  paymentMethodText: {
+    fontSize: 14,
+    fontWeight: '500',
+    color: colors.text.secondary,
+  },
+  paymentMethodTextSelected: {
+    color: colors.primary.main,
+    fontWeight: '600',
   },
 });
 

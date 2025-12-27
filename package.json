@@ -8,7 +8,19 @@
     "ios": "expo start --ios",
     "web": "expo start --web",
     "dev": "node start-dev.js",
-    "dev-windows": "start-dev.bat"
+    "dev-windows": "start-dev.bat",
+    "test": "jest",
+    "test:pbt": "jest --testPathPattern=__tests__ --verbose"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testMatch": ["**/__tests__/**/*.test.js"],
+    "moduleFileExtensions": ["js", "jsx", "json"],
+    "transformIgnorePatterns": [
+      "node_modules/(?!(@react-native|react-native)/)"
+    ],
+    "setupFilesAfterEnv": [],
+    "testTimeout": 30000
   },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
@@ -45,7 +57,9 @@
     "react-native-web": "^0.21.0"
   },
   "devDependencies": {
-    "@babel/core": "^7.20.0"
+    "@babel/core": "^7.20.0",
+    "fast-check": "^4.5.2",
+    "jest": "^30.2.0"
   },
   "private": true
 }

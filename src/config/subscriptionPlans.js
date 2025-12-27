@@ -7,32 +7,79 @@ export const SUBSCRIPTION_PLANS = {
     currency: 'INR',
     billing: 'trial',
     duration: '7 days',
-    description: 'Experience all core features before choosing a paid plan',
+    description: 'Experience ALL features free for 7 days',
     features: {
-      maxProducts: 10,
-      maxTransactions: 50,
-      maxLocations: 1,
-      maxDevices: 1,
+      // Trial gets ALL enterprise features for the trial period
+      maxProducts: 'unlimited',
+      maxTransactions: 'unlimited',
+      maxLocations: 'unlimited',
+      maxDevices: 2, // Allow 2 devices during trial
       inventoryTracking: true,
       basicReports: true,
       basicInvoice: true,
+      customBranding: true,
       basicAnalytics: true,
+      advancedAnalytics: true,
+      performanceInsights: true,
+      pdfReports: true,
+      dailyWeeklyAnalytics: true,
+      monthlyReports: true,
       cloudBackup: true,
-      storageGB: 0.1, // 100 MB
-      advancedReports: false,
+      storageGB: 5, // 5 GB during trial
+      dataExport: true,
+      csvPdfExport: true,
+      multiDeviceSync: true,
+      prioritySupport: false, // No priority support during trial
+      integrations: {
+        whatsapp: true,
+        email_reports: true
+      }
+    },
+    limits: {
+      dailyTransactions: 'unlimited',
+      monthlyTransactions: 'unlimited',
+      trialDays: 7
+    }
+  },
+  
+  expired_trial: {
+    name: 'Trial Expired',
+    price: 0,
+    currency: 'INR',
+    billing: 'expired',
+    description: 'Your trial has expired. Upgrade to continue using FlowPOS.',
+    features: {
+      // Very limited features after trial expires
+      maxProducts: 5,
+      maxTransactions: 10,
+      maxLocations: 1,
+      maxDevices: 1,
+      inventoryTracking: false,
+      basicReports: false,
+      basicInvoice: true,
+      customBranding: false,
+      basicAnalytics: false,
+      advancedAnalytics: false,
+      performanceInsights: false,
+      pdfReports: false,
+      dailyWeeklyAnalytics: false,
+      monthlyReports: false,
+      cloudBackup: false,
+      storageGB: 0.05, // 50 MB
+      dataExport: false,
+      csvPdfExport: false,
       multiDeviceSync: false,
       prioritySupport: false,
-      customBranding: false,
       integrations: {
         whatsapp: false,
         email_reports: false
       }
     },
     limits: {
-      dailyTransactions: 10,
-      monthlyTransactions: 50,
-      trialDays: 7
-    }
+      dailyTransactions: 5,
+      monthlyTransactions: 10
+    },
+    isExpired: true
   },
   
   starter: {

@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useCallback } from 'react';
 import { BackHandler, Alert, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
@@ -23,7 +23,14 @@ export const useBackPrevention = (isActive, options = {}) => {
     onCancel
   } = options;
 
+  // Use refs to always have the latest values in the callback
+  const optionsRef = useRef({ message, title, showAlert, hardBlock, onCancel });
   const listenerRef = useRef(null);
+  
+  // Update refs when options change
+  useEffect(() => {
+    optionsRef.current = { message, title, showAlert, hardBlock, onCancel };
+  }, [message, title, showAlert, hardBlock, onCancel]);
   
   // Get navigation object for gesture prevention
   let navigation = null;
@@ -52,31 +59,34 @@ export const useBackPrevention = (isActive, options = {}) => {
     }
   }, [isActive, navigation]);
 
+  // Create stable back press handler that reads from refs
+  const handleBackPress = useCallback(() => {
+    const { message: msg, title: ttl, showAlert: show, hardBlock: hard, onCancel: cancel } = optionsRef.current;
+    
+    if (show && !hard) {
+      Alert.alert(
+        ttl,
+        msg,
+        [
+          { text: 'Wait', style: 'cancel' },
+          { 
+            text: 'Cancel Operation', 
+            style: 'destructive', 
+            onPress: cancel || (() => {})
+          }
+        ]
+      );
+    } else if (hard) {
+      // Show a simple message for hard block
+      Alert.alert(ttl, msg, [{ text: 'OK', style: 'default' }]);
+    }
+    return true; // Always prevent back navigation when active
+  }, []);
+
   // Handle Android hardware back button
   useEffect(() => {
     // Only add listener when isActive is true and on Android
     if (isActive && Platform.OS === 'android') {
-      const onBackPress = () => {
-        if (showAlert && !hardBlock) {
-          Alert.alert(
-            title,
-            message,
-            [
-              { text: 'Wait', style: 'cancel' },
-              { 
-                text: 'Cancel Operation', 
-                style: 'destructive', 
-                onPress: onCancel || (() => {})
-              }
-            ]
-          );
-        } else if (hardBlock) {
-          // Show a simple message for hard block
-          Alert.alert(title, message, [{ text: 'OK', style: 'default' }]);
-        }
-        return true; // Always prevent back navigation when active
-      };
-
       // Remove existing listener if any (with error handling)
       if (listenerRef.current) {
         try {
@@ -88,9 +98,9 @@ export const useBackPrevention = (isActive, options = {}) => {
 
       // Add new listener (with error handling)
       try {
-        BackHandler.addEventListener('hardwareBackPress', onBackPress);
-        listenerRef.current = onBackPress;
-        console.log('🛡️ Back prevention activated');
+        BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+        listenerRef.current = handleBackPress;
+        console.log('🛡️ Back prevention activated for:', optionsRef.current.title);
       } catch (error) {
         console.error('🛡️ [useBackPrevention] Error adding back handler:', error.message);
         listenerRef.current = null;
@@ -121,7 +131,7 @@ export const useBackPrevention = (isActive, options = {}) => {
         }
       }
     };
-  }, [isActive, message, title, showAlert, hardBlock, onCancel]);
+  }, [isActive, handleBackPress]);
 };
 
 export default useBackPrevention;

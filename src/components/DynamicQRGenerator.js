@@ -15,7 +15,7 @@ import { getDeviceInfo } from '../utils/deviceUtils';
 import ResponsiveText from './ResponsiveText';
 import { useNotificationPaymentReader } from '../hooks/useNotificationPaymentReader';
 import { colors } from '../styles/colors';
-import { useAuth } from '../context/AuthContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 
 const DynamicQRGenerator = ({ 
   amount, 
@@ -35,8 +35,13 @@ const DynamicQRGenerator = ({
   const [isAutoListening, setIsAutoListening] = useState(false);
   const [showUpiError, setShowUpiError] = useState(false);
   const [autoPaymentDetectionEnabled, setAutoPaymentDetectionEnabled] = useState(true);
+  
+  // Import cache function for reading auto payment detection setting
+  const { getAppSettingFromCache } = require('../context/AppSettingsContext');
   const { isTablet } = getDeviceInfo();
-  const { getStore } = useAuth();
+  
+  // Use StoreSettingsContext for UPI IDs (migrated from getStore())
+  const { storeSettings, getPaymentSettings, getStoreProfile } = useStoreSettings();
   
   // Use refs to store callback functions and avoid dependency issues
   const onCloseRef = useRef(onClose);
@@ -110,16 +115,32 @@ const DynamicQRGenerator = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeInfo, amount, visible, selectedUpiId]);
 
-  // Load auto payment detection setting
+  // Load auto payment detection setting from AppSettingsContext cache
   useEffect(() => {
-    const loadAutoDetectionSetting = async () => {
+    const loadAutoDetectionSetting = () => {
       try {
-        const setting = await AsyncStorage.getItem('autoPaymentDetection');
-        if (setting !== null) {
-          setAutoPaymentDetectionEnabled(JSON.parse(setting));
+        // Read from AppSettingsContext cache first (single source of truth)
+        const cachedSetting = getAppSettingFromCache('autoPaymentDetection');
+        
+        if (cachedSetting !== undefined) {
+          setAutoPaymentDetectionEnabled(cachedSetting);
+          console.log('📱 [DynamicQRGenerator] autoPaymentDetection read from cache:', cachedSetting);
+        } else {
+          // Fallback to AsyncStorage if cache unavailable (backward compatibility)
+          AsyncStorage.getItem('autoPaymentDetection').then(setting => {
+            if (setting !== null) {
+              setAutoPaymentDetectionEnabled(JSON.parse(setting));
+              console.log('📱 [DynamicQRGenerator] autoPaymentDetection fallback to AsyncStorage:', JSON.parse(setting));
+            } else {
+              // Default to true if no setting exists
+              setAutoPaymentDetectionEnabled(true);
+              console.log('📱 [DynamicQRGenerator] autoPaymentDetection using default: true');
+            }
+          });
         }
       } catch (error) {
         console.error('Error loading auto payment detection setting:', error);
+        setAutoPaymentDetectionEnabled(true); // Default to enabled on error
       }
     };
     loadAutoDetectionSetting();
@@ -127,12 +148,14 @@ const DynamicQRGenerator = ({
 
   const loadStoreInfo = async () => {
     try {
-      console.log('🔄 Loading store info from backend for QR generation...');
+      console.log('🔄 Loading store info from StoreSettingsContext for QR generation...');
       
-      // Get store information from backend
-      const storeData = await getStore();
+      // Get store information from StoreSettingsContext (migrated from getStore())
+      const storeProfile = getStoreProfile();
+      const paymentSettings = getPaymentSettings();
       
-      if (!storeData) {
+      // Check if store settings are available
+      if (!storeSettings) {
         setShowUpiError(true);
         Alert.alert(
           'Store Setup Required',
@@ -151,22 +174,28 @@ const DynamicQRGenerator = ({
         return;
       }
 
-      console.log('📊 Store data loaded for QR:', storeData);
+      // Combine store profile and payment settings for storeData
+      const storeData = {
+        ...storeProfile,
+        ...paymentSettings
+      };
+
+      console.log('📊 Store data loaded for QR from context:', storeData);
       setStoreInfo(storeData);
       
-      // Set up available UPI IDs from backend store data
+      // Set up available UPI IDs from context
       const upiIds = [];
-      if (storeData.upi_id) {
-        upiIds.push(storeData.upi_id);
+      if (paymentSettings.upi_id) {
+        upiIds.push(paymentSettings.upi_id);
       }
-      if (storeData.upi_id_2) {
-        upiIds.push(storeData.upi_id_2);
+      if (paymentSettings.upi_id_2) {
+        upiIds.push(paymentSettings.upi_id_2);
       }
-      if (storeData.upi_id_3) {
-        upiIds.push(storeData.upi_id_3);
+      if (paymentSettings.upi_id_3) {
+        upiIds.push(paymentSettings.upi_id_3);
       }
       
-      console.log('📱 Available UPI IDs:', upiIds);
+      console.log('📱 Available UPI IDs from context:', upiIds);
       
       if (upiIds.length === 0) {
         setShowUpiError(true);
@@ -191,11 +220,11 @@ const DynamicQRGenerator = ({
       setSelectedUpiId(upiIds[0] || ''); // Default to first UPI ID
       setShowUpiError(false);
     } catch (error) {
-      console.error('Error loading store info from backend:', error);
+      console.error('Error loading store info from context:', error);
       setShowUpiError(true);
       Alert.alert(
         'Error',
-        'Failed to load store information from server. Please check your connection and try again.',
+        'Failed to load store information. Please check your connection and try again.',
         [{ text: 'OK', onPress: () => onCloseRef.current?.() }]
       );
     }

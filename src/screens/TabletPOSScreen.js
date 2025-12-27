@@ -14,6 +14,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 import LoadingSpinner from '../components/LoadingSpinner';
 
 import CustomAlert from '../components/CustomAlert';
@@ -28,10 +29,14 @@ const TabletPOSScreen = ({ navigation }) => {
   const [products, setProducts] = useState([]);
   const [selectedTag, setSelectedTag] = useState('All Items');
   const [refreshing, setRefreshing] = useState(false);
-  const [storeName, setStoreName] = useState('FlowPOS Store');
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
   const { items, addItem, removeItem, clearCart, getItemCount, getTotal } = useCart();
+  const { getStoreProfile } = useStoreSettings();
+  
+  // Get store name from context
+  const storeProfile = getStoreProfile();
+  const storeName = storeProfile.store_name || 'FlowPOS Store';
   
   const { isTablet } = getDeviceInfo();
   const layoutConfig = getTabletLayoutConfig();
@@ -52,22 +57,10 @@ const TabletPOSScreen = ({ navigation }) => {
 
   useEffect(() => {
     loadProducts();
-    loadStoreName();
+    // Store name now comes from StoreSettingsContext - no need to load separately
   }, []);
 
-  const loadStoreName = async () => {
-    try {
-      const storeInfo = await AsyncStorage.getItem('storeInfo');
-      if (storeInfo) {
-        const parsedStoreInfo = JSON.parse(storeInfo);
-        if (parsedStoreInfo.name && parsedStoreInfo.name.trim()) {
-          setStoreName(parsedStoreInfo.name);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading store name:', error);
-    }
-  };
+  // Store name now comes from StoreSettingsContext via getStoreProfile()
 
   const loadProducts = async (isRefresh = false) => {
     if (isRefresh) {

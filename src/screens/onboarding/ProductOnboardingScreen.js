@@ -21,6 +21,7 @@ import { colors } from '../../styles/colors';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import productsService from '../../services/ProductsService';
 import NetworkService from '../../services/NetworkService';
+import { useStoreSettings } from '../../context/StoreSettingsContext';
 
 // Enhanced product validation and security utilities
 const ProductValidation = {
@@ -205,6 +206,9 @@ const ProductOnboardingScreen = ({ navigation }) => {
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
   const [businessType, setBusinessType] = useState('restaurant');
+  
+  // Get store settings from context
+  const { getStoreProfile } = useStoreSettings();
   
   const [formData, setFormData] = useState({
     name: '',
@@ -466,10 +470,10 @@ const ProductOnboardingScreen = ({ navigation }) => {
 
   const loadBusinessType = async () => {
     try {
-      const storeData = await AsyncStorage.getItem('storeInfo');
-      if (storeData) {
-        const store = JSON.parse(storeData);
-        setBusinessType(store.business_type || store.businessType || 'Restaurant/Cafe');
+      // Get business type from StoreSettingsContext
+      const storeProfile = getStoreProfile();
+      if (storeProfile.business_type) {
+        setBusinessType(storeProfile.business_type);
       }
     } catch (error) {
       console.error('Error loading business type:', error);

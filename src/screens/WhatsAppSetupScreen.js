@@ -16,18 +16,15 @@ import { colors } from '../styles/colors';
 import { buttonStyles } from '../styles/buttonStyles';
 import LoadingSpinner from '../components/LoadingSpinner';
 import WhatsAppService from '../services/WhatsAppService';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
 
 const WhatsAppSetupScreen = ({ navigation }) => {
   const [whatsAppEnabled, setWhatsAppEnabled] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [isTesting, setIsTesting] = useState(false);
-  
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('WhatsAppSetup');
+  const [hasAccess, setHasAccess] = useState(true);
 
   useEffect(() => {
+    // Load WhatsApp settings on mount
     loadWhatsAppSettings();
   }, []);
 
@@ -227,13 +224,6 @@ const WhatsAppSetupScreen = ({ navigation }) => {
 
       {/* Loading Overlay */}
       {isLoading && <LoadingSpinner />}
-
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
-        visible={showTour}
-        currentScreen="WhatsAppSetup"
-        onComplete={completeTour}
-      />
     </SafeAreaView>
   );
 };

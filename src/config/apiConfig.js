@@ -8,8 +8,8 @@ const ENVIRONMENT = 'development'; // Change to 'production' for Railway deploym
 const API_CONFIGS = {
   development: [
     // LOCAL DEVELOPMENT - Testing (Multiple IPs for fallback)
-    'http://192.168.1.8:3000',      // Primary - Current machine IP for mobile access
-    'http://localhost:3000',        // Fallback - localhost
+    'http://192.168.1.4:3000',      // Primary - Your current LAN IP for mobile
+    'http://localhost:3000',        // Fallback - localhost for same machine
     'http://127.0.0.1:3000',        // Loopback
     'http://10.0.2.2:3000',         // Android emulator
   ],

@@ -7,461 +7,424 @@ import {
   Modal,
   Dimensions,
   Platform,
-  StatusBar,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Haptics from 'expo-haptics';
 
-const { width, height } = Dimensions.get('window');
-const statusBarHeight = Platform.OS === 'ios' ? 44 : StatusBar.currentHeight || 0;
+const { width: SCREEN_WIDTH, height: SCREEN_HEIGHT } = Dimensions.get('window');
 
-// Bottom navigation bar height (tab bar)
-const BOTTOM_NAV_HEIGHT = 80;
-// Safe area for content (above bottom nav)
-const CONTENT_BOTTOM = height - BOTTOM_NAV_HEIGHT;
-
-const ImprovedTourGuide = ({ visible, onComplete, currentScreen, navigation }) => {
-  const [currentStep, setCurrentStep] = useState(0);
-  const [tourSteps, setTourSteps] = useState([]);
-
-  // Improved tour data with accurate positioning based on actual layouts
-  // All positions account for: statusBar, header, bottom nav bar
-  const tourData = {
-    POS: [
-      {
-        title: 'Welcome to FlowPOS! 🏪',
-        description: 'This is your main POS screen where you can add products to cart and process orders. The header shows your store name.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Product Categories 📂',
-        description: 'Filter products by categories. Tap on different tags to see specific product types like "All Items", "Food", "Drinks", etc.',
-        highlight: { top: statusBarHeight + 70, left: 0, width: '100%', height: 68 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Product Grid 📦',
-        description: 'Your products are displayed here. Each card shows the product name, price, and image. Products with low stock show a warning badge.',
-        highlight: { top: statusBarHeight + 138, left: 16, width: width - 32, height: Math.min(350, CONTENT_BOTTOM - statusBarHeight - 220) },
-        cardPosition: 'center',
-      },
-      {
-        title: '➕ Adding Products to Cart',
-        description: 'TAP ONCE on any product card to add 1 item to your cart. You\'ll see a quantity badge appear on the product showing how many are in cart.',
-        highlight: { top: statusBarHeight + 138, left: 16, width: (width - 48) / 2, height: 160 },
-        cardPosition: 'center',
-      },
-      {
-        title: '➕➕ Adding Multiple Items',
-        description: 'TAP MULTIPLE TIMES on the same product to increase quantity. Each tap adds one more item. The quantity badge updates instantly!',
-        highlight: { top: statusBarHeight + 138, left: 16, width: (width - 48) / 2, height: 160 },
-        cardPosition: 'center',
-      },
-      {
-        title: '➖ Removing Products',
-        description: 'LONG PRESS (hold for 1 second) on any product to remove ALL quantities of that item from cart at once. Great for quick corrections!',
-        highlight: { top: statusBarHeight + 138, left: 16, width: (width - 48) / 2, height: 160 },
-        cardPosition: 'center',
-      },
-      {
-        title: 'Cart Summary 🛒',
-        description: 'When you add items, the cart summary appears at the bottom. It shows total items count and total amount. Tap "Complete Order" to proceed to checkout.',
-        highlight: { top: CONTENT_BOTTOM - 90, left: 20, width: width - 40, height: 80 },
-        cardPosition: 'top',
-      },
-      {
-        title: 'Clear All Items 🗑️',
-        description: 'Use the trash icon button in the cart summary to clear ALL items at once. This removes everything from your current order instantly.',
-        highlight: { top: CONTENT_BOTTOM - 90, left: 20, width: 60, height: 80 },
-        cardPosition: 'top',
-      },
-      {
-        title: 'Ready to Checkout! ✅',
-        description: 'Tap "Complete Order" to go to the Cart screen where you can enter customer details, choose payment method, and finalize the order.',
-        highlight: { top: CONTENT_BOTTOM - 90, left: width - 180, width: 160, height: 80 },
-        cardPosition: 'top',
-        nextScreen: 'Cart', // Indicates this step should navigate to Cart
-      },
-    ],
-    Cart: [
-      {
-        title: 'Customer Information 👤',
-        description: 'Enter customer details first. Customer name and phone number are required for all orders and help with order tracking.',
-        highlight: { top: statusBarHeight + 60, left: 16, width: width - 32, height: 160 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Order Items Review 📋',
-        description: 'Review all cart items here. Adjust quantities with +/- buttons or remove items completely. Shows individual and total prices.',
-        highlight: { top: statusBarHeight + 240, left: 16, width: width - 32, height: 180 },
-        cardPosition: 'center',
-      },
-      {
-        title: 'Payment Method Selection 💳',
-        description: 'Choose how customer will pay: Cash or QR Pay (UPI). QR Pay automatically generates QR codes for exact amounts.',
-        highlight: { top: statusBarHeight + 440, left: 16, width: width - 32, height: 100 },
-        cardPosition: 'top',
-      },
-      {
-        title: 'Complete Order ✅',
-        description: 'Review the order summary and tap "Complete Order" to process payment and finish the transaction. You\'ll get a professional invoice.',
-        highlight: { top: CONTENT_BOTTOM - 70, left: 16, width: width - 32, height: 56 },
-        cardPosition: 'top',
-      },
-    ],
-    Manage: [
-      {
-        title: 'Business Management 📊',
-        description: 'This is your business control center. The header shows your store name and provides access to settings and subscription.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Tab Navigation 📑',
-        description: 'Switch between different management sections: Products (inventory), Inventory (stock), Store Settings, and Materials.',
-        highlight: { top: statusBarHeight + 70, left: 0, width: '100%', height: 50 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Product Management 📦',
-        description: 'Add, edit, and manage your products. Set prices, track stock, add images, and organize with tags. This builds your inventory.',
-        highlight: { top: statusBarHeight + 120, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 200) },
-        cardPosition: 'center',
-      },
-    ],
-    Orders: [
-      {
-        title: 'Order History 📜',
-        description: 'View all completed orders with order IDs, dates, and customer information. Pull down to refresh the list.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Order Management 📋',
-        description: 'Each order shows customer details, items, payment method, and total. Tap any order for details or to generate/send invoices.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    Analytics: [
-      {
-        title: 'Business Analytics 📈',
-        description: 'Track your business performance with comprehensive sales data, revenue trends, and insights. Pull down to refresh data.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Revenue Dashboard 💰',
-        description: 'View key metrics: total revenue, order count, average order value, and popular products. Monitor today, weekly, and all-time performance.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    Settings: [
-      {
-        title: 'App Settings ⚙️',
-        description: 'Configure your app preferences, business settings, and integrations. Customize FlowPOS to work best for your business.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Business Configuration 🏪',
-        description: 'Set up WhatsApp integration, invoice settings, payment methods, and other business-specific configurations.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    WhatsAppSetup: [
-      {
-        title: 'WhatsApp Business Integration 📱',
-        description: 'Set up WhatsApp to automatically send professional invoices to your customers. This uses Twilio\'s WhatsApp Business API.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Twilio Configuration 🔧',
-        description: 'Enter your Twilio credentials to connect WhatsApp. You\'ll need Account SID, Auth Token, and WhatsApp number from your Twilio console.',
-        highlight: { top: statusBarHeight + 100, left: 16, width: width - 32, height: Math.min(280, CONTENT_BOTTOM - statusBarHeight - 200) },
-        cardPosition: 'center',
-      },
-      {
-        title: 'Test & Save 💾',
-        description: 'Always test your configuration first to ensure it works properly, then save it. Your customers will receive professional invoices via WhatsApp.',
-        highlight: { top: CONTENT_BOTTOM - 80, left: 16, width: width - 32, height: 60 },
-        cardPosition: 'top',
-      },
-    ],
-    PerformanceInsights: [
-      {
-        title: 'Performance Analytics 📊',
-        description: 'Monitor your business performance with advanced insights, health scores, and optimization recommendations.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Business Health Score 💪',
-        description: 'View your overall business health score and get actionable insights to improve performance and efficiency.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    StorageManagement: [
-      {
-        title: 'Cloud Storage Management ☁️',
-        description: 'Monitor your cloud storage usage, manage data efficiently, and optimize storage costs across your FlowPOS account.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Storage Analytics 📈',
-        description: 'View detailed storage breakdowns by data type, track usage trends, and get recommendations for optimization.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    AdvancedAnalytics: [
-      {
-        title: 'Advanced Business Analytics 📊',
-        description: 'Deep dive into your business performance with advanced charts, filters, and detailed insights. Export comprehensive reports.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Interactive Filters 🔍',
-        description: 'Use powerful filters to analyze specific time periods, categories, or products. Get exactly the insights you need.',
-        highlight: { top: statusBarHeight + 70, left: 0, width: '100%', height: 50 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Summary Cards 📋',
-        description: 'Scroll through key metrics cards to see revenue, orders, items sold, and averages. Cards are horizontally scrollable!',
-        highlight: { top: statusBarHeight + 120, left: 0, width: '100%', height: 80 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Export Reports 📄',
-        description: 'Generate and export detailed PDF reports with comprehensive analytics data for business planning and record keeping.',
-        highlight: { top: statusBarHeight + 200, left: 16, width: width - 32, height: 50 },
-        cardPosition: 'bottom',
-      },
-    ],
-    DataExport: [
-      {
-        title: 'Data Export Center 📤',
-        description: 'Export your business data in various formats (CSV, PDF, Excel) for analysis, backup, or integration with other systems.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Export Options 📋',
-        description: 'Choose what data to export: orders, products, customers, or analytics. Select date ranges and formats that suit your needs.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    PDFReports: [
-      {
-        title: 'Professional PDF Reports 📄',
-        description: 'Generate comprehensive business reports in PDF format with charts, analytics, and professional formatting.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Report Templates 📋',
-        description: 'Choose from various report templates: sales summary, inventory report, customer analysis, and financial overview.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    Subscription: [
-      {
-        title: 'Subscription Management 💎',
-        description: 'Manage your FlowPOS subscription, view plan features, usage limits, and upgrade options for enhanced capabilities.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Plan Features 🚀',
-        description: 'See what features are available in your current plan and what you can unlock with upgrades. Track usage and limits.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
-    Profile: [
-      {
-        title: 'User Profile 👤',
-        description: 'Manage your personal information, business details, and account settings. Keep your profile updated for better service.',
-        highlight: { top: statusBarHeight, left: 0, width: '100%', height: 70 },
-        cardPosition: 'bottom',
-      },
-      {
-        title: 'Account Management 🔧',
-        description: 'Access account settings, privacy controls, security options, and profile editing tools from this central hub.',
-        highlight: { top: statusBarHeight + 70, left: 16, width: width - 32, height: Math.min(400, CONTENT_BOTTOM - statusBarHeight - 150) },
-        cardPosition: 'center',
-      },
-    ],
+// Responsive positioning system - calculates positions based on screen size
+const getResponsivePositions = () => {
+  const isTablet = SCREEN_WIDTH > 768;
+  const headerHeight = Platform.OS === 'ios' ? 100 : 80;
+  const bottomSafeArea = Platform.OS === 'ios' ? 34 : 0;
+  
+  return {
+    // POS Screen positions
+    POS_HEADER: { 
+      top: headerHeight - 30, 
+      left: 0, 
+      width: SCREEN_WIDTH, 
+      height: 70 
+    },
+    POS_FIRST_PRODUCT: { 
+      top: headerHeight + 100, 
+      left: 16, 
+      width: isTablet ? (SCREEN_WIDTH - 64) / 3 : (SCREEN_WIDTH - 48) / 2, 
+      height: isTablet ? 250 : 200 
+    },
+    POS_CART_BAR: { 
+      top: SCREEN_HEIGHT - 160 - bottomSafeArea, 
+      left: 20, 
+      width: SCREEN_WIDTH - 40, 
+      height: 70 
+    },
+    POS_COMPLETE_BTN: { 
+      top: SCREEN_HEIGHT - 150 - bottomSafeArea, 
+      left: SCREEN_WIDTH - 180, 
+      width: 150, 
+      height: 50 
+    },
+    POS_EMPTY: { 
+      top: SCREEN_HEIGHT / 2 - 80, 
+      left: 30, 
+      width: SCREEN_WIDTH - 60, 
+      height: 160 
+    },
+    
+    // Manage Screen positions
+    MANAGE_HEADER: { 
+      top: headerHeight - 30, 
+      left: 0, 
+      width: SCREEN_WIDTH, 
+      height: 70 
+    },
+    MANAGE_TABS: { 
+      top: headerHeight + 40, 
+      left: 0, 
+      width: SCREEN_WIDTH, 
+      height: 50 
+    },
+    MANAGE_ADD_BTN: { 
+      top: headerHeight + 100, 
+      left: SCREEN_WIDTH - 150, 
+      width: 130, 
+      height: 40 
+    },
+    MANAGE_LIST: { 
+      top: headerHeight + 150, 
+      left: 10, 
+      width: SCREEN_WIDTH - 20, 
+      height: 300 
+    },
+    
+    // Cart Screen positions
+    CART_CUSTOMER: { 
+      top: headerHeight + 20, 
+      left: 20, 
+      width: SCREEN_WIDTH - 40, 
+      height: 150 
+    },
+    CART_ITEMS: { 
+      top: headerHeight + 190, 
+      left: 20, 
+      width: SCREEN_WIDTH - 40, 
+      height: 200 
+    },
+    CART_PAYMENT: { 
+      top: SCREEN_HEIGHT - 250 - bottomSafeArea, 
+      left: 20, 
+      width: SCREEN_WIDTH - 40, 
+      height: 70 
+    },
+    CART_COMPLETE: { 
+      top: SCREEN_HEIGHT - 130 - bottomSafeArea, 
+      left: 20, 
+      width: SCREEN_WIDTH - 40, 
+      height: 56 
+    },
+    
+    // Orders Screen positions
+    ORDERS_HEADER: { 
+      top: headerHeight - 30, 
+      left: 0, 
+      width: SCREEN_WIDTH, 
+      height: 70 
+    },
+    ORDERS_LIST: { 
+      top: headerHeight + 50, 
+      left: 10, 
+      width: SCREEN_WIDTH - 20, 
+      height: SCREEN_HEIGHT - headerHeight - 150 
+    },
+    
+    // Analytics Screen positions
+    ANALYTICS_HEADER: { 
+      top: headerHeight - 30, 
+      left: 0, 
+      width: SCREEN_WIDTH, 
+      height: 70 
+    },
+    ANALYTICS_METRICS: { 
+      top: headerHeight + 50, 
+      left: 10, 
+      width: SCREEN_WIDTH - 20, 
+      height: 200 
+    },
+    
+    // Advanced Analytics positions
+    ADV_HEADER: { 
+      top: headerHeight - 30, 
+      left: 0, 
+      width: SCREEN_WIDTH, 
+      height: 70 
+    },
+    ADV_FILTERS: { 
+      top: headerHeight + 50, 
+      left: 10, 
+      width: SCREEN_WIDTH - 20, 
+      height: 50 
+    },
+    ADV_CHARTS: { 
+      top: headerHeight + 120, 
+      left: 10, 
+      width: SCREEN_WIDTH - 20, 
+      height: 300 
+    },
   };
+};
+
+// Tour content with improved descriptions
+const TOURS = {
+  POS: [
+    { 
+      title: '🏪 Welcome to POS', 
+      text: 'This is your main sales screen where you process customer orders.', 
+      box: 'POS_HEADER', 
+      cardPos: 'bottom' 
+    },
+    { 
+      title: '👆 Add Products', 
+      text: 'TAP any product to add it to the cart. The quantity will increase with each tap.', 
+      box: 'POS_FIRST_PRODUCT', 
+      cardPos: 'bottom', 
+      interact: true 
+    },
+    { 
+      title: '✋ Remove Products', 
+      text: 'LONG PRESS any product to remove it from the cart.', 
+      box: 'POS_FIRST_PRODUCT', 
+      cardPos: 'bottom', 
+      interact: true 
+    },
+    { 
+      title: '🛒 Cart Summary', 
+      text: 'Your cart summary appears here. Tap to view full cart details.', 
+      box: 'POS_CART_BAR', 
+      cardPos: 'top', 
+      interact: true 
+    },
+    { 
+      title: '✅ Complete Order', 
+      text: 'Tap here to proceed to checkout and complete the sale.', 
+      box: 'POS_COMPLETE_BTN', 
+      cardPos: 'top', 
+      interact: true, 
+      nextScreen: 'Cart' 
+    },
+  ],
+  POS_EMPTY: [
+    { 
+      title: '📦 No Products Yet', 
+      text: 'You need to add products first. Let\'s go to the Manage screen to add some products.', 
+      box: 'POS_EMPTY', 
+      cardPos: 'bottom', 
+      nextScreen: 'Manage', 
+      autoNav: true 
+    },
+  ],
+  Manage: [
+    { 
+      title: '📊 Manage Your Store', 
+      text: 'This is where you control your products, inventory, and store settings.', 
+      box: 'MANAGE_HEADER', 
+      cardPos: 'bottom' 
+    },
+    { 
+      title: '📑 Navigation Tabs', 
+      text: 'Switch between Products, Inventory, and Store Settings using these tabs.', 
+      box: 'MANAGE_TABS', 
+      cardPos: 'bottom', 
+      interact: true 
+    },
+    { 
+      title: '➕ Add New Product', 
+      text: 'Tap here to create new products for your store.', 
+      box: 'MANAGE_ADD_BTN', 
+      cardPos: 'bottom', 
+      interact: true 
+    },
+    { 
+      title: '✏️ Manage Products', 
+      text: 'View, edit, or delete your existing products from this list.', 
+      box: 'MANAGE_LIST', 
+      cardPos: 'top', 
+      interact: true 
+    },
+  ],
+  Cart: [
+    { 
+      title: '👤 Customer Details', 
+      text: 'Enter customer information for the invoice and receipt.', 
+      box: 'CART_CUSTOMER', 
+      cardPos: 'bottom', 
+      interact: true 
+    },
+    { 
+      title: '📋 Order Items', 
+      text: 'Review the items in this order. You can still modify quantities here.', 
+      box: 'CART_ITEMS', 
+      cardPos: 'top', 
+      interact: true 
+    },
+    { 
+      title: '💳 Payment Method', 
+      text: 'Select how the customer will pay for this order.', 
+      box: 'CART_PAYMENT', 
+      cardPos: 'top', 
+      interact: true 
+    },
+    { 
+      title: '✅ Complete Sale', 
+      text: 'Finalize the transaction and generate the invoice.', 
+      box: 'CART_COMPLETE', 
+      cardPos: 'top', 
+      interact: true 
+    },
+  ],
+  Orders: [
+    { 
+      title: '📋 Order History', 
+      text: 'View all your completed orders and their details.', 
+      box: 'ORDERS_HEADER', 
+      cardPos: 'bottom' 
+    },
+    { 
+      title: '📄 Order Actions', 
+      text: 'Tap any order to view details, generate invoice, or send via WhatsApp.', 
+      box: 'ORDERS_LIST', 
+      cardPos: 'top', 
+      interact: true 
+    },
+  ],
+  Analytics: [
+    { 
+      title: '📈 Business Analytics', 
+      text: 'Monitor your business performance and sales trends.', 
+      box: 'ANALYTICS_HEADER', 
+      cardPos: 'bottom' 
+    },
+    { 
+      title: '📊 Key Metrics', 
+      text: 'View revenue, order count, and other important business metrics.', 
+      box: 'ANALYTICS_METRICS', 
+      cardPos: 'bottom', 
+      interact: true 
+    },
+  ],
+  AdvancedAnalytics: [
+    { 
+      title: '📊 Advanced Analytics', 
+      text: 'Detailed insights and advanced reporting for your business.', 
+      box: 'ADV_HEADER', 
+      cardPos: 'bottom' 
+    },
+    { 
+      title: '🔍 Time Filters', 
+      text: 'Filter your analytics by different time periods.', 
+      box: 'ADV_FILTERS', 
+      cardPos: 'bottom', 
+      interact: true 
+    },
+    { 
+      title: '📈 Visual Charts', 
+      text: 'Interactive charts showing your business data trends.', 
+      box: 'ADV_CHARTS', 
+      cardPos: 'top', 
+      interact: true 
+    },
+  ],
+};
+
+const ImprovedTourGuide = ({ visible, onComplete, currentScreen, navigation, hasProducts = true }) => {
+  const [step, setStep] = useState(0);
+  const [steps, setSteps] = useState([]);
+  const [positions, setPositions] = useState({});
+
+  // Update positions when screen dimensions change
+  useEffect(() => {
+    const updatePositions = () => {
+      setPositions(getResponsivePositions());
+    };
+    
+    updatePositions();
+    
+    const subscription = Dimensions.addEventListener('change', updatePositions);
+    return () => subscription?.remove();
+  }, []);
 
   useEffect(() => {
-    if (visible && currentScreen && tourData[currentScreen]) {
-      setTourSteps(tourData[currentScreen]);
-      setCurrentStep(0);
+    if (visible && currentScreen) {
+      // Determine which tour to show
+      let tourSteps;
+      if (currentScreen === 'POS' && !hasProducts) {
+        tourSteps = TOURS.POS_EMPTY;
+      } else {
+        tourSteps = TOURS[currentScreen] || [];
+      }
+      
+      setSteps(tourSteps);
+      setStep(0);
+      console.log(`🎯 [TourGuide] Starting ${currentScreen} tour with ${tourSteps.length} steps`);
     }
-  }, [visible, currentScreen]);
+  }, [visible, currentScreen, hasProducts]);
 
   const handleNext = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     
-    const currentStepData = tourSteps[currentStep];
+    const currentStep = steps[step];
     
-    // Check if this step should navigate to another screen
-    if (currentStepData?.nextScreen && navigation) {
-      // Save current tour progress
-      try {
-        const completedTours = await AsyncStorage.getItem('completedTours');
-        const tours = completedTours ? JSON.parse(completedTours) : {};
-        tours[currentScreen] = true;
-        await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
-        await AsyncStorage.setItem('hasSeenAppTour', 'true');
-        
-        // Store that we're continuing the tour
-        await AsyncStorage.setItem('continueTourTo', currentStepData.nextScreen);
-        
-        console.log(`🎯 [${currentScreen}] Navigating to ${currentStepData.nextScreen} for continued tour`);
-      } catch (error) {
-        console.error('Error saving tour progress:', error);
-      }
-      
-      // Complete current tour and navigate
+    // Handle auto-navigation
+    if (currentStep?.autoNav && currentStep?.nextScreen) {
+      console.log(`🎯 [TourGuide] Auto-navigating to ${currentStep.nextScreen}`);
+      await AsyncStorage.setItem('continueTourTo', currentStep.nextScreen);
+      navigation.navigate(currentStep.nextScreen);
       onComplete();
-      
-      // Navigate to the next screen with tour flag
-      setTimeout(() => {
-        navigation.navigate(currentStepData.nextScreen, { startTour: true });
-      }, 300);
       return;
     }
     
-    if (currentStep < tourSteps.length - 1) {
-      setCurrentStep(currentStep + 1);
+    // Handle manual navigation
+    if (currentStep?.nextScreen && step === steps.length - 1) {
+      console.log(`🎯 [TourGuide] Navigating to ${currentStep.nextScreen} after tour completion`);
+      await AsyncStorage.setItem('continueTourTo', currentStep.nextScreen);
+      navigation.navigate(currentStep.nextScreen);
+      onComplete();
+      return;
+    }
+    
+    // Move to next step
+    if (step < steps.length - 1) {
+      setStep(step + 1);
     } else {
-      handleComplete();
+      onComplete();
     }
   };
 
   const handleSkip = async () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
     
+    // Mark all tours as completed when skipping
     try {
-      console.log(`🎯 [${currentScreen}] Skip button pressed - skipping all tours`);
-      
-      // Mark overall app tour as seen
       await AsyncStorage.setItem('hasSeenAppTour', 'true');
       
-      // Mark all screen tours as completed (core features only)
-      const allScreens = [
-        'POS', 'Cart', 'Manage', 'Orders', 'Analytics', 'Settings', 
-        'WhatsAppSetup', 'PerformanceInsights', 'StorageManagement',
-        'AdvancedAnalytics', 'DataExport', 'PDFReports', 'Subscription'
-      ];
-      const tours = {};
-      allScreens.forEach(screen => {
-        tours[screen] = true;
-      });
-      await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
+      // Clear any pending tour continuation
+      await AsyncStorage.removeItem('continueTourTo');
       
-      console.log(`🎯 [${currentScreen}] All tours skipped successfully`);
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onComplete();
-    } catch (error) {
-      console.error('Error skipping all tours:', error);
-      // Still complete the current tour even if skip all fails
-      handleComplete();
-    }
-  };
-
-  const handleComplete = async () => {
-    try {
-      console.log(`🎯 [${currentScreen}] Tour completed - saving completion status`);
-      
-      // Mark tour as completed for this screen
       const completedTours = await AsyncStorage.getItem('completedTours');
       const tours = completedTours ? JSON.parse(completedTours) : {};
-      tours[currentScreen] = true;
+      
+      // Mark all screens as completed
+      Object.keys(TOURS).forEach(screenName => {
+        tours[screenName] = true;
+      });
+      
       await AsyncStorage.setItem('completedTours', JSON.stringify(tours));
-      
-      // Mark overall tour as seen
-      await AsyncStorage.setItem('hasSeenAppTour', 'true');
-      
-      console.log(`🎯 [${currentScreen}] Tour completion saved successfully`);
-      
-      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      onComplete();
+      console.log('🎯 [TourGuide] All tours marked as completed (skipped)');
     } catch (error) {
-      console.error('Error saving tour completion:', error);
-      onComplete();
+      console.error('Error skipping tours:', error);
     }
+    
+    onComplete();
   };
 
-  const getCardPosition = (cardPosition, highlight) => {
-    const cardHeight = 220;
-    const margin = 16;
-    const safeAreaTop = statusBarHeight + 10;
-    const safeAreaBottom = CONTENT_BOTTOM - 20; // Account for bottom nav
+  if (!visible || steps.length === 0) {
+    return null;
+  }
 
-    switch (cardPosition) {
-      case 'top':
-        // Position above the highlight, but ensure it's visible
-        const topPosition = Math.max(safeAreaTop, highlight.top - cardHeight - margin);
-        return {
-          top: topPosition,
-          left: margin,
-          right: margin,
-        };
-      case 'bottom':
-        // Position below the highlight, but ensure it fits on screen
-        const bottomPosition = Math.min(
-          safeAreaBottom - cardHeight,
-          highlight.top + highlight.height + margin
-        );
-        return {
-          top: Math.max(safeAreaTop, bottomPosition),
-          left: margin,
-          right: margin,
-        };
-      case 'center':
-      default:
-        // Center the card, avoiding the highlight area
-        let centerTop = (safeAreaTop + safeAreaBottom) / 2 - cardHeight / 2;
-        
-        // If center would overlap with highlight, move it
-        const highlightCenter = highlight.top + highlight.height / 2;
-        const cardCenter = centerTop + cardHeight / 2;
-        
-        if (Math.abs(cardCenter - highlightCenter) < (cardHeight / 2 + highlight.height / 2 + margin)) {
-          // Move to the side with more space
-          if (highlightCenter < (safeAreaTop + safeAreaBottom) / 2) {
-            centerTop = highlight.top + highlight.height + margin;
-          } else {
-            centerTop = highlight.top - cardHeight - margin;
-          }
-        }
-        
-        return {
-          top: Math.max(safeAreaTop, Math.min(safeAreaBottom - cardHeight, centerTop)),
-          left: margin,
-          right: margin,
-        };
-    }
-  };
+  const currentStep = steps[step];
+  const currentBox = positions[currentStep.box];
+  
+  if (!currentBox) {
+    console.warn(`🎯 [TourGuide] Position not found for ${currentStep.box}`);
+    return null;
+  }
 
-  if (!visible || !tourSteps.length) return null;
-
-  const currentStepData = tourSteps[currentStep];
-  const cardPosition = getCardPosition(currentStepData.cardPosition, currentStepData.highlight);
+  // Calculate card position
+  const cardTop = currentStep.cardPos === 'top' 
+    ? currentBox.top - 120 
+    : currentBox.top + currentBox.height + 20;
+  
+  const cardLeft = Math.max(20, Math.min(SCREEN_WIDTH - 320, currentBox.left));
 
   return (
     <Modal
@@ -471,58 +434,60 @@ const ImprovedTourGuide = ({ visible, onComplete, currentScreen, navigation }) =
       statusBarTranslucent={true}
     >
       <View style={styles.overlay}>
-        {/* Highlight Area */}
+        {/* Highlight box */}
         <View
           style={[
-            styles.highlight,
+            styles.highlightBox,
             {
-              top: currentStepData.highlight.top,
-              left: currentStepData.highlight.left,
-              width: typeof currentStepData.highlight.width === 'string' 
-                ? currentStepData.highlight.width 
-                : currentStepData.highlight.width,
-              height: currentStepData.highlight.height,
+              top: currentBox.top,
+              left: currentBox.left,
+              width: currentBox.width,
+              height: currentBox.height,
             },
           ]}
         />
-
-        {/* Tour Card */}
-        <View style={[styles.tourCard, cardPosition]}>
-          <View style={styles.tourHeader}>
-            <Text style={styles.tourTitle}>{currentStepData.title}</Text>
+        
+        {/* Tour card */}
+        <View
+          style={[
+            styles.tourCard,
+            {
+              top: cardTop,
+              left: cardLeft,
+            },
+          ]}
+        >
+          <Text style={styles.tourTitle}>{currentStep.title}</Text>
+          <Text style={styles.tourText}>{currentStep.text}</Text>
+          
+          {/* Progress dots */}
+          <View style={styles.progressContainer}>
+            {steps.map((_, index) => (
+              <View
+                key={index}
+                style={[
+                  styles.progressDot,
+                  index === step && styles.progressDotActive,
+                ]}
+              />
+            ))}
+          </View>
+          
+          {/* Buttons */}
+          <View style={styles.buttonContainer}>
             <TouchableOpacity
               style={styles.skipButton}
               onPress={handleSkip}
-              activeOpacity={0.7}
             >
-              <Text style={styles.skipText}>Skip Tour</Text>
+              <Text style={styles.skipButtonText}>Skip All</Text>
             </TouchableOpacity>
-          </View>
-
-          <Text style={styles.tourDescription}>
-            {currentStepData.description}
-          </Text>
-
-          <View style={styles.tourFooter}>
-            <View style={styles.stepIndicators}>
-              {tourSteps.map((_, index) => (
-                <View
-                  key={index}
-                  style={[
-                    styles.stepIndicator,
-                    index === currentStep && styles.stepIndicatorActive,
-                  ]}
-                />
-              ))}
-            </View>
-
+            
             <TouchableOpacity
               style={styles.nextButton}
               onPress={handleNext}
-              activeOpacity={0.8}
             >
               <Text style={styles.nextButtonText}>
-                {currentStep === tourSteps.length - 1 ? 'Got it!' : 'Next'}
+                {step === steps.length - 1 ? 'Done' : 'Next'}
               </Text>
             </TouchableOpacity>
           </View>
@@ -535,92 +500,84 @@ const ImprovedTourGuide = ({ visible, onComplete, currentScreen, navigation }) =
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.75)',
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
   },
-  highlight: {
+  highlightBox: {
     position: 'absolute',
-    backgroundColor: 'rgba(59, 130, 246, 0.15)',
-    borderRadius: 12,
     borderWidth: 3,
-    borderColor: '#3b82f6',
-    shadowColor: '#3b82f6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 1,
-    shadowRadius: 20,
-    elevation: 20,
+    borderColor: '#007AFF',
+    borderRadius: 8,
+    backgroundColor: 'rgba(0, 122, 255, 0.1)',
   },
   tourCard: {
     position: 'absolute',
-    backgroundColor: '#ffffff',
-    borderRadius: 16,
+    width: 300,
+    backgroundColor: 'white',
+    borderRadius: 12,
     padding: 20,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
+    shadowOffset: {
+      width: 0,
+      height: 4,
+    },
     shadowOpacity: 0.3,
-    shadowRadius: 16,
-    elevation: 16,
-    maxHeight: 250,
-  },
-  tourHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
+    shadowRadius: 8,
+    elevation: 8,
   },
   tourTitle: {
     fontSize: 18,
-    fontWeight: '700',
-    color: '#1f2937',
-    flex: 1,
-    marginRight: 12,
+    fontWeight: 'bold',
+    color: '#333',
+    marginBottom: 8,
+    textAlign: 'center',
   },
-  skipButton: {
-    backgroundColor: '#f3f4f6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-  },
-  skipText: {
-    fontSize: 12,
-    color: '#6b7280',
-    fontWeight: '500',
-  },
-  tourDescription: {
+  tourText: {
     fontSize: 14,
-    color: '#4b5563',
+    color: '#666',
     lineHeight: 20,
-    marginBottom: 20,
+    textAlign: 'center',
+    marginBottom: 16,
   },
-  tourFooter: {
+  progressContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 16,
   },
-  stepIndicators: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  stepIndicator: {
+  progressDot: {
     width: 8,
     height: 8,
     borderRadius: 4,
-    backgroundColor: '#d1d5db',
-    marginRight: 6,
+    backgroundColor: '#E0E0E0',
+    marginHorizontal: 4,
   },
-  stepIndicatorActive: {
-    backgroundColor: '#3b82f6',
-    width: 20,
+  progressDotActive: {
+    backgroundColor: '#007AFF',
+  },
+  buttonContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  skipButton: {
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    borderRadius: 6,
+    backgroundColor: '#F0F0F0',
+  },
+  skipButtonText: {
+    fontSize: 14,
+    color: '#666',
+    fontWeight: '500',
   },
   nextButton: {
-    backgroundColor: '#3b82f6',
-    paddingHorizontal: 20,
     paddingVertical: 10,
-    borderRadius: 12,
+    paddingHorizontal: 20,
+    borderRadius: 6,
+    backgroundColor: '#007AFF',
   },
   nextButtonText: {
     fontSize: 14,
+    color: 'white',
     fontWeight: '600',
-    color: '#ffffff',
   },
 });
 

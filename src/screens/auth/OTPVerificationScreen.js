@@ -14,38 +14,60 @@ import { Ionicons } from '@expo/vector-icons';
 import { authColors as colors } from '../../styles/authColors';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const OTPVerificationScreen = ({ navigation, route }) => {
   const { email, name, phone } = route.params;
   const { verifyOTP, resendOTP } = useAuth();
+  
   const [otp, setOtp] = useState(['', '', '', '', '', '']);
   const [isLoading, setIsLoading] = useState(false);
   const [isResending, setIsResending] = useState(false);
-  const [countdown, setCountdown] = useState(60);
-  const [canResend, setCanResend] = useState(false);
+  const [countdown, setCountdown] = useState(180); // 3 minutes = 180 seconds
+  const [resendAttempts, setResendAttempts] = useState(0);
+  const [maxAttempts] = useState(3);
+  const [showExpiryModal, setShowExpiryModal] = useState(false);
   
   const inputRefs = useRef([]);
 
-  useEffect(() => {
-    // Start countdown timer
-    const timer = setInterval(() => {
-      setCountdown(prev => {
-        if (prev <= 1) {
-          setCanResend(true);
-          clearInterval(timer);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
+  // ALWAYS block back navigation on OTP screen - user must complete verification
+  // This prevents the issue of going back and triggering resend OTP again
+  useBackPrevention(true, {
+    message: 'Please complete OTP verification. Going back will require you to start the signup process again.',
+    title: 'Complete Verification',
+    hardBlock: true, // Always hard block - no back allowed
+    showAlert: true,
+  });
 
-    return () => clearInterval(timer);
-  }, []);
+  // Enhanced timer with expiry handling and visibility
+  useEffect(() => {
+    if (countdown > 0) {
+      const timer = setInterval(() => {
+        setCountdown(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            // Show expiry modal when timer reaches 0
+            setShowExpiryModal(true);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => clearInterval(timer);
+    }
+  }, [countdown]);
+
+  // Format timer display (MM:SS)
+  const formatTime = (seconds) => {
+    const minutes = Math.floor(seconds / 60);
+    const remainingSeconds = seconds % 60;
+    return `${minutes}:${remainingSeconds.toString().padStart(2, '0')}`;
+  };
 
   const handleOtpChange = (index, value) => {
-    // Only allow digits
-    if (value && !/^\d$/.test(value)) return;
-
+    if (value.length > 1) return; // Prevent multiple characters
+    
     const newOtp = [...otp];
     newOtp[index] = value;
     setOtp(newOtp);
@@ -55,8 +77,8 @@ const OTPVerificationScreen = ({ navigation, route }) => {
       inputRefs.current[index + 1]?.focus();
     }
 
-    // Auto-verify when all digits are entered
-    if (value && index === 5 && newOtp.every(digit => digit !== '')) {
+    // Auto-verify when all fields are filled
+    if (newOtp.every(digit => digit !== '') && value) {
       handleVerification(newOtp.join(''));
     }
   };
@@ -71,14 +93,14 @@ const OTPVerificationScreen = ({ navigation, route }) => {
     const codeToVerify = otpCode || otp.join('');
     
     if (codeToVerify.length !== 6) {
-      Alert.alert('Invalid OTP', 'Please enter the complete 6-digit verification code');
+      Alert.alert('Invalid Code', 'Please enter the complete 6-digit code');
       return;
     }
 
     setIsLoading(true);
     try {
       // Verify OTP with backend
-      const response = await verifyOTP(email, codeToVerify);
+      await verifyOTP(email, codeToVerify);
       
       // Navigate to password setup after successful verification
       navigation.navigate('PasswordSetup', {
@@ -89,10 +111,9 @@ const OTPVerificationScreen = ({ navigation, route }) => {
       
     } catch (error) {
       console.error('Verification error:', error);
-      Alert.alert(
-        'Verification Failed', 
-        error.message || 'Invalid verification code. Please try again.'
-      );
+      Alert.alert('Invalid Code', error.message || 'Please check your code and try again');
+      
+      // Clear OTP fields
       setOtp(['', '', '', '', '', '']);
       inputRefs.current[0]?.focus();
     } finally {
@@ -101,35 +122,27 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   };
 
   const handleResendOtp = async () => {
+    if (countdown > 0 || resendAttempts >= maxAttempts || isResending) return;
+    
     setIsResending(true);
     try {
-      // Resend OTP via backend
       await resendOTP(email);
       
-      Alert.alert('Code Sent! 📧', 'A new verification code has been sent to your email');
-      setCountdown(60);
-      setCanResend(false);
-      setOtp(['', '', '', '', '', '']); // Clear current OTP
-      inputRefs.current[0]?.focus(); // Focus first input
+      // Increment attempt counter
+      setResendAttempts(prev => prev + 1);
       
-      // Restart countdown
-      const timer = setInterval(() => {
-        setCountdown(prev => {
-          if (prev <= 1) {
-            setCanResend(true);
-            clearInterval(timer);
-            return 0;
-          }
-          return prev - 1;
-        });
-      }, 1000);
+      // Reset countdown to 3 minutes
+      setCountdown(180);
+      setShowExpiryModal(false);
+      
+      Alert.alert(
+        'Code Sent', 
+        `A new verification code has been sent to your email. Attempts remaining: ${maxAttempts - resendAttempts - 1}`
+      );
       
     } catch (error) {
       console.error('Resend error:', error);
-      Alert.alert(
-        'Error', 
-        error.message || 'Failed to resend verification code. Please try again.'
-      );
+      Alert.alert('Error', 'Failed to resend code. Please try again.');
     } finally {
       setIsResending(false);
     }
@@ -143,80 +156,94 @@ const OTPVerificationScreen = ({ navigation, route }) => {
       >
         {/* Header */}
         <View style={styles.header}>
-          <TouchableOpacity
-            style={styles.backButton}
-            onPress={() => navigation.goBack()}
-          >
-            <Ionicons name="arrow-back" size={24} color={colors.text} />
-          </TouchableOpacity>
-          <Text style={styles.title}>Verify Email</Text>
+          <View style={styles.placeholder} />
+          <Text style={styles.title}>Verify Code</Text>
           <View style={styles.placeholder} />
         </View>
 
         {/* Content */}
         <View style={styles.content}>
-          {/* Icon */}
-          <View style={styles.iconContainer}>
-            <Ionicons name="mail" size={60} color={colors.primary} />
+          {/* Icon and Title */}
+          <View style={styles.iconSection}>
+            <View style={styles.iconContainer}>
+              <Ionicons name="mail-outline" size={48} color={colors.primary} />
+            </View>
+            <Text style={styles.mainTitle}>Check Your Email</Text>
+            <Text style={styles.subtitle}>
+              We've sent a 6-digit verification code to
+            </Text>
+            <Text style={styles.email}>{email}</Text>
           </View>
 
-          {/* Title and Description */}
-          <Text style={styles.mainTitle}>Check your email</Text>
-          <Text style={styles.description}>
-            We've sent a 6-digit verification code to{'\n'}
-            <Text style={styles.emailText}>{email}</Text>
-          </Text>
+          {/* Timer Display Section */}
+          <View style={styles.timerSection}>
+            <Text style={styles.timerLabel}>Code expires in:</Text>
+            <Text style={styles.timerDisplay}>{formatTime(countdown)}</Text>
+            
+            {/* Progress Bar */}
+            <View style={styles.timerProgressContainer}>
+              <View 
+                style={[
+                  styles.timerProgress, 
+                  { width: `${(countdown / 180) * 100}%` }
+                ]} 
+              />
+            </View>
+          </View>
 
           {/* OTP Input */}
-          <View style={styles.otpContainer}>
-            {otp.map((digit, index) => (
-              <TextInput
-                key={index}
-                ref={ref => inputRefs.current[index] = ref}
-                style={[
-                  styles.otpInput,
-                  digit && styles.otpInputFilled,
-                ]}
-                value={digit}
-                onChangeText={(value) => handleOtpChange(index, value)}
-                onKeyPress={({ nativeEvent }) => handleKeyPress(index, nativeEvent.key)}
-                keyboardType="numeric"
-                maxLength={1}
-                textAlign="center"
-                selectTextOnFocus
-              />
-            ))}
+          <View style={styles.otpSection}>
+            <Text style={styles.label}>Enter Verification Code</Text>
+            <View style={styles.otpContainer}>
+              {otp.map((digit, index) => (
+                <TextInput
+                  key={index}
+                  ref={ref => inputRefs.current[index] = ref}
+                  style={styles.otpInput}
+                  value={digit}
+                  onChangeText={(value) => handleOtpChange(index, value)}
+                  onKeyPress={({ nativeEvent }) => handleKeyPress(index, nativeEvent.key)}
+                  keyboardType="numeric"
+                  maxLength={1}
+                  textAlign="center"
+                />
+              ))}
+            </View>
           </View>
 
-          {/* Verify Button */}
+          {/* Verify Button - Always active, validation on press */}
           <TouchableOpacity
-            style={[
-              styles.verifyButton,
-              (isLoading || otp.join('').length !== 6) && styles.buttonDisabled
-            ]}
+            style={styles.verifyButton}
             onPress={() => handleVerification()}
-            disabled={isLoading || otp.join('').length !== 6}
+            disabled={isLoading}
           >
             <Text style={styles.verifyButtonText}>Verify & Continue</Text>
           </TouchableOpacity>
 
-          {/* Resend Section */}
+          {/* Resend Section with Attempt Counter */}
           <View style={styles.resendSection}>
-            <Text style={styles.resendText}>Didn't receive the code?</Text>
-            {canResend ? (
-              <TouchableOpacity onPress={handleResendOtp} disabled={isResending}>
-                {isResending ? (
-                  <LoadingSpinner size="small" color={colors.primary} />
-                ) : (
-                  <Text style={styles.resendLink}>Resend Code</Text>
-                )}
-              </TouchableOpacity>
-            ) : (
-              <Text style={styles.countdownText}>
-                Resend in {countdown}s
+            <Text style={styles.resendText}>Didn't receive the code? </Text>
+            <TouchableOpacity
+              onPress={handleResendOtp}
+              disabled={countdown > 0 || isResending || resendAttempts >= maxAttempts}
+            >
+              <Text style={[
+                styles.resendLink,
+                (countdown > 0 || isResending || resendAttempts >= maxAttempts) && styles.resendDisabled
+              ]}>
+                {isResending ? 'Sending...' : 
+                 countdown > 0 ? `Resend in ${formatTime(countdown)}` : 
+                 resendAttempts >= maxAttempts ? 'Max attempts reached' : 'Resend'}
               </Text>
-            )}
+            </TouchableOpacity>
           </View>
+
+          {/* Attempt Counter */}
+          {resendAttempts > 0 && (
+            <Text style={styles.attemptCounter}>
+              Resend attempts: {resendAttempts}/{maxAttempts}
+            </Text>
+          )}
 
           {/* Help Text */}
           <Text style={styles.helpText}>
@@ -224,6 +251,59 @@ const OTPVerificationScreen = ({ navigation, route }) => {
           </Text>
         </View>
       </KeyboardAvoidingView>
+
+      {/* Timer Expiry Modal */}
+      {showExpiryModal && (
+        <Modal
+          visible={showExpiryModal}
+          transparent={true}
+          animationType="fade"
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.expiryModal}>
+              <Ionicons name="time-outline" size={48} color={colors.warning} />
+              <Text style={styles.expiryTitle}>Code Expired</Text>
+              <Text style={styles.expiryMessage}>
+                Your verification code has expired. You can request a new code or go back to try again.
+              </Text>
+              
+              <View style={styles.expiryActions}>
+                <TouchableOpacity
+                  style={styles.expiryBackButton}
+                  onPress={() => {
+                    setShowExpiryModal(false);
+                    navigation.goBack();
+                  }}
+                >
+                  <Text style={styles.expiryBackText}>Go Back</Text>
+                </TouchableOpacity>
+                
+                {resendAttempts < maxAttempts ? (
+                  <TouchableOpacity
+                    style={styles.expiryResendButton}
+                    onPress={() => handleResendOtp()}
+                    disabled={isResending}
+                  >
+                    <Text style={styles.expiryResendText}>
+                      {isResending ? 'Sending...' : 'Resend Code'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : (
+                  <TouchableOpacity
+                    style={styles.expiryBackButton}
+                    onPress={() => {
+                      setShowExpiryModal(false);
+                      navigation.goBack();
+                    }}
+                  >
+                    <Text style={styles.expiryBackText}>Max Attempts Reached</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
+          </View>
+        </Modal>
+      )}
 
       {/* Loading Overlay */}
       {isLoading && <LoadingSpinner />}
@@ -259,38 +339,52 @@ const styles = StyleSheet.create({
   content: {
     flex: 1,
     paddingHorizontal: 20,
+  },
+  iconSection: {
     alignItems: 'center',
+    marginBottom: 40,
   },
   iconContainer: {
-    width: 120,
-    height: 120,
-    borderRadius: 60,
-    backgroundColor: colors.primaryLight,
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: colors.surface,
     alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 30,
+    marginBottom: 20,
   },
   mainTitle: {
     fontSize: 24,
     fontWeight: 'bold',
     color: colors.text,
-    marginBottom: 12,
+    textAlign: 'center',
+    marginBottom: 8,
   },
-  description: {
+  subtitle: {
     fontSize: 16,
     color: colors.textSecondary,
     textAlign: 'center',
-    lineHeight: 22,
-    marginBottom: 40,
   },
-  emailText: {
+  email: {
+    fontSize: 16,
     color: colors.primary,
     fontWeight: '600',
+    textAlign: 'center',
+    marginTop: 4,
+  },
+  otpSection: {
+    marginBottom: 30,
+  },
+  label: {
+    fontSize: 16,
+    fontWeight: '500',
+    color: colors.text,
+    marginBottom: 16,
+    textAlign: 'center',
   },
   otpContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 40,
     paddingHorizontal: 20,
   },
   otpInput: {
@@ -299,26 +393,17 @@ const styles = StyleSheet.create({
     borderWidth: 2,
     borderColor: colors.border,
     borderRadius: 12,
-    fontSize: 20,
-    fontWeight: '600',
+    fontSize: 24,
+    fontWeight: 'bold',
     color: colors.text,
     backgroundColor: colors.surface,
-  },
-  otpInputFilled: {
-    borderColor: colors.primary,
-    backgroundColor: colors.primaryLight,
   },
   verifyButton: {
     backgroundColor: colors.primary,
     borderRadius: 12,
     paddingVertical: 16,
-    paddingHorizontal: 40,
-    minWidth: 200,
     alignItems: 'center',
-    marginBottom: 30,
-  },
-  buttonDisabled: {
-    opacity: 0.6,
+    marginBottom: 20,
   },
   verifyButtonText: {
     color: '#fff',
@@ -326,22 +411,115 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   resendSection: {
+    flexDirection: 'row',
+    justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 20,
   },
   resendText: {
-    fontSize: 14,
+    fontSize: 16,
     color: colors.textSecondary,
-    marginBottom: 8,
   },
   resendLink: {
     fontSize: 16,
     color: colors.primary,
     fontWeight: '600',
   },
-  countdownText: {
+  resendDisabled: {
+    color: colors.textSecondary,
+  },
+  attemptCounter: {
+    fontSize: 12,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    marginTop: 8,
+    fontStyle: 'italic',
+  },
+  timerSection: {
+    alignItems: 'center',
+    marginBottom: 30,
+    paddingHorizontal: 20,
+  },
+  timerLabel: {
     fontSize: 14,
     color: colors.textSecondary,
+    marginBottom: 8,
+  },
+  timerDisplay: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: colors.primary,
+    marginBottom: 12,
+  },
+  timerProgressContainer: {
+    width: '100%',
+    height: 4,
+    backgroundColor: colors.border,
+    borderRadius: 2,
+    overflow: 'hidden',
+  },
+  timerProgress: {
+    height: '100%',
+    backgroundColor: colors.primary,
+    borderRadius: 2,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+  },
+  expiryModal: {
+    backgroundColor: colors.surface,
+    borderRadius: 16,
+    padding: 24,
+    alignItems: 'center',
+    width: '100%',
+    maxWidth: 320,
+  },
+  expiryTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    color: colors.text,
+    marginTop: 16,
+    marginBottom: 8,
+  },
+  expiryMessage: {
+    fontSize: 14,
+    color: colors.textSecondary,
+    textAlign: 'center',
+    lineHeight: 20,
+    marginBottom: 24,
+  },
+  expiryActions: {
+    flexDirection: 'row',
+    gap: 12,
+    width: '100%',
+  },
+  expiryBackButton: {
+    flex: 1,
+    backgroundColor: colors.border,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  expiryBackText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.textSecondary,
+  },
+  expiryResendButton: {
+    flex: 1,
+    backgroundColor: colors.primary,
+    paddingVertical: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  expiryResendText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#fff',
   },
   helpText: {
     fontSize: 12,

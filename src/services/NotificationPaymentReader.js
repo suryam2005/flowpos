@@ -202,15 +202,19 @@ class NotificationPaymentReader {
     return Math.min(confidence, 100);
   }
 
-  // Match parsed payment with active payments
+  // Match parsed payment with active payments - STRICT INTEGER AMOUNT MATCHING
   matchActivePayment(parsedPayment) {
     for (const [paymentId, activePayment] of this.activePayments.entries()) {
-      const amountDiff = Math.abs(parsedPayment.amount - activePayment.amount);
-      const amountMatches = amountDiff < 0.01; // Exact match required
+      // STRICT: Amount must match exactly as integers (no decimals)
+      const expectedAmount = Math.round(activePayment.amount);
+      const receivedAmount = Math.round(parsedPayment.amount);
+      const amountMatches = expectedAmount === receivedAmount;
 
+      // Time window check - payment must be within 10 minutes
       const timeDiff = Date.now() - activePayment.timestamp;
       const timeMatches = timeDiff < 10 * 60 * 1000; // 10 minutes window
 
+      // Only proceed if BOTH amount AND time match
       if (amountMatches && timeMatches) {
         const matchConfidence = this.calculateMatchConfidence(parsedPayment, activePayment);
         
@@ -218,29 +222,40 @@ class NotificationPaymentReader {
           paymentId,
           activePayment,
           confidence: matchConfidence,
-          parsedPayment
+          parsedPayment,
+          amountMatched: true
         };
       }
     }
     return null;
   }
 
-  // Calculate match confidence
+  // Calculate match confidence - Amount match is MANDATORY (integers only)
   calculateMatchConfidence(parsedPayment, activePayment) {
     let confidence = 0;
 
-    // Exact amount match (critical)
-    const amountDiff = Math.abs(parsedPayment.amount - activePayment.amount);
-    if (amountDiff < 0.01) confidence += 70;
+    // MANDATORY: Exact integer amount match (already verified in matchActivePayment)
+    const expectedAmount = Math.round(activePayment.amount);
+    const receivedAmount = Math.round(parsedPayment.amount);
+    
+    if (expectedAmount !== receivedAmount) {
+      // Amount doesn't match - return 0 confidence
+      return 0;
+    }
+    
+    // Amount matches exactly - start with 70% base confidence
+    confidence = 70;
 
-    // Time proximity
+    // Time proximity bonus (up to 20%)
     const timeDiff = Date.now() - activePayment.timestamp;
-    if (timeDiff < 2 * 60 * 1000) confidence += 20; // Within 2 minutes
-    else if (timeDiff < 5 * 60 * 1000) confidence += 15; // Within 5 minutes
-    else if (timeDiff < 10 * 60 * 1000) confidence += 10; // Within 10 minutes
+    if (timeDiff < 1 * 60 * 1000) confidence += 20;       // Within 1 minute
+    else if (timeDiff < 2 * 60 * 1000) confidence += 15;  // Within 2 minutes
+    else if (timeDiff < 5 * 60 * 1000) confidence += 10;  // Within 5 minutes
+    else if (timeDiff < 10 * 60 * 1000) confidence += 5;  // Within 10 minutes
 
-    // Content confidence
-    confidence += parsedPayment.confidence * 0.1; // 10% weight to content confidence
+    // Content quality bonus (up to 10%)
+    if (parsedPayment.confidence >= 80) confidence += 10;
+    else if (parsedPayment.confidence >= 60) confidence += 5;
 
     return Math.min(confidence, 100);
   }
@@ -426,7 +441,7 @@ class NotificationPaymentReader {
 
     const match = this.matchActivePayment(parsedPayment);
 
-    if (match && match.confidence >= 85) {
+    if (match && match.confidence >= 95) {
       console.log(`✅ Payment auto-confirmed with ${match.confidence}% confidence`);
 
       // Update payment status
@@ -453,7 +468,7 @@ class NotificationPaymentReader {
       // Save confirmation record
       this.savePaymentConfirmation(match.paymentId, parsedPayment);
 
-    } else if (match && match.confidence >= 60) {
+    } else if (match && match.confidence >= 85) {
       console.log(`⚠️ Possible payment detected with ${match.confidence}% confidence`);
       
       // Don't auto-confirm, but notify for manual verification

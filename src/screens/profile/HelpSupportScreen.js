@@ -38,44 +38,64 @@ const HelpSupportScreen = ({ navigation }) => {
   // FAQ Data with actual answers
   const faqData = [
     {
+      id: 'getting-started',
+      question: 'How do I get started with FlowPOS?',
+      answer: 'After signing up, complete the store setup by adding your store name, address, and UPI ID. Then add your products from the Manage screen. You\'re ready to start selling! The app will guide you through a quick tour on first use.',
+    },
+    {
       id: 'add-products',
       question: 'How do I add products?',
-      answer: 'Go to Manage screen → Products tab → Tap "Add Product" button. Fill in product name, price, stock quantity, and optionally add an image and tags. Products with stock tracking will show low stock alerts.',
+      answer: 'Go to Manage screen → Products tab → Tap "Add Product" button. Fill in product name, price, and optionally add stock quantity, image, category, and tags. Enable "Track Stock" to get low stock alerts and prevent overselling.',
     },
     {
       id: 'process-order',
       question: 'How do I process an order?',
-      answer: 'From the POS screen, tap products to add them to cart. Tap "Complete Order" to go to checkout. Enter customer details, select payment method (Cash, Card, or QR Pay), then tap "Complete Order" to finish.',
+      answer: 'From the POS screen, tap products to add them to cart. Tap the cart icon to go to checkout. Enter customer details (name and phone), select payment method (Cash or QR Pay), then tap "Complete Order". The invoice will be generated automatically.',
     },
     {
       id: 'qr-payment',
       question: 'How do I set up QR payments?',
-      answer: 'Go to Manage → Store Settings → scroll to UPI Settings. Add your UPI ID (e.g., yourname@upi). You can add up to 3 UPI IDs. When processing orders, select "QR Pay" to generate a payment QR code.',
+      answer: 'Go to Manage → Store Settings → scroll to UPI Settings. Add your UPI ID (e.g., yourname@upi or yourname@paytm). You can add up to 3 UPI IDs for different payment apps. When processing orders, select "QR Pay" to generate a dynamic payment QR code.',
     },
     {
-      id: 'view-reports',
-      question: 'How do I view sales reports?',
-      answer: 'Go to Analytics screen from the bottom navigation. You can see daily, weekly, and monthly sales. For detailed reports, go to Settings → PDF Reports or Data Export to generate comprehensive business reports.',
-    },
-    {
-      id: 'manage-inventory',
-      question: 'How do I manage inventory?',
-      answer: 'Go to Manage → Inventory tab. Here you can update stock quantities, enable/disable stock tracking for products, and see low stock alerts. Products with tracking enabled will prevent overselling.',
+      id: 'auto-payment',
+      question: 'What is Auto Payment Detection?',
+      answer: 'When enabled in Settings, FlowPOS can automatically detect UPI payment confirmations from your phone\'s notifications/SMS. After showing the QR code, the app listens for payment confirmation and auto-completes the order when payment is received. Requires notification permissions.',
     },
     {
       id: 'whatsapp-invoice',
       question: 'How do I send invoices via WhatsApp?',
-      answer: 'After completing an order, you can share the invoice. For automatic WhatsApp sending, go to Settings → WhatsApp Setup and configure your Twilio credentials. Invoices will be sent automatically to customers with phone numbers.',
+      answer: 'After completing an order, you can share the invoice via WhatsApp. Two methods available: 1) Device WhatsApp - opens WhatsApp app with pre-filled message, 2) FlowPOS WhatsApp - sends automatically via backend (requires Twilio setup). Configure in Settings → WhatsApp Setup.',
+    },
+    {
+      id: 'view-reports',
+      question: 'How do I view sales reports?',
+      answer: 'Go to Analytics screen from the bottom navigation. View daily, weekly, and monthly sales with charts. For detailed reports, go to Settings → PDF Reports for printable reports, or Settings → Data Export for CSV files you can open in Excel.',
+    },
+    {
+      id: 'manage-inventory',
+      question: 'How do I manage inventory?',
+      answer: 'Go to Manage → Inventory tab. Here you can update stock quantities, enable/disable stock tracking per product, and see low stock alerts. Products with tracking enabled will show stock count on POS and prevent selling when out of stock.',
     },
     {
       id: 'change-store-info',
       question: 'How do I update store information?',
-      answer: 'Go to Manage → Store Settings tab. Here you can update store name, address, phone, email, GST number, business type, and UPI IDs. Changes are saved automatically.',
+      answer: 'Go to Manage → Store Settings tab. Update store name, address, GST number, business type, and UPI IDs. For receipt settings (what shows on invoices), go to Settings → Receipt Settings to toggle store name, phone, email, address, and GST display.',
     },
     {
       id: 'export-data',
       question: 'How do I export my data?',
-      answer: 'Go to Settings → Data Export. You can export products, orders, sales summary, or complete business reports in CSV format. For PDF reports, use Settings → PDF Reports.',
+      answer: 'Go to Settings → Data Export. Export products, orders, sales summary, or complete business reports in CSV format. For PDF reports with charts and summaries, use Settings → PDF Reports. All exports can be shared via email or other apps.',
+    },
+    {
+      id: 'gst-setup',
+      question: 'How do I set up GST for my store?',
+      answer: 'Go to Manage → Store Settings and add your GST number. Then go to Settings and enable GST. Set your GST rate (default 18%) and choose whether tax is included in product prices or added on top. GST will appear on all invoices.',
+    },
+    {
+      id: 'multiple-devices',
+      question: 'Can I use FlowPOS on multiple devices?',
+      answer: 'Yes! Your account syncs across devices. Log in with the same credentials on any device. Your products, orders, and settings are stored in the cloud and sync automatically. You can manage active sessions from Profile → Account Settings.',
     },
   ];
 
@@ -107,8 +127,27 @@ const HelpSupportScreen = ({ navigation }) => {
   ];
 
   const handleContactSubmit = async () => {
-    if (!contactForm.subject.trim() || !contactForm.message.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+    // Enhanced validation with specific error messages
+    const errors = [];
+    
+    if (!contactForm.subject.trim()) {
+      errors.push('Subject is required');
+    } else if (contactForm.subject.trim().length < 5) {
+      errors.push('Subject must be at least 5 characters long');
+    } else if (contactForm.subject.trim().length > 100) {
+      errors.push('Subject must be less than 100 characters');
+    }
+    
+    if (!contactForm.message.trim()) {
+      errors.push('Message is required');
+    } else if (contactForm.message.trim().length < 10) {
+      errors.push('Message must be at least 10 characters long');
+    } else if (contactForm.message.trim().length > 1000) {
+      errors.push('Message must be less than 1000 characters');
+    }
+    
+    if (errors.length > 0) {
+      Alert.alert('Validation Error', errors.join('\n'));
       return;
     }
 
@@ -152,8 +191,23 @@ const HelpSupportScreen = ({ navigation }) => {
   };
 
   const handleFeedbackSubmit = async () => {
+    // Enhanced validation with specific error messages
+    const errors = [];
+    
     if (!feedbackForm.message.trim()) {
-      Alert.alert('Error', 'Please enter your feedback');
+      errors.push('Feedback message is required');
+    } else if (feedbackForm.message.trim().length < 5) {
+      errors.push('Feedback must be at least 5 characters long');
+    } else if (feedbackForm.message.trim().length > 1000) {
+      errors.push('Feedback must be less than 1000 characters');
+    }
+    
+    if (feedbackForm.rating < 1 || feedbackForm.rating > 5) {
+      errors.push('Please provide a valid rating (1-5 stars)');
+    }
+    
+    if (errors.length > 0) {
+      Alert.alert('Validation Error', errors.join('\n'));
       return;
     }
 
@@ -286,11 +340,19 @@ const HelpSupportScreen = ({ navigation }) => {
           <View style={styles.contactCard}>
             <View style={styles.contactItem}>
               <Ionicons name="mail-outline" size={20} color={colors.text.secondary} />
-              <Text style={styles.contactText}>support@flowpos.com</Text>
+              <Text style={styles.contactText}>support@flowpos.app</Text>
+            </View>
+            <View style={styles.contactItem}>
+              <Ionicons name="globe-outline" size={20} color={colors.text.secondary} />
+              <Text style={styles.contactText}>www.flowpos.app</Text>
             </View>
             <View style={styles.contactItem}>
               <Ionicons name="time-outline" size={20} color={colors.text.secondary} />
               <Text style={styles.contactText}>Response within 24-48 hours</Text>
+            </View>
+            <View style={styles.contactItem}>
+              <Ionicons name="location-outline" size={20} color={colors.text.secondary} />
+              <Text style={styles.contactText}>India</Text>
             </View>
           </View>
         </View>
@@ -300,7 +362,10 @@ const HelpSupportScreen = ({ navigation }) => {
           <View style={styles.appInfoCard}>
             <Text style={styles.appInfoTitle}>FlowPOS</Text>
             <Text style={styles.appInfoVersion}>Version 1.0.0</Text>
-            <Text style={styles.appInfoTagline}>Made with ❤️ for small businesses</Text>
+            <Text style={styles.appInfoDescription}>
+              Simple, powerful point-of-sale for small businesses
+            </Text>
+            <Text style={styles.appInfoTagline}>Made with ❤️ in India</Text>
           </View>
         </View>
 
@@ -327,12 +392,20 @@ const HelpSupportScreen = ({ navigation }) => {
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Subject *</Text>
                 <TextInput
-                  style={styles.input}
+                  style={[
+                    styles.input,
+                    contactForm.subject.trim().length > 0 && contactForm.subject.trim().length < 5 && styles.inputError
+                  ]}
                   placeholder="Brief description of your issue"
                   placeholderTextColor={colors.text.tertiary}
                   value={contactForm.subject}
                   onChangeText={(text) => setContactForm({...contactForm, subject: text})}
+                  maxLength={100}
                 />
+                {contactForm.subject.trim().length > 0 && contactForm.subject.trim().length < 5 && (
+                  <Text style={styles.errorText}>Subject must be at least 5 characters</Text>
+                )}
+                <Text style={styles.characterCount}>{contactForm.subject.length}/100</Text>
               </View>
 
               <View style={styles.inputGroup}>
@@ -361,7 +434,11 @@ const HelpSupportScreen = ({ navigation }) => {
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Message *</Text>
                 <TextInput
-                  style={[styles.input, styles.textArea]}
+                  style={[
+                    styles.input, 
+                    styles.textArea,
+                    contactForm.message.trim().length > 0 && contactForm.message.trim().length < 10 && styles.inputError
+                  ]}
                   placeholder="Describe your issue in detail..."
                   placeholderTextColor={colors.text.tertiary}
                   value={contactForm.message}
@@ -369,7 +446,12 @@ const HelpSupportScreen = ({ navigation }) => {
                   multiline={true}
                   numberOfLines={6}
                   textAlignVertical="top"
+                  maxLength={1000}
                 />
+                {contactForm.message.trim().length > 0 && contactForm.message.trim().length < 10 && (
+                  <Text style={styles.errorText}>Message must be at least 10 characters</Text>
+                )}
+                <Text style={styles.characterCount}>{contactForm.message.length}/1000</Text>
               </View>
 
               <TouchableOpacity
@@ -451,7 +533,11 @@ const HelpSupportScreen = ({ navigation }) => {
               <View style={styles.inputGroup}>
                 <Text style={styles.inputLabel}>Your Feedback *</Text>
                 <TextInput
-                  style={[styles.input, styles.textArea]}
+                  style={[
+                    styles.input, 
+                    styles.textArea,
+                    feedbackForm.message.trim().length > 0 && feedbackForm.message.trim().length < 5 && styles.inputError
+                  ]}
                   placeholder="Tell us what you think..."
                   placeholderTextColor={colors.text.tertiary}
                   value={feedbackForm.message}
@@ -459,7 +545,12 @@ const HelpSupportScreen = ({ navigation }) => {
                   multiline={true}
                   numberOfLines={6}
                   textAlignVertical="top"
+                  maxLength={1000}
                 />
+                {feedbackForm.message.trim().length > 0 && feedbackForm.message.trim().length < 5 && (
+                  <Text style={styles.errorText}>Feedback must be at least 5 characters</Text>
+                )}
+                <Text style={styles.characterCount}>{feedbackForm.message.length}/1000</Text>
               </View>
 
               <TouchableOpacity
@@ -655,6 +746,12 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     marginBottom: 8,
   },
+  appInfoDescription: {
+    fontSize: 14,
+    color: colors.text.primary,
+    textAlign: 'center',
+    marginBottom: 8,
+  },
   appInfoTagline: {
     fontSize: 12,
     color: colors.text.tertiary,
@@ -757,6 +854,21 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '600',
     color: colors.background.surface,
+  },
+  inputError: {
+    borderColor: colors.error.main,
+    borderWidth: 2,
+  },
+  errorText: {
+    fontSize: 12,
+    color: colors.error.main,
+    marginTop: 4,
+  },
+  characterCount: {
+    fontSize: 12,
+    color: colors.text.tertiary,
+    textAlign: 'right',
+    marginTop: 4,
   },
 });
 

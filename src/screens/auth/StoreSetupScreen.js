@@ -20,6 +20,7 @@ import { buttonStyles } from '../../styles/buttonStyles';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import { useBackPrevention } from '../../hooks/useBackPrevention';
+import { useStoreSettings } from '../../context/StoreSettingsContext';
 
 // Enhanced input validation and security utilities for Store Setup
 const StoreValidation = {
@@ -67,15 +68,15 @@ const StoreValidation = {
     return { isValid: true, sanitized };
   },
 
-  // Phone validation
+  // Phone validation - Indian 10-digit mobile numbers only
   validatePhone: (phone) => {
     const sanitized = phone.replace(/\s/g, ''); // Remove spaces
     if (!sanitized) return { isValid: false, error: 'Phone number is required' };
     
-    // Enhanced phone validation - supports international formats
-    const phoneRegex = /^[\+]?[1-9][\d]{7,14}$/;
+    // Indian 10-digit mobile number validation (starts with 6,7,8,9)
+    const phoneRegex = /^[6-9][0-9]{9}$/;
     if (!phoneRegex.test(sanitized)) {
-      return { isValid: false, error: 'Please enter a valid phone number (8-15 digits)' };
+      return { isValid: false, error: 'Enter a valid 10-digit mobile number starting with 6, 7, 8, or 9' };
     }
     
     return { isValid: true, sanitized };
@@ -162,6 +163,7 @@ const { width } = Dimensions.get('window');
 
 const StoreSetupScreen = ({ navigation, route }) => {
   const { createStore, user } = useAuth();
+  const { refreshSettings } = useStoreSettings();
   const { isOnboarding = true } = route.params || {};
   
   const [storeData, setStoreData] = useState({
@@ -475,6 +477,15 @@ const StoreSetupScreen = ({ navigation, route }) => {
                 try {
                   // Mark store setup as completed but not full onboarding yet
                   await AsyncStorage.setItem('storeSetupCompleted', 'true');
+                  
+                  // Refresh StoreSettingsContext cache with new store data
+                  try {
+                    await refreshSettings();
+                    console.log('✅ StoreSettingsContext cache refreshed');
+                  } catch (cacheError) {
+                    console.warn('⚠️ Failed to refresh store settings cache:', cacheError);
+                  }
+                  
                   console.log('✅ Store setup marked as completed - navigating to product onboarding');
                   
                   // Navigate to ProductOnboardingScreen to let user choose sample products
@@ -484,6 +495,12 @@ const StoreSetupScreen = ({ navigation, route }) => {
                   navigation.navigate('ProductOnboarding');
                 }
               } else {
+                // Refresh cache for non-onboarding flow too
+                try {
+                  await refreshSettings();
+                } catch (cacheError) {
+                  console.warn('⚠️ Failed to refresh store settings cache:', cacheError);
+                }
                 navigation.goBack();
               }
             },
@@ -673,18 +690,20 @@ const StoreSetupScreen = ({ navigation, route }) => {
         <Text style={styles.inputLabel}>
           Store Address <Text style={styles.required}>*</Text>
         </Text>
-        <View style={[styles.inputContainer, validationErrors.store_address && styles.inputError]}>
-          <Ionicons name="location-outline" size={20} color={validationErrors.store_address ? colors.error : colors.textSecondary} style={styles.inputIcon} />
+        <View style={[styles.inputContainer, styles.inputContainerMultiline, validationErrors.store_address && styles.inputError]}>
+          <Ionicons name="location-outline" size={20} color={validationErrors.store_address ? colors.error : colors.textSecondary} style={styles.inputIconMultiline} />
           <TextInput
-            style={[styles.inputWithIcon, styles.textArea]}
+            style={styles.textAreaInput}
             value={storeData.store_address}
             onChangeText={(value) => handleInputChange('store_address', value)}
-            placeholder="Enter your complete store address"
+            placeholder="Enter your complete store address&#10;Include street, city, state, and postal code"
             multiline
-            numberOfLines={3}
+            numberOfLines={4}
             textAlignVertical="top"
             maxLength={300}
             editable={!isLoading}
+            returnKeyType="default"
+            blurOnSubmit={false}
           />
         </View>
         {validationErrors.store_address ? (
@@ -703,17 +722,21 @@ const StoreSetupScreen = ({ navigation, route }) => {
           <TextInput
             style={styles.inputWithIcon}
             value={storeData.store_phone}
-            onChangeText={(value) => handleInputChange('store_phone', value)}
-            placeholder="+91 9876543210"
+            onChangeText={(value) => {
+              // Only allow digits, remove any non-digit characters
+              const cleanValue = value.replace(/\D/g, '');
+              handleInputChange('store_phone', cleanValue);
+            }}
+            placeholder="9876543210"
             keyboardType="phone-pad"
-            maxLength={15}
+            maxLength={10}
             editable={!isLoading}
           />
         </View>
         {validationErrors.store_phone ? (
           <Text style={styles.errorText}>{validationErrors.store_phone}</Text>
         ) : (
-          <Text style={styles.inputHint}>Include country code for better reach</Text>
+          <Text style={styles.inputHint}>10-digit mobile number without country code</Text>
         )}
       </View>
 
@@ -1210,9 +1233,19 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     backgroundColor: colors.surface,
     paddingHorizontal: 16,
+    minHeight: 48,
+  },
+  inputContainerMultiline: {
+    alignItems: 'flex-start', // Changed from 'center' for multiline
+    paddingVertical: 4, // Add vertical padding for multiline
   },
   inputIcon: {
     marginRight: 12,
+    color: colors.textSecondary,
+  },
+  inputIconMultiline: {
+    marginRight: 12,
+    marginTop: 16, // Align with first line of text
     color: colors.textSecondary,
   },
   inputWithIcon: {
@@ -1220,6 +1253,17 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     fontSize: 16,
     color: colors.text,
+  },
+  textAreaInput: {
+    flex: 1,
+    paddingVertical: 16,
+    paddingTop: 16,
+    paddingBottom: 16,
+    fontSize: 16,
+    color: colors.text,
+    textAlignVertical: 'top',
+    lineHeight: 20,
+    minHeight: 80,
   },
   input: {
     borderWidth: 1,
@@ -1230,11 +1274,6 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text.primary,
     backgroundColor: colors.background.surface,
-  },
-  textArea: {
-    minHeight: 80,
-    paddingTop: 12,
-    textAlignVertical: 'top',
   },
   inputHint: {
     fontSize: 12,

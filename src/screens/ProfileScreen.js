@@ -14,13 +14,17 @@ import { colors } from '../styles/colors';
 import { safeGoBack } from '../utils/navigationUtils';
 import { useAuth } from '../context/AuthContext';
 import { useSubscription } from '../hooks/useSubscription';
+import { useStoreSettings } from '../context/StoreSettingsContext';
 
 const ProfileScreen = ({ navigation }) => {
   const { logout, user, isAuthenticated, refreshUserData } = useAuth();
   const { subscriptionPlan, getPlanDisplayName, refreshSubscription } = useSubscription();
+  const { getStoreProfile } = useStoreSettings();
   const [userInfo, setUserInfo] = useState(null);
-  const [storeInfo, setStoreInfo] = useState(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
+  
+  // Get store info from context instead of AsyncStorage
+  const storeInfo = getStoreProfile();
 
   useEffect(() => {
     loadUserData();
@@ -48,11 +52,7 @@ const ProfileScreen = ({ navigation }) => {
         }
       }
 
-      // Load store info from AsyncStorage
-      const storeData = await AsyncStorage.getItem('storeInfo');
-      if (storeData) {
-        setStoreInfo(JSON.parse(storeData));
-      }
+      // Store info now comes from StoreSettingsContext via getStoreProfile()
     } catch (error) {
       console.error('Error loading user data:', error);
     } finally {

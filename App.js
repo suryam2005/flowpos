@@ -1,11 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createStackNavigator } from '@react-navigation/stack';
 import { StatusBar } from 'expo-status-bar';
 import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getItemAsync } from './src/utils/secureStorage';
 import { Platform } from 'react-native';
 import * as Notifications from 'expo-notifications';
 
@@ -40,8 +39,10 @@ import { CartProvider } from './src/context/CartContext';
 import { AuthProvider } from './src/context/AuthContext';
 import { DataSyncProvider } from './src/context/DataSyncContext';
 import { ThemeProvider } from './src/context/ThemeContext';
+import { SubscriptionProvider } from './src/context/SubscriptionContext';
+import { AppSettingsProvider } from './src/context/AppSettingsContext';
+import { StoreSettingsProvider } from './src/context/StoreSettingsContext';
 import { hasOldDummyData, clearAllAppData } from './src/utils/dataUtils';
-import PinAuthScreen from './src/screens/auth/PinAuthScreen';
 
 // New Auth Screens
 import SignupScreen from './src/screens/auth/SignupScreen';
@@ -175,8 +176,30 @@ export default function App() {
       // Additional check: if user has store data in storage, consider setup completed
       let hasStoreData = false;
       try {
-        const storeInfo = await AsyncStorage.getItem('storeInfo');
-        hasStoreData = storeInfo && JSON.parse(storeInfo).store_name;
+        // Check multiple storage keys for store data
+        const [storeInfo, storeData, storeSettingsCache] = await Promise.all([
+          AsyncStorage.getItem('storeInfo'),
+          AsyncStorage.getItem('storeData'),
+          AsyncStorage.getItem('@flowpos_store_settings')
+        ]);
+        
+        // Check storeInfo first (from store setup flow)
+        if (storeInfo) {
+          const parsed = JSON.parse(storeInfo);
+          hasStoreData = !!parsed.store_name;
+        }
+        
+        // Also check storeData (from login response)
+        if (!hasStoreData && storeData) {
+          const parsed = JSON.parse(storeData);
+          hasStoreData = !!(parsed.store_name || parsed.name);
+        }
+        
+        // Also check StoreSettingsContext cache (from caching system)
+        if (!hasStoreData && storeSettingsCache) {
+          const parsed = JSON.parse(storeSettingsCache);
+          hasStoreData = !!parsed.store_name;
+        }
       } catch (error) {
         console.log('Error parsing store info:', error);
         hasStoreData = false;
@@ -186,10 +209,34 @@ export default function App() {
         hasCompletedOnboarding: !!hasCompletedOnboarding,
         storeSetupCompleted: !!storeSetupCompleted,
         productsOnboardingCompleted: !!productsOnboardingCompleted,
-        hasStoreData
+        hasStoreData,
+        isAuthenticated
       });
       
       if (!hasCompletedOnboarding) {
+        // Check if user has store data AND storeSetupCompleted flag
+        // This means they completed store setup but not product onboarding
+        if (hasStoreData && storeSetupCompleted) {
+          console.log('📦 User completed store setup but not product onboarding');
+          setAppState('productOnboarding');
+          return;
+        }
+        
+        // Check if user has store data from login (returning user with full setup)
+        // Only auto-complete if they have store data from backend (not just local setup)
+        if (hasStoreData && !storeSetupCompleted) {
+          // This is a returning user who logged in - their data came from backend
+          // They must have completed full onboarding before
+          console.log('✅ Returning user detected with store data from backend - setting onboarding flags');
+          await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
+          await AsyncStorage.setItem('storeSetupCompleted', 'true');
+          await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
+          // Mark tour as seen for returning users - they don't need the tour
+          await AsyncStorage.setItem('hasSeenAppTour', 'true');
+          setAppState('main');
+          return;
+        }
+        
         // Authenticated user but hasn't completed onboarding - show welcome screen
         console.log('👋 Authenticated user needs onboarding - showing welcome screen');
         setAppState('welcome');
@@ -249,57 +296,63 @@ export default function App() {
   return (
     <ThemeProvider>
       <AuthProvider>
-        <DataSyncProvider>
-          <CartProvider>
-            <NavigationContainer>
-              <StatusBar style="dark" />
-              <Stack.Navigator 
-                screenOptions={{ headerShown: false }}
-                initialRouteName={getInitialRoute()}
-              >
-                <Stack.Screen name="Welcome" component={WelcomeScreen} />
-                <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
-                <Stack.Screen name="Main" component={MainTabs} />
-                <Stack.Screen 
-                  name="Cart" 
-                  component={isTablet ? TabletCartScreen : CartScreen} 
-                />
-                <Stack.Screen name="Invoice" component={InvoiceScreen} />
-                <Stack.Screen name="SimpleInvoicePreview" component={SimpleInvoicePreviewScreen} />
-                <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
-                <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
-                <Stack.Screen name="Settings" component={SettingsScreen} />
-                <Stack.Screen name="Profile" component={ProfileScreen} />
-                <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-                <Stack.Screen name="StoreInformation" component={StoreInformationScreen} />
-                <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-                <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTPScreen} />
-                <Stack.Screen name="Notifications" component={NotificationsScreen} />
-                <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
-                <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
-                <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-                <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
-                <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-                <Stack.Screen name="DataExport" component={DataExportScreen} />
-                <Stack.Screen name="PDFReports" component={PDFReportsScreen} />
-                <Stack.Screen name="StorageManagement" component={StorageManagementScreen} />
-                <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
-                
-                {/* Auth Screens */}
-                <Stack.Screen name="Signup" component={SignupScreen} />
-                <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-                <Stack.Screen name="PasswordSetup" component={PasswordSetupScreen} />
-                <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
-                <Stack.Screen name="Login" component={LoginScreen} />
-                
-                {/* Forgot Password Screens */}
-                <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                <Stack.Screen name="ResetPasswordOTP" component={ResetPasswordOTPScreen} />
-                <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
-              </Stack.Navigator>
-            </NavigationContainer>
-          </CartProvider>
-        </DataSyncProvider>
+        <StoreSettingsProvider>
+          <SubscriptionProvider>
+            <AppSettingsProvider>
+              <DataSyncProvider>
+                <CartProvider>
+                  <NavigationContainer>
+                  <StatusBar style="dark" />
+                  <Stack.Navigator 
+                    screenOptions={{ headerShown: false }}
+                    initialRouteName={getInitialRoute()}
+                  >
+                    <Stack.Screen name="Welcome" component={WelcomeScreen} />
+                    <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
+                    <Stack.Screen name="Main" component={MainTabs} />
+                    <Stack.Screen 
+                      name="Cart" 
+                      component={isTablet ? TabletCartScreen : CartScreen} 
+                    />
+                    <Stack.Screen name="Invoice" component={InvoiceScreen} />
+                    <Stack.Screen name="SimpleInvoicePreview" component={SimpleInvoicePreviewScreen} />
+                    <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+                    <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
+                    <Stack.Screen name="Settings" component={SettingsScreen} />
+                    <Stack.Screen name="Profile" component={ProfileScreen} />
+                    <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+                    <Stack.Screen name="StoreInformation" component={StoreInformationScreen} />
+                    <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+                    <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTPScreen} />
+                    <Stack.Screen name="Notifications" component={NotificationsScreen} />
+                    <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+                    <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
+                    <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+                    <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
+                    <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+                    <Stack.Screen name="DataExport" component={DataExportScreen} />
+                    <Stack.Screen name="PDFReports" component={PDFReportsScreen} />
+                    <Stack.Screen name="StorageManagement" component={StorageManagementScreen} />
+                    <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
+                    
+                    {/* Auth Screens */}
+                    <Stack.Screen name="Signup" component={SignupScreen} />
+                    <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+                    <Stack.Screen name="PasswordSetup" component={PasswordSetupScreen} />
+                    <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
+                    <Stack.Screen name="Login" component={LoginScreen} />
+                    
+                    {/* Forgot Password Screens */}
+                    <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+                    <Stack.Screen name="ResetPasswordOTP" component={ResetPasswordOTPScreen} />
+                    <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
+                  </Stack.Navigator>
+                </NavigationContainer>
+              </CartProvider>
+            </DataSyncProvider>
+          </AppSettingsProvider>
+          </SubscriptionProvider>
+        </StoreSettingsProvider>
       </AuthProvider>
     </ThemeProvider>
   );

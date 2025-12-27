@@ -49,7 +49,7 @@ export const DataSyncProvider = ({ children }) => {
   // Load data from storage AND fetch from backend
   const loadData = async (silent = false) => {
     try {
-      console.log('📊 [DataSync] Loading data...');
+      // console.log('📊 [DataSync] Loading data...');
       
       // First, load from AsyncStorage for immediate display
       const [productsData, ordersData, storeData] = await Promise.all([
@@ -115,13 +115,13 @@ export const DataSyncProvider = ({ children }) => {
       // Debounce: Don't fetch if we fetched less than 1 second ago (unless forced)
       const now = Date.now();
       if (!forceRefresh && now - lastFetchRef.current < 1000) {
-        console.log('⏭️ [DataSync] Skipping fetch - too soon since last fetch');
+        // console.log('⏭️ [DataSync] Skipping fetch - too soon since last fetch');
         return;
       }
 
       // Request deduplication: If a fetch is already in progress, reuse it
       if (pendingFetchRef.current) {
-        console.log('🔄 [DataSync] Reusing in-flight request');
+        // console.log('🔄 [DataSync] Reusing in-flight request');
         return pendingFetchRef.current;
       }
 
@@ -131,21 +131,21 @@ export const DataSyncProvider = ({ children }) => {
       }
 
       lastFetchRef.current = now;
-      console.log('🌐 [DataSync] Fetching products and orders from backend...');
+      // console.log('🌐 [DataSync] Fetching products and orders from backend...');
       
       // Create the fetch promise and store it for deduplication
       const fetchPromise = (async () => {
         try {
           // Fetch both products and orders from backend
-          console.log('🌐 [DataSync] Fetching products and orders from backend...');
+          // console.log('🌐 [DataSync] Fetching products and orders from backend...');
           
           const [freshProducts, freshOrders] = await Promise.all([
             productsService.getProducts(),
             ordersService.getOrders()
           ]);
           
-          console.log('✅ [DataSync] Fetched products:', freshProducts.length);
-          console.log('✅ [DataSync] Fetched orders:', freshOrders.length);
+          // console.log('✅ [DataSync] Fetched products:', freshProducts.length);
+          // console.log('✅ [DataSync] Fetched orders:', freshOrders.length);
           
           // Handle products
           if (freshProducts && freshProducts.length >= 0) {
@@ -153,7 +153,7 @@ export const DataSyncProvider = ({ children }) => {
             setProducts(freshProducts);
             currentDataRef.current.products = freshProducts;
             notifyListeners('products', freshProducts);
-            console.log('✅ [DataSync] Products synced to AsyncStorage');
+            // console.log('✅ [DataSync] Products synced to AsyncStorage');
           }
           
           // Handle orders
@@ -162,11 +162,11 @@ export const DataSyncProvider = ({ children }) => {
             setOrders(freshOrders);
             currentDataRef.current.orders = freshOrders;
             notifyListeners('orders', freshOrders);
-            console.log('✅ [DataSync] Orders synced to AsyncStorage');
+            // console.log('✅ [DataSync] Orders synced to AsyncStorage');
           }
           
           setLastSync(Date.now());
-          console.log('✅ [DataSync] Full data sync completed successfully');
+          // console.log('✅ [DataSync] Full data sync completed successfully');
           
         } finally {
           // Clear the pending request reference
@@ -307,7 +307,7 @@ export const DataSyncProvider = ({ children }) => {
     if (syncIntervalRef.current) return;
 
     syncIntervalRef.current = setInterval(() => {
-      console.log('🔄 [DataSync] Background sync triggered');
+      // console.log('🔄 [DataSync] Background sync triggered');
       fetchFreshData(false); // Fetch from backend (not forced, respects debounce)
     }, 300000); // Check every 5 minutes (300000ms) - Phase 1 optimization
   };

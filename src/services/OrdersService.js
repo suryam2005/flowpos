@@ -136,15 +136,15 @@ class OrdersService {
   // Get all orders (CLOUD ONLY - NO CACHE) with request deduplication
   async getOrders(options = {}) {
     try {
-      console.log('📋 [OrdersService] getOrders() called with options:', options);
-      console.log('📋 [OrdersService] isOnline:', this.isOnline);
+      // console.log('📋 [OrdersService] getOrders() called with options:', options);
+      // console.log('📋 [OrdersService] isOnline:', this.isOnline);
 
       if (!this.isOnline) {
-        console.log('📱 [OrdersService] Offline - cannot fetch orders without internet');
+        // console.log('📱 [OrdersService] Offline - cannot fetch orders without internet');
         return [];
       }
 
-      console.log('📋 [OrdersService] Calling getOrdersFromCloud()...');
+      // console.log('📋 [OrdersService] Calling getOrdersFromCloud()...');
       
       // Phase 1 Optimization: Deduplicate concurrent requests
       const dedupeKey = `getOrders_${JSON.stringify(options)}`;
@@ -153,7 +153,7 @@ class OrdersService {
         return await this.getOrdersFromCloud(options);
       });
       
-      console.log('✅ [OrdersService] Fresh orders fetched directly from Supabase:', orders.length);
+      // console.log('✅ [OrdersService] Fresh orders fetched directly from Supabase:', orders.length);
       
       // Apply client-side filtering if needed
       let filteredOrders = orders;
@@ -169,22 +169,20 @@ class OrdersService {
         return dateB - dateA;
       });
 
-      console.log('📊 [OrdersService] Returning fresh orders from Supabase:', filteredOrders.length);
+      // console.log('📊 [OrdersService] Returning fresh orders from Supabase:', filteredOrders.length);
       return filteredOrders;
 
     } catch (error) {
-      console.error('❌ [OrdersService] Error in getOrders():', error);
-      console.error('❌ [OrdersService] Error message:', error.message);
-      console.error('❌ [OrdersService] Error stack:', error.stack);
+      console.error('❌ [OrdersService] Error in getOrders():', error.message);
       
       // Handle AbortError gracefully
       if (error.name === 'AbortError' || error.message.includes('Aborted')) {
-        console.log('🔄 [OrdersService] Request aborted, returning empty array');
+        // console.log('🔄 [OrdersService] Request aborted, returning empty array');
         return [];
       }
       
       // Return empty array instead of throwing
-      console.log('🔄 [OrdersService] Returning empty array due to error');
+      // console.log('🔄 [OrdersService] Returning empty array due to error');
       return [];
     }
   }
@@ -371,7 +369,7 @@ class OrdersService {
 
   async getOrdersFromCloud(options = {}) {
     try {
-      console.log('🌐 [OrdersService] getOrdersFromCloud() called');
+      // console.log('🌐 [OrdersService] getOrdersFromCloud() called');
       
       // SECURITY FIX: Get user and store IDs for filtering
       const { userId, storeId } = await this.getUserAndStoreIds();
@@ -389,13 +387,13 @@ class OrdersService {
       if (options.status) queryParams.append('status', options.status);
 
       const endpoint = `/orders?${queryParams}`;
-      console.log('🌐 [OrdersService] Calling networkService.apiCall() with user filtering:', endpoint);
+      // console.log('🌐 [OrdersService] Calling networkService.apiCall() with user filtering:', endpoint);
 
       const response = await networkService.apiCall(endpoint, {
         method: 'GET'
       });
 
-      console.log('🌐 [OrdersService] Response received, status:', response.status);
+      // console.log('🌐 [OrdersService] Response received, status:', response.status);
 
       if (!response.ok) {
         const errorData = await response.json();
@@ -404,12 +402,11 @@ class OrdersService {
       }
 
       const result = await response.json();
-      console.log('✅ [OrdersService] Orders data received:', result.data?.length || 0, 'orders');
+      // console.log('✅ [OrdersService] Orders data received:', result.data?.length || 0, 'orders');
       return result.data || [];
 
     } catch (error) {
-      console.error('❌ [OrdersService] Error in getOrdersFromCloud():', error);
-      console.error('❌ [OrdersService] Error message:', error.message);
+      console.error('❌ [OrdersService] Error in getOrdersFromCloud():', error.message);
       throw this.handleAuthError(error);
     }
   }

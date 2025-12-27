@@ -1,161 +1,170 @@
-import { useState, useEffect, useRef } from 'react';
+import { useCallback, useMemo } from 'react';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
 import { useAuth } from '../context/AuthContext';
 
-// Cache for subscription data to prevent repeated API calls
-let subscriptionCache = {
-  data: null,
-  timestamp: null,
-  isLoading: false
-};
-
-const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes cache
-
-// Export cache clearing function for use in other modules
-export const clearSubscriptionCache = () => {
-  subscriptionCache.data = null;
-  subscriptionCache.timestamp = null;
-  subscriptionCache.isLoading = false;
-};
-
-// Custom hook for managing subscription data
+/**
+ * useSubscription Hook
+ * 
+ * Provides access to subscription data from SubscriptionContext.
+ * This hook is a wrapper around SubscriptionContext that maintains
+ * backward compatibility with the existing interface.
+ * 
+ * Implements Requirements 4.1, 4.2:
+ * - 4.1: Expose plan, status, expiresAt, limits, and features globally
+ * - 4.2: All screens receive the same data from the single source
+ * 
+ * The hook does NOT make direct API calls - all data comes from SubscriptionContext.
+ */
 export const useSubscription = () => {
-  const { user, refreshUserData, getUserSubscriptionPlan } = useAuth();
-  const [subscriptionPlan, setSubscriptionPlan] = useState('free');
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const mountedRef = useRef(true);
+  const { user } = useAuth();
+  
+  // Get subscription data from context (single source of truth)
+  const {
+    subscription,
+    isLoading,
+    error,
+    isCached,
+    lastFetchedAt,
+    refreshSubscription: contextRefresh,
+    clearCache: contextClearCache,
+    updateSubscriptionCache,
+    getSubscription,
+    hasCachedSubscription,
+    getCachedSubscription,
+    isCacheStale,
+    UNKNOWN_SUBSCRIPTION_STATE
+  } = useSubscriptionContext();
 
-  // Check if cache is valid
-  const isCacheValid = () => {
-    return subscriptionCache.data && 
-           subscriptionCache.timestamp && 
-           (Date.now() - subscriptionCache.timestamp) < CACHE_DURATION;
-  };
-
-  // Load subscription data with caching
-  const loadSubscriptionData = async (forceRefresh = false) => {
-    try {
-      setIsLoading(true);
-      setError(null);
-
-      // Use cached data if available and not forcing refresh
-      if (!forceRefresh && isCacheValid()) {
-        if (mountedRef.current) {
-          setSubscriptionPlan(subscriptionCache.data);
-          setIsLoading(false);
-        }
-        return;
-      }
-
-      // Prevent multiple simultaneous API calls
-      if (subscriptionCache.isLoading && !forceRefresh) {
-        // Wait for ongoing request
-        const checkCache = () => {
-          if (subscriptionCache.data && mountedRef.current) {
-            setSubscriptionPlan(subscriptionCache.data);
-            setIsLoading(false);
-          } else if (!subscriptionCache.isLoading) {
-            // Retry if loading failed
-            loadSubscriptionData(false);
-          } else {
-            setTimeout(checkCache, 100);
-          }
-        };
-        checkCache();
-        return;
-      }
-
-      subscriptionCache.isLoading = true;
-
-      // Refresh user data if needed
-      if (forceRefresh) {
-        await refreshUserData();
-      }
-
-      // Get subscription plan from database
-      const plan = await getUserSubscriptionPlan();
-      
-      // Update cache
-      subscriptionCache.data = plan;
-      subscriptionCache.timestamp = Date.now();
-      subscriptionCache.isLoading = false;
-
-      if (mountedRef.current) {
-        setSubscriptionPlan(plan);
-      }
-
-    } catch (err) {
-      console.error('Error loading subscription data:', err);
-      subscriptionCache.isLoading = false;
-      
-      if (mountedRef.current) {
-        setError(err.message);
-        
-        // Fallback to user context data or cached data
-        if (user?.subscription_plan) {
-          setSubscriptionPlan(user.subscription_plan);
-        } else if (subscriptionCache.data) {
-          setSubscriptionPlan(subscriptionCache.data);
-        }
-      }
-    } finally {
-      if (mountedRef.current) {
-        setIsLoading(false);
-      }
+  /**
+   * Get the subscription plan name
+   * Maintains backward compatibility with existing code that uses subscriptionPlan
+   */
+  const subscriptionPlan = useMemo(() => {
+    if (!subscription) {
+      return 'free';
     }
-  };
-
-  // Initialize on mount
-  useEffect(() => {
-    mountedRef.current = true;
-    
-    // Use user data immediately if available
-    if (user?.subscription_plan && !subscriptionCache.data) {
-      setSubscriptionPlan(user.subscription_plan);
-      subscriptionCache.data = user.subscription_plan;
-      subscriptionCache.timestamp = Date.now();
-      setIsLoading(false);
-    } else {
-      loadSubscriptionData();
+    // Map plan names for backward compatibility
+    const plan = subscription.plan || 'free';
+    // Handle 'unknown' plan from UNKNOWN_SUBSCRIPTION_STATE
+    if (plan === 'unknown') {
+      return 'free';
     }
+    return plan;
+  }, [subscription]);
 
-    return () => {
-      mountedRef.current = false;
-    };
-  }, [user]);
-
-  // Refresh subscription data (clears cache)
-  const refreshSubscription = () => {
-    subscriptionCache.data = null;
-    subscriptionCache.timestamp = null;
-    return loadSubscriptionData(true);
-  };
-
-  // Clear cache (useful for logout) - using exported function
-  const clearCache = () => {
-    clearSubscriptionCache();
-  };
-
-  // Get plan display name
-  const getPlanDisplayName = () => {
+  /**
+   * Get plan display name
+   * Maintains backward compatibility with existing getPlanDisplayName function
+   */
+  const getPlanDisplayName = useCallback(() => {
     const planNames = {
       free: 'Free',
+      trial: 'Trial',
       starter: 'Starter',
+      growth: 'Growth',
       business: 'Business',
-      enterprise: 'Enterprise'
+      enterprise: 'Enterprise',
+      unknown: 'Free'
     };
     return planNames[subscriptionPlan] || 'Free';
-  };
+  }, [subscriptionPlan]);
 
-  // Check if user has specific plan or higher
-  const hasPlanOrHigher = (requiredPlan) => {
-    const planHierarchy = ['free', 'starter', 'business', 'enterprise'];
+  /**
+   * Check if user has specific plan or higher
+   * Maintains backward compatibility with existing hasPlanOrHigher function
+   */
+  const hasPlanOrHigher = useCallback((requiredPlan) => {
+    const planHierarchy = ['free', 'trial', 'starter', 'growth', 'business', 'enterprise'];
     const currentIndex = planHierarchy.indexOf(subscriptionPlan);
     const requiredIndex = planHierarchy.indexOf(requiredPlan);
     return currentIndex >= requiredIndex;
-  };
+  }, [subscriptionPlan]);
 
+  /**
+   * Refresh subscription data
+   * Wraps context's refreshSubscription for backward compatibility
+   */
+  const refreshSubscription = useCallback(async () => {
+    try {
+      await contextRefresh();
+    } catch (err) {
+      console.error('[useSubscription] Error refreshing subscription:', err);
+      // Don't throw - maintain backward compatibility
+    }
+  }, [contextRefresh]);
+
+  /**
+   * Clear subscription cache
+   * Wraps context's clearCache for backward compatibility
+   */
+  const clearCache = useCallback(async () => {
+    try {
+      await contextClearCache();
+    } catch (err) {
+      console.error('[useSubscription] Error clearing cache:', err);
+      // Don't throw - maintain backward compatibility
+    }
+  }, [contextClearCache]);
+
+  /**
+   * Get subscription status
+   * Returns the status from subscription data
+   */
+  const status = useMemo(() => {
+    if (!subscription) {
+      return 'UNKNOWN';
+    }
+    return subscription.status || 'UNKNOWN';
+  }, [subscription]);
+
+  /**
+   * Get subscription limits
+   * Returns the limits from subscription data
+   */
+  const limits = useMemo(() => {
+    if (!subscription) {
+      return UNKNOWN_SUBSCRIPTION_STATE.limits;
+    }
+    return subscription.limits || UNKNOWN_SUBSCRIPTION_STATE.limits;
+  }, [subscription, UNKNOWN_SUBSCRIPTION_STATE]);
+
+  /**
+   * Get subscription features
+   * Returns the features from subscription data
+   */
+  const features = useMemo(() => {
+    if (!subscription) {
+      return {};
+    }
+    return subscription.features || {};
+  }, [subscription]);
+
+  /**
+   * Get subscription expiry date
+   * Returns the expiresAt from subscription data
+   */
+  const expiresAt = useMemo(() => {
+    if (!subscription) {
+      return null;
+    }
+    return subscription.expiresAt || null;
+  }, [subscription]);
+
+  /**
+   * Get plan details
+   * Returns the planDetails from subscription data
+   */
+  const planDetails = useMemo(() => {
+    if (!subscription) {
+      return UNKNOWN_SUBSCRIPTION_STATE.planDetails;
+    }
+    return subscription.planDetails || UNKNOWN_SUBSCRIPTION_STATE.planDetails;
+  }, [subscription, UNKNOWN_SUBSCRIPTION_STATE]);
+
+  // Return the same interface as before for backward compatibility
+  // Plus additional data from SubscriptionContext for new features
   return {
+    // Backward compatible interface
     subscriptionPlan,
     isLoading,
     error,
@@ -163,8 +172,40 @@ export const useSubscription = () => {
     clearCache,
     getPlanDisplayName,
     hasPlanOrHigher,
-    user
+    user,
+    
+    // Extended interface from SubscriptionContext (Requirement 4.1)
+    subscription,        // Full subscription object
+    plan: subscriptionPlan, // Alias for subscriptionPlan
+    status,              // Subscription status
+    limits,              // Subscription limits
+    features,            // Subscription features
+    expiresAt,           // Subscription expiry date
+    planDetails,         // Plan details (name, price, currency)
+    
+    // Cache status
+    isCached,
+    lastFetchedAt,
+    
+    // Additional actions
+    updateSubscriptionCache,
+    getSubscription,
+    hasCachedSubscription,
+    getCachedSubscription,
+    isCacheStale
   };
+};
+
+/**
+ * Export cache clearing function for use in other modules
+ * This is a no-op now since cache is managed by SubscriptionContext
+ * Kept for backward compatibility
+ * @deprecated Use clearCache from useSubscription hook instead
+ */
+export const clearSubscriptionCache = () => {
+  console.warn('[useSubscription] clearSubscriptionCache is deprecated. Use clearCache from useSubscription hook instead.');
+  // This is now a no-op - cache is managed by SubscriptionContext
+  // The actual clearing happens through the context's clearCache method
 };
 
 export default useSubscription;

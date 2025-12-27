@@ -1,9 +1,8 @@
 import { useState, useCallback } from 'react';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { useAuth } from '../context/AuthContext';
+import { getStoreSettingsFromCache, getReceiptSettingsFromCache } from '../context/StoreSettingsContext';
 
 export const useQRPayment = () => {
-  const { getStore } = useAuth();
   const [isQRVisible, setIsQRVisible] = useState(false);
   const [paymentData, setPaymentData] = useState({
     amount: 0,
@@ -19,17 +18,17 @@ export const useQRPayment = () => {
         throw new Error('Invalid amount');
       }
 
-      // Get store information from backend
-      console.log('🔄 Fetching store info from backend for QR generation...');
-      const storeInfo = await getStore();
+      // Get store information from StoreSettingsContext cache (migrated from getStore())
+      console.log('🔄 Fetching store info from StoreSettingsContext cache for QR generation...');
+      const storeInfo = getStoreSettingsFromCache();
       
       if (!storeInfo) {
         throw new Error('Store information not found. Please set up your store first.');
       }
 
-      console.log('📊 Store info retrieved:', storeInfo);
+      console.log('📊 Store info retrieved from cache:', storeInfo);
 
-      // Check for any available UPI ID from backend store data
+      // Check for any available UPI ID from cached store data
       const hasUpiId = storeInfo.upi_id || storeInfo.upi_id_2 || storeInfo.upi_id_3;
       
       if (!hasUpiId) {

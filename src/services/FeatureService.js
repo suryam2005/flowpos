@@ -13,29 +13,66 @@ class FeatureService {
   PLAN_CONFIGS = {
     trial: {
       features: {
+        // Trial gets ALL enterprise features for the trial period
         cash_payments: true,
         upi_payments: true,
         basic_invoice: true,
         basic_analytics: true,
+        advanced_analytics: true,
+        performance_insights: true,
+        pdf_reports: true,
+        daily_weekly_analytics: true,
+        monthly_reports: true,
         cloud_backup: true,
-        multi_device_sync: false,
-        advanced_analytics: false,
-        custom_branding: false,
-        whatsapp_integration: false,
-        email_reports: false,
-        data_export: false,
+        whatsapp_integration: true,
+        email_reports: true,
+        data_export: true,
+        csv_pdf_export: true,
+        multi_device_sync: true,
+        custom_branding: true,
       },
       limits: {
-        products: 10,
-        orders_per_month: 50,
-        devices: 1,
-        storage_mb: 100,
+        products: -1, // unlimited during trial
+        orders_per_month: -1, // unlimited during trial
+        devices: 2, // Allow 2 devices during trial
+        storage_gb: 5,
         trial_days: 7,
       },
       price: 0,
       name: 'Free Trial',
-      description: 'Experience all core features before choosing a paid plan',
+      description: 'Experience ALL features free for 7 days',
       duration: '7 days'
+    },
+    expired_trial: {
+      features: {
+        // Expired trial - very limited features to encourage upgrade
+        cash_payments: true,
+        upi_payments: true,
+        basic_invoice: true,
+        basic_analytics: false,
+        advanced_analytics: false,
+        performance_insights: false,
+        pdf_reports: false,
+        daily_weekly_analytics: false,
+        monthly_reports: false,
+        cloud_backup: false,
+        whatsapp_integration: false,
+        email_reports: false,
+        data_export: false,
+        csv_pdf_export: false,
+        multi_device_sync: false,
+        custom_branding: false,
+      },
+      limits: {
+        products: 5, // Very limited
+        orders_per_month: 10, // Very limited
+        devices: 1,
+        storage_gb: 0.05, // 50 MB
+      },
+      price: 0,
+      name: 'Trial Expired',
+      description: 'Your trial has expired. Upgrade to continue using FlowPOS.',
+      isExpired: true
     },
     starter: {
       features: {
@@ -426,17 +463,13 @@ class FeatureService {
     return stats;
   }
 
-  // Simulate plan upgrade (for testing)
+  // Update plan (called after successful backend upgrade)
   async upgradePlan(newPlan) {
     if (this.PLAN_CONFIGS[newPlan]) {
       this.userPlan = newPlan;
       await AsyncStorage.setItem('userPlan', newPlan);
       this.updateFeatures();
-      
-      Alert.alert(
-        'Plan Upgraded!',
-        `You've been upgraded to ${this.PLAN_CONFIGS[newPlan].name}. Enjoy your new features!`
-      );
+      console.log(`✅ FeatureService updated to plan: ${newPlan}`);
     }
   }
 }

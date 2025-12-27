@@ -17,19 +17,15 @@ import LoadingSpinner from '../components/LoadingSpinner';
 import PerformanceInsightsService from '../services/PerformanceInsightsService';
 import { safeGoBack } from '../utils/navigationUtils';
 import Icon from '../components/SVGIcons';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
 
 const PerformanceInsightsScreen = ({ navigation }) => {
   const [insightsData, setInsightsData] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   
   const [isLoading, setIsLoading] = useState(true);
-  
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('PerformanceInsights');
 
   useEffect(() => {
+    // Load insights data on mount
     loadInsights();
   }, []);
 
@@ -301,13 +297,6 @@ const PerformanceInsightsScreen = ({ navigation }) => {
           </View>
         </ScrollView>
       </View>
-
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
-        visible={showTour}
-        currentScreen="PerformanceInsights"
-        onComplete={completeTour}
-      />
     </SafeAreaView>
   );
 };
