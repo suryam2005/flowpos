@@ -22,14 +22,14 @@ import { useAuth } from '../context/AuthContext';
 import { colors } from '../styles/colors';
 import { analyticsStyles, spacing } from '../styles/analyticsStyles';
 import LoadingSpinner from '../components/LoadingSpinner';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
+import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
+import useInteractiveTour from '../hooks/useInteractiveTour';
 
 // Import rebuilt chart components
 import { BarChart, LineChart, HorizontalBarChart, DonutChart, PieChart, ProgressChart, ChartCard, NoDataChart } from '../components/ChartComponents';
 
 
-const AdvancedAnalyticsScreen = ({ navigation }) => {
+const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   // Get store settings from context
   const { getStoreProfile } = useStoreSettings();
   const { user } = useAuth();
@@ -102,8 +102,27 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
   
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('AdvancedAnalytics');
+  // App tour guide - using interactive tour hook
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    completeTour,
+    checkAutoStart,
+    setOverlayRef,
+    isInitialized,
+  } = useInteractiveTour('AdvancedAnalytics');
+  
+  // Tour overlay ref
+  const tourOverlayRef = useRef(null);
   
   // Tour refs for dynamic positioning
   const headerRef = useRef(null);
@@ -114,6 +133,31 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
     // Load analytics data when period changes
     loadAdvancedAnalytics();
   }, [selectedPeriod]);
+
+  // Check if tour should auto-start when initialized
+  useEffect(() => {
+    if (isInitialized) {
+      checkAutoStart();
+    }
+  }, [isInitialized, checkAutoStart]);
+
+  // Handle tour trigger from route params
+  useEffect(() => {
+    if (route?.params?.startTour) {
+      console.log('🎯 [AdvancedAnalyticsScreen] Tour trigger received from route params');
+      setTimeout(() => {
+        startTour();
+      }, 1500);
+      navigation.setParams({ startTour: undefined });
+    }
+  }, [route?.params?.startTour, startTour, navigation]);
+
+  // Set overlay ref for animations
+  useEffect(() => {
+    if (tourOverlayRef.current) {
+      setOverlayRef(tourOverlayRef.current);
+    }
+  }, [setOverlayRef]);
 
   useEffect(() => {
     if (orders.length > 0) {
@@ -2477,17 +2521,20 @@ const AdvancedAnalyticsScreen = ({ navigation }) => {
       </View>
       </View>
 
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
+      {/* Interactive Tour Overlay */}
+      <InteractiveTourOverlay
+        ref={tourOverlayRef}
         visible={showTour}
-        onComplete={completeTour}
-        currentScreen="AdvancedAnalytics"
-        navigation={navigation}
-        tourRefs={{
-          header: headerRef,
-          filterSection: filterSectionRef,
-          summaryCards: summaryCardsRef,
-        }}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepIndex={stepIndex}
+        onNext={nextStep}
+        onSkip={skipScreen}
+        onSkipAll={skipAll}
+        onSkipStep={skipStep}
+        onActionComplete={completeTour}
+        showHint={showHint}
+        showSkipStep={showSkipStep}
       />
     </SafeAreaView>
   );

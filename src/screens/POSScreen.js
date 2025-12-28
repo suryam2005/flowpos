@@ -15,18 +15,25 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
 import CustomAlert from '../components/CustomAlert';
+import LoadingSpinner from '../components/LoadingSpinner';
 import { webScrollFix, webContainerFix, webScrollableContainer } from '../styles/webStyles';
 import { useRealtimeProducts } from '../hooks/useRealtimeData';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import ResponsiveText from '../components/ResponsiveText';
 import featureService from '../services/FeatureService';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
+import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
+import TourResumePrompt from '../components/TourResumePrompt';
+import useInteractiveTour from '../hooks/useInteractiveTour';
+import tourProgressManager from '../services/TourProgressManager';
+import { ACTION_TYPES, setDynamicPosition, clearDynamicPosition } from '../config/tourContent';
 import { colors } from '../styles/colors';
 import { buttonStyles } from '../styles/buttonStyles';
 import { typography } from '../styles/typographyStyles';
 import { useTheme } from '../context/ThemeContext';
 import { getProductImageUrl } from '../utils/imageUtils';
+
+// Staleness threshold for focus refresh (5 minutes in milliseconds)
+const FOCUS_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 
 
 
@@ -37,21 +44,32 @@ const POSScreen = ({ navigation, route }) => {
   const [alertConfig, setAlertConfig] = useState({});
   const [searchQuery, setSearchQuery] = useState('');
   const [showSearch, setShowSearch] = useState(false);
+  const [showTourResumePrompt, setShowTourResumePrompt] = useState(true);
   const { items, addItem, removeItem, clearCart, getItemCount, getTotal } = useCart();
   
   // Track if initial load is done
   const initialLoadDone = useRef(false);
+  
+  // Track last fetch timestamp for staleness check (API optimization)
+  const lastFetchRef = useRef(0);
   
   // Tour refs for dynamic positioning
   const headerRef = useRef(null);
   const productGridRef = useRef(null);
   const cartBarRef = useRef(null);
   const completeOrderButtonRef = useRef(null);
+  const tourOverlayRef = useRef(null);
+  
+  // Track previous cart state for action detection
+  const prevCartItemsRef = useRef([]);
+  
+  // Ref to always have latest nextStep function
+  const nextStepRef = useRef(null);
   
   // Responsive layout - no fixed calculations, use flex instead
   
   // Real-time data hooks
-  const { data: products, refresh: refreshProducts } = useRealtimeProducts();
+  const { data: products, refresh: refreshProducts, isLoading } = useRealtimeProducts();
   
   // Get store settings from StoreSettingsContext (single source of truth)
   const { getStoreProfile } = useStoreSettings();
@@ -67,22 +85,185 @@ const POSScreen = ({ navigation, route }) => {
     // Trigger initial products fetch
     console.log('🏪 [POS] Initial mount - fetching products');
     refreshProducts();
+    lastFetchRef.current = Date.now(); // Track initial fetch timestamp
     initialLoadDone.current = true;
   }, []);
 
   // Auto-refresh on focus to sync data from other screens (Inventory, ManageScreen)
+  // OPTIMIZED: Only refresh if cache is stale (older than 5 minutes)
   useFocusEffect(
     useCallback(() => {
       // Only refresh if not initial load
       if (initialLoadDone.current) {
-        console.log('🏪 [POS] Screen focused - refreshing products silently');
-        refreshProducts(); // Silent refresh without loader
+        const now = Date.now();
+        const timeSinceLastFetch = now - lastFetchRef.current;
+        const isStale = timeSinceLastFetch > FOCUS_STALENESS_THRESHOLD_MS;
+        
+        if (isStale) {
+          console.log('🏪 [POS] Screen focused - cache stale, refreshing products');
+          refreshProducts();
+          lastFetchRef.current = now; // Update fetch timestamp
+        } else {
+          console.log('🏪 [POS] Screen focused - cache fresh, skipping API call');
+        }
       }
     }, [refreshProducts])
   );
 
-  // App tour guide
-  const { showTour, completeTour, startTour } = useAppTour('POS');
+  // Interactive App Tour
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    notifyAction,
+    setOverlayRef,
+    isCurrentStepInteractive,
+    getCurrentActionTarget,
+  } = useInteractiveTour('POS');
+
+  // Set overlay ref for animations
+  useEffect(() => {
+    if (tourOverlayRef.current) {
+      setOverlayRef(tourOverlayRef.current);
+    }
+  }, [setOverlayRef]);
+
+  // Measure and set dynamic positions for cart bar and complete order button
+  // This ensures highlight positions are accurate based on actual component measurements
+  // Requirements: 12.1, 12.2, 12.3, 12.4, 12.5
+  useEffect(() => {
+    const measurePositions = () => {
+      // Measure cart bar position
+      if (cartBarRef.current && getItemCount() > 0) {
+        cartBarRef.current.measureInWindow((x, y, width, height) => {
+          if (typeof y === 'number' && typeof x === 'number' && width > 0 && height > 0) {
+            const cartBarPosition = {
+              top: y,
+              left: x,
+              width: width,
+              height: height,
+            };
+            setDynamicPosition('POS_CART_BAR', cartBarPosition);
+            console.log('🎯 [POS] Cart bar position measured:', cartBarPosition);
+          }
+        });
+      }
+
+      // Measure complete order button position
+      if (completeOrderButtonRef.current && getItemCount() > 0) {
+        completeOrderButtonRef.current.measureInWindow((x, y, width, height) => {
+          if (typeof y === 'number' && typeof x === 'number' && width > 0 && height > 0) {
+            const buttonPosition = {
+              top: y,
+              left: x,
+              width: width,
+              height: height,
+            };
+            setDynamicPosition('POS_COMPLETE_BTN', buttonPosition);
+            console.log('🎯 [POS] Complete Order button position measured:', buttonPosition);
+          }
+        });
+      }
+    };
+
+    // Measure positions when tour is active and cart has items
+    if (showTour && getItemCount() > 0) {
+      // Small delay to ensure layout is complete
+      const measureTimer = setTimeout(measurePositions, 100);
+      return () => clearTimeout(measureTimer);
+    }
+  }, [showTour, getItemCount, items.length]);
+
+  // Clear dynamic positions when leaving POS screen or tour ends
+  useEffect(() => {
+    return () => {
+      clearDynamicPosition('POS_CART_BAR');
+      clearDynamicPosition('POS_COMPLETE_BTN');
+    };
+  }, []);
+
+  // Keep nextStepRef updated with latest nextStep function
+  useEffect(() => {
+    nextStepRef.current = nextStep;
+  }, [nextStep]);
+
+  // Detect cart changes for tour action detection
+  useEffect(() => {
+    if (!showTour || !isCurrentStepInteractive()) {
+      prevCartItemsRef.current = [...items];
+      return;
+    }
+
+    const prevItems = prevCartItemsRef.current;
+    const currentItems = items;
+    const actionTarget = getCurrentActionTarget();
+
+    // Detect item added (cart grew or quantity increased)
+    const prevTotal = prevItems.reduce((sum, item) => sum + item.quantity, 0);
+    const currentTotal = currentItems.reduce((sum, item) => sum + item.quantity, 0);
+
+    if (currentTotal > prevTotal && actionTarget === 'product-card') {
+      // Check if it's a new item or quantity increase
+      const prevItemIds = new Set(prevItems.map(i => i.id));
+      const newItem = currentItems.find(i => !prevItemIds.has(i.id));
+      
+      if (newItem) {
+        // New item added
+        console.log('🎯 [POS Tour] Item added to cart:', newItem.name);
+        console.log('🎯 [POS Tour] Calling nextStep via ref');
+        // Use ref to always get latest nextStep
+        setTimeout(() => {
+          if (nextStepRef.current) {
+            nextStepRef.current();
+          }
+        }, 300);
+      } else {
+        // Quantity increased
+        const changedItem = currentItems.find(curr => {
+          const prev = prevItems.find(p => p.id === curr.id);
+          return prev && curr.quantity > prev.quantity;
+        });
+        if (changedItem) {
+          console.log('🎯 [POS Tour] Quantity increased:', changedItem.name);
+          console.log('🎯 [POS Tour] Calling nextStep via ref');
+          // Use ref to always get latest nextStep
+          setTimeout(() => {
+            if (nextStepRef.current) {
+              nextStepRef.current();
+            }
+          }, 300);
+        }
+      }
+    }
+
+    // Detect item removed (cart shrunk)
+    if (currentTotal < prevTotal && actionTarget === 'product-card') {
+      const currentItemIds = new Set(currentItems.map(i => i.id));
+      const removedItem = prevItems.find(i => !currentItemIds.has(i.id));
+      
+      if (removedItem) {
+        console.log('🎯 [POS Tour] Item removed from cart:', removedItem.name);
+        console.log('🎯 [POS Tour] Calling nextStep via ref');
+        // Use ref to always get latest nextStep
+        setTimeout(() => {
+          if (nextStepRef.current) {
+            nextStepRef.current();
+          }
+        }, 300);
+      }
+    }
+
+    // Update previous items ref
+    prevCartItemsRef.current = [...currentItems];
+  }, [items, showTour, isCurrentStepInteractive, getCurrentActionTarget]);
 
   // Handle tour trigger from route params
   useEffect(() => {
@@ -91,7 +272,7 @@ const POSScreen = ({ navigation, route }) => {
       
       // Small delay to ensure screen is fully loaded
       setTimeout(() => {
-        console.log('🎯 [POS] Starting tour manually from route params');
+        console.log('🎯 [POS] Starting interactive tour from route params');
         startTour();
       }, 1500);
       
@@ -99,6 +280,34 @@ const POSScreen = ({ navigation, route }) => {
       navigation.setParams({ startTour: undefined });
     }
   }, [route?.params?.startTour, startTour, navigation]);
+
+  // Handle redirect to Manage if no products (for tour)
+  useEffect(() => {
+    if (showTour && products.length === 0 && currentStep?.id === 'pos-welcome') {
+      console.log('🎯 [POS Tour] No products - redirecting to Manage screen');
+      // Skip POS tour and redirect to Manage
+      skipScreen();
+      navigation.navigate('Main', { 
+        screen: 'Manage', 
+        params: { 
+          initialTab: 'Products',
+          startTour: true 
+        }
+      });
+    }
+  }, [showTour, products.length, currentStep, skipScreen, navigation]);
+
+  // Handle Complete Order navigation for tour
+  const handleCompleteOrder = useCallback(async () => {
+    // Notify tour of navigation action
+    if (showTour && getCurrentActionTarget() === 'complete-order-btn') {
+      console.log('🎯 [POS Tour] Complete Order button pressed');
+      notifyAction(ACTION_TYPES.NAVIGATION, 'complete-order-btn', { screen: 'Cart' });
+      // Set continuation to Cart for tour flow
+      await tourProgressManager.setContinueTourTo('Cart');
+    }
+    navigation.navigate('Cart');
+  }, [showTour, getCurrentActionTarget, notifyAction, navigation]);
 
   // Generate available tags from products
   const availableTags = React.useMemo(() => {
@@ -116,6 +325,7 @@ const POSScreen = ({ navigation, route }) => {
   const onRefresh = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     refreshProducts();
+    lastFetchRef.current = Date.now(); // Update fetch timestamp on manual refresh
   };
 
   const filteredProducts = React.useMemo(() => {
@@ -346,6 +556,9 @@ const POSScreen = ({ navigation, route }) => {
 
   return (
     <SafeAreaView style={[styles.container, webContainerFix]}>
+      {/* Show loader during initial data fetch */}
+      {isLoading && <LoadingSpinner />}
+      
       <View style={styles.content}>
         <View style={styles.header} ref={headerRef}>
           <ResponsiveText variant="title" style={styles.title}>
@@ -447,7 +660,7 @@ const POSScreen = ({ navigation, route }) => {
               <TouchableOpacity
                 ref={completeOrderButtonRef}
                 style={buttonStyles.success}
-                onPress={() => navigation.navigate('Cart')}
+                onPress={handleCompleteOrder}
                 activeOpacity={0.8}
               >
                 <ResponsiveText variant="button" style={buttonStyles.successText}>
@@ -469,14 +682,30 @@ const POSScreen = ({ navigation, route }) => {
         onClose={() => setShowAlert(false)}
       />
 
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
+      {/* Interactive App Tour */}
+      <InteractiveTourOverlay
+        ref={tourOverlayRef}
         visible={showTour}
-        currentScreen="POS"
-        onComplete={completeTour}
-        navigation={navigation}
-        hasProducts={products.length > 0}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepIndex={stepIndex}
+        onNext={nextStep}
+        onSkip={skipScreen}
+        onSkipAll={skipAll}
+        onSkipStep={skipStep}
+        onActionComplete={nextStep}
+        showHint={showHint}
+        showSkipStep={showSkipStep}
       />
+
+      {/* Tour Resume Prompt - shows when there's an incomplete tour */}
+      {showTourResumePrompt && (
+        <TourResumePrompt
+          navigation={navigation}
+          onResume={() => setShowTourResumePrompt(false)}
+          onDismiss={() => setShowTourResumePrompt(false)}
+        />
+      )}
       </View>
     </SafeAreaView>
   );

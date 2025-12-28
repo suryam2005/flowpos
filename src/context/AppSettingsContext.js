@@ -621,6 +621,66 @@ const performOneTimeMigration = async (token) => {
 };
 
 /**
+ * Distribute store data to AppSettingsContext (called from AuthContext)
+ * This receives the app_settings field from a consolidated GET /api/store call
+ * and stores it in the AppSettingsContext cache.
+ * 
+ * @param {Object} storeData - Full store data from GET /api/store
+ */
+export const distributeStoreDataToAppSettings = (storeData) => {
+  if (!storeData) {
+    console.log('[AppSettingsCache] No store data to distribute');
+    return;
+  }
+
+  const appSettings = storeData.app_settings;
+  
+  // Store in cache via global actions
+  // IMPORTANT: If app_settings is null (new user), store empty object {}
+  // This distinguishes "loaded but empty" from "not loaded yet" (null)
+  const settingsToStore = appSettings === null || appSettings === undefined ? {} : appSettings;
+  
+  // Use internal storage function via global action pattern
+  if (globalAppSettingsActions.refreshSettings) {
+    // We can't directly call storeSettingsData, so we'll use a different approach
+    // Store directly to AsyncStorage and update state via a new global action
+    (async () => {
+      try {
+        const timestamp = Date.now();
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(settingsToStore)),
+          AsyncStorage.setItem(STORAGE_KEYS.APP_SETTINGS_TIMESTAMP, timestamp.toString())
+        ]);
+        console.log('[AppSettingsCache] Distributed store data stored in AsyncStorage');
+        
+        // Trigger a refresh to update in-memory state from the newly stored cache
+        // This is a lightweight operation since data is already in AsyncStorage
+        globalAppSettingsActions.refreshSettings().catch(err => {
+          console.error('[AppSettingsCache] Error refreshing after distribution:', err.message);
+        });
+      } catch (err) {
+        console.error('[AppSettingsCache] Error distributing store data:', err.message);
+      }
+    })();
+  } else {
+    console.log('[AppSettingsCache] Global actions not registered, falling back to direct storage');
+    // Fallback: store directly to AsyncStorage
+    (async () => {
+      try {
+        const timestamp = Date.now();
+        await Promise.all([
+          AsyncStorage.setItem(STORAGE_KEYS.APP_SETTINGS, JSON.stringify(settingsToStore)),
+          AsyncStorage.setItem(STORAGE_KEYS.APP_SETTINGS_TIMESTAMP, timestamp.toString())
+        ]);
+        console.log('[AppSettingsCache] Distributed store data stored in AsyncStorage (fallback)');
+      } catch (err) {
+        console.error('[AppSettingsCache] Error in fallback distribution:', err.message);
+      }
+    })();
+  }
+};
+
+/**
  * Trigger app settings fetch after login (non-blocking)
  * Called by AuthContext after successful login
  * Includes one-time migration check for existing users

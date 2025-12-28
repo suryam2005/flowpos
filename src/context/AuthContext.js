@@ -9,12 +9,15 @@ import {
 } from './SubscriptionContext';
 import {
   triggerAppSettingsFetchAfterLogin,
-  clearAppSettingsCacheOnLogout
+  clearAppSettingsCacheOnLogout,
+  distributeStoreDataToAppSettings
 } from './AppSettingsContext';
 import {
   triggerStoreSettingsFetchAfterLogin,
-  clearStoreSettingsCacheOnLogout
+  clearStoreSettingsCacheOnLogout,
+  distributeStoreDataToStoreSettings
 } from './StoreSettingsContext';
+import { apiDeduplicator, ENDPOINT_KEYS } from '../utils/APIDeduplicator';
 
 const AuthContext = createContext();
 
@@ -94,6 +97,65 @@ export const AuthProvider = ({ children }) => {
       console.error('Error checking auth status:', error);
     } finally {
       setIsLoading(false);
+    }
+  };
+
+  /**
+   * Consolidated store data fetch - makes a single GET /api/store call
+   * and distributes data to both StoreSettingsContext and AppSettingsContext
+   * 
+   * Uses APIDeduplicator to prevent duplicate calls when both contexts
+   * try to fetch simultaneously after login.
+   * 
+   * @param {string} token - Auth token for API call
+   * @returns {Promise<Object|null>} - Store data or null on failure
+   */
+  const fetchAndDistributeStoreData = async (token) => {
+    if (!token) {
+      console.log('[AuthContext] No token for consolidated store fetch');
+      return null;
+    }
+
+    try {
+      // Use APIDeduplicator to ensure only one call happens
+      const storeData = await apiDeduplicator.deduplicate(ENDPOINT_KEYS.STORE, async () => {
+        console.log('🔄 [AuthContext] Making consolidated GET /api/store call');
+        
+        const response = await apiCallWithFallback('/store', {
+          method: 'GET',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`
+          }
+        });
+
+        if (!response.ok) {
+          const errorData = await response.json().catch(() => ({}));
+          throw new Error(errorData.message || 'Failed to fetch store data');
+        }
+
+        const data = await response.json();
+        console.log('✅ [AuthContext] Consolidated store fetch successful');
+        return data.store || data;
+      });
+
+      // Distribute data to both contexts (non-blocking)
+      if (storeData) {
+        // Distribute to StoreSettingsContext
+        if (distributeStoreDataToStoreSettings) {
+          distributeStoreDataToStoreSettings(storeData, token);
+        }
+        
+        // Distribute to AppSettingsContext (app_settings field)
+        if (distributeStoreDataToAppSettings) {
+          distributeStoreDataToAppSettings(storeData);
+        }
+      }
+
+      return storeData;
+    } catch (error) {
+      console.error('[AuthContext] Consolidated store fetch failed:', error.message);
+      return null;
     }
   };
 
@@ -197,15 +259,16 @@ export const AuthProvider = ({ children }) => {
       console.log('📦 Triggering subscription fetch after password setup (non-blocking)...');
       triggerSubscriptionFetchAfterLogin();
       
-      // Trigger app settings fetch after successful password setup (non-blocking)
-      // This includes one-time migration check for existing users
-      console.log('⚙️ Triggering app settings fetch after password setup (non-blocking)...');
-      triggerAppSettingsFetchAfterLogin();
-      
-      // Trigger store settings fetch after successful password setup (non-blocking)
-      // This includes one-time migration check for existing users
-      console.log('🏪 Triggering store settings fetch after password setup (non-blocking)...');
-      triggerStoreSettingsFetchAfterLogin();
+      // CONSOLIDATED: Single API call for store data, distributed to both contexts
+      // This replaces separate triggerAppSettingsFetchAfterLogin and triggerStoreSettingsFetchAfterLogin
+      // Requirement 1.4: Prevent duplicate GET /api/store calls
+      console.log('🏪 Triggering consolidated store data fetch after password setup (non-blocking)...');
+      fetchAndDistributeStoreData(response.access_token).catch(err => {
+        console.error('[AuthContext] Consolidated store fetch failed:', err.message);
+        // Fallback: trigger individual fetches if consolidated fails
+        triggerAppSettingsFetchAfterLogin();
+        triggerStoreSettingsFetchAfterLogin();
+      });
     }
 
     return response;
@@ -274,15 +337,17 @@ export const AuthProvider = ({ children }) => {
     console.log('📦 Triggering subscription fetch (non-blocking)...');
     triggerSubscriptionFetchAfterLogin();
     
-    // Trigger app settings fetch after successful login (non-blocking)
-    // This includes one-time migration check for existing users
-    console.log('⚙️ Triggering app settings fetch (non-blocking)...');
-    triggerAppSettingsFetchAfterLogin();
-    
-    // Trigger store settings fetch after successful login (non-blocking)
-    // This includes one-time migration check for existing users
-    console.log('🏪 Triggering store settings fetch (non-blocking)...');
-    triggerStoreSettingsFetchAfterLogin();
+    // CONSOLIDATED: Single API call for store data, distributed to both contexts
+    // This replaces separate triggerAppSettingsFetchAfterLogin and triggerStoreSettingsFetchAfterLogin
+    // Requirement 1.4: Prevent duplicate GET /api/store calls
+    // Requirements 2.1, 2.2: Cache-first access for non-frequent data
+    console.log('🏪 Triggering consolidated store data fetch (non-blocking)...');
+    fetchAndDistributeStoreData(response.access_token).catch(err => {
+      console.error('[AuthContext] Consolidated store fetch failed:', err.message);
+      // Fallback: trigger individual fetches if consolidated fails
+      triggerAppSettingsFetchAfterLogin();
+      triggerStoreSettingsFetchAfterLogin();
+    });
 
     console.log('🎉 Login complete!');
 
@@ -346,15 +411,16 @@ export const AuthProvider = ({ children }) => {
       console.log('📦 Triggering subscription fetch after password reset (non-blocking)...');
       triggerSubscriptionFetchAfterLogin();
       
-      // Trigger app settings fetch after password reset (non-blocking)
-      // This includes one-time migration check for existing users
-      console.log('⚙️ Triggering app settings fetch after password reset (non-blocking)...');
-      triggerAppSettingsFetchAfterLogin();
-      
-      // Trigger store settings fetch after password reset (non-blocking)
-      // This includes one-time migration check for existing users
-      console.log('🏪 Triggering store settings fetch after password reset (non-blocking)...');
-      triggerStoreSettingsFetchAfterLogin();
+      // CONSOLIDATED: Single API call for store data, distributed to both contexts
+      // This replaces separate triggerAppSettingsFetchAfterLogin and triggerStoreSettingsFetchAfterLogin
+      // Requirement 1.4: Prevent duplicate GET /api/store calls
+      console.log('🏪 Triggering consolidated store data fetch after password reset (non-blocking)...');
+      fetchAndDistributeStoreData(response.access_token).catch(err => {
+        console.error('[AuthContext] Consolidated store fetch failed:', err.message);
+        // Fallback: trigger individual fetches if consolidated fails
+        triggerAppSettingsFetchAfterLogin();
+        triggerStoreSettingsFetchAfterLogin();
+      });
     }
 
     return response;

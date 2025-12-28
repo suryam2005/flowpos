@@ -1,11 +1,9 @@
-import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  Switch,
   Alert,
   Linking,
   Share,
@@ -20,34 +18,6 @@ import { useAuth } from '../../context/AuthContext';
 
 const PrivacySecurityScreen = ({ navigation }) => {
   const { user, logout } = useAuth();
-  
-  const [settings, setSettings] = useState({
-    // Communication Preferences (these work without backend)
-    marketingEmails: false,
-    productUpdates: true,
-    securityAlerts: true,
-    surveyInvitations: false,
-    // Data & Analytics
-    analyticsEnabled: true,
-    crashReporting: true,
-  });
-
-  const [isLoading, setIsLoading] = useState(false);
-
-  useEffect(() => {
-    loadPrivacySettings();
-  }, []);
-
-  const loadPrivacySettings = async () => {
-    try {
-      const savedSettings = await AsyncStorage.getItem('privacySettings');
-      if (savedSettings) {
-        setSettings({ ...settings, ...JSON.parse(savedSettings) });
-      }
-    } catch (error) {
-      console.error('Error loading privacy settings:', error);
-    }
-  };
 
   const handleExportData = async () => {
     try {
@@ -56,7 +26,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
       const privacyReport = {
         user_id: user?.id,
         email: user?.email,
-        privacy_settings: settings,
         export_date: new Date().toISOString(),
       };
 
@@ -96,57 +65,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
     );
   };
 
-  const handleDataDeletionRequest = () => {
-    Alert.alert(
-      'Request Data Deletion',
-      'This will permanently delete all your data including:\n\n' +
-      '• Your account and profile\n' +
-      '• All products and inventory\n' +
-      '• All orders and sales history\n' +
-      '• All settings and preferences\n\n' +
-      'This action cannot be undone. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Request Deletion',
-          style: 'destructive',
-          onPress: async () => {
-            try {
-              setIsLoading(true);
-              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-              
-              // Save deletion request locally
-              const deletionRequests = await AsyncStorage.getItem('deletionRequests');
-              const requests = deletionRequests ? JSON.parse(deletionRequests) : [];
-              
-              const newRequest = {
-                id: `DEL_${Date.now()}`,
-                userId: user?.id || 'Unknown',
-                userEmail: user?.email || 'Unknown',
-                requestedAt: new Date().toISOString(),
-                status: 'pending',
-              };
-              
-              requests.push(newRequest);
-              await AsyncStorage.setItem('deletionRequests', JSON.stringify(requests));
-              
-              Alert.alert(
-                'Request Submitted',
-                'Your data deletion request has been submitted. You will receive a confirmation email within 48 hours. Your account will remain active until the deletion is processed.',
-                [{ text: 'OK' }]
-              );
-            } catch (error) {
-              console.error('Error submitting deletion request:', error);
-              Alert.alert('Error', 'Failed to submit deletion request. Please try again.');
-            } finally {
-              setIsLoading(false);
-            }
-          }
-        }
-      ]
-    );
-  };
-
   const handleClearLocalData = () => {
     Alert.alert(
       'Clear Local Data',
@@ -158,7 +76,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
           style: 'destructive',
           onPress: async () => {
             try {
-              setIsLoading(true);
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
               
               // Clear all AsyncStorage except auth tokens
@@ -184,8 +101,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
             } catch (error) {
               console.error('Error clearing local data:', error);
               Alert.alert('Error', 'Failed to clear local data. Please try again.');
-            } finally {
-              setIsLoading(false);
             }
           }
         }
@@ -207,22 +122,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
     );
   };
 
-  const saveSettings = async (newSettings) => {
-    try {
-      await AsyncStorage.setItem('privacySettings', JSON.stringify(newSettings));
-      setSettings(newSettings);
-      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    } catch (error) {
-      console.error('Error saving privacy settings:', error);
-      Alert.alert('Error', 'Failed to save privacy settings');
-    }
-  };
-
-  const updateSetting = (key, value) => {
-    const newSettings = { ...settings, [key]: value };
-    saveSettings(newSettings);
-  };
-
   // Coming Soon Badge Component
   const ComingSoonBadge = () => (
     <View style={styles.comingSoonBadge}>
@@ -230,40 +129,7 @@ const PrivacySecurityScreen = ({ navigation }) => {
     </View>
   );
 
-  const renderSettingItem = (title, subtitle, settingKey, disabled = false, onPress = null, comingSoon = false) => (
-    <TouchableOpacity
-      style={[styles.settingItem, disabled && styles.settingItemDisabled]}
-      onPress={onPress}
-      disabled={!onPress || comingSoon}
-    >
-      <View style={styles.settingContent}>
-        <View style={styles.settingTitleRow}>
-          <Text style={[styles.settingTitle, disabled && styles.settingTitleDisabled]}>
-            {title}
-          </Text>
-          {comingSoon && <ComingSoonBadge />}
-        </View>
-        {subtitle && (
-          <Text style={[styles.settingSubtitle, disabled && styles.settingSubtitleDisabled]}>
-            {subtitle}
-          </Text>
-        )}
-      </View>
-      {onPress ? (
-        <Ionicons name="chevron-forward" size={20} color={comingSoon ? colors.text.tertiary : colors.text.secondary} />
-      ) : (
-        <Switch
-          value={settings[settingKey]}
-          onValueChange={(value) => updateSetting(settingKey, value)}
-          disabled={disabled || comingSoon}
-          trackColor={{ false: colors.border.medium, true: colors.primary.background }}
-          thumbColor={settings[settingKey] ? colors.primary.main : colors.text.tertiary}
-        />
-      )}
-    </TouchableOpacity>
-  );
-
-  const renderComingSoonItem = (title, subtitle, icon) => (
+  const renderComingSoonItem = (title, subtitle) => (
     <View style={[styles.settingItem, styles.settingItemDisabled]}>
       <View style={styles.settingContent}>
         <View style={styles.settingTitleRow}>
@@ -303,48 +169,42 @@ const PrivacySecurityScreen = ({ navigation }) => {
       </View>
 
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Communication Preferences - These work */}
+        {/* Communication Preferences - Coming Soon (not connected to backend) */}
         {renderSection(
           'Communication Preferences',
           'Choose what communications you want to receive',
           <>
-            {renderSettingItem(
+            {renderComingSoonItem(
               'Marketing Emails',
-              'Receive promotional emails and offers',
-              'marketingEmails'
+              'Receive promotional emails and offers'
             )}
-            {renderSettingItem(
+            {renderComingSoonItem(
               'Product Updates',
-              'Get notified about new features and updates',
-              'productUpdates'
+              'Get notified about new features and updates'
             )}
-            {renderSettingItem(
+            {renderComingSoonItem(
               'Security Alerts',
-              'Receive important security notifications',
-              'securityAlerts'
+              'Receive important security notifications'
             )}
-            {renderSettingItem(
+            {renderComingSoonItem(
               'Survey Invitations',
-              'Participate in surveys to help improve FlowPOS',
-              'surveyInvitations'
+              'Participate in surveys to help improve FlowPOS'
             )}
           </>
         )}
 
-        {/* Data & Analytics - Working */}
+        {/* Data & Analytics - Coming Soon (not connected to backend) */}
         {renderSection(
           'Data & Analytics',
           'Control how your data is used',
           <>
-            {renderSettingItem(
+            {renderComingSoonItem(
               'Analytics',
-              'Help improve FlowPOS by sharing anonymous usage data',
-              'analyticsEnabled'
+              'Help improve FlowPOS by sharing anonymous usage data'
             )}
-            {renderSettingItem(
+            {renderComingSoonItem(
               'Crash Reporting',
-              'Automatically send crash reports to help fix bugs',
-              'crashReporting'
+              'Automatically send crash reports to help fix bugs'
             )}
           </>
         )}
@@ -391,7 +251,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
             <TouchableOpacity
               style={styles.actionButton}
               onPress={handleClearLocalData}
-              disabled={isLoading}
             >
               <Ionicons name="trash-outline" size={20} color={colors.text.primary} />
               <Text style={styles.actionButtonText}>Clear Local Data</Text>
@@ -400,20 +259,15 @@ const PrivacySecurityScreen = ({ navigation }) => {
           </>
         )}
 
-        {/* Data Deletion - Working */}
+        {/* Data Deletion - Coming Soon */}
         {renderSection(
           'Account Data',
           'Manage your account data',
           <>
-            <TouchableOpacity
-              style={[styles.actionButton, styles.dangerButton]}
-              onPress={handleDataDeletionRequest}
-              disabled={isLoading}
-            >
-              <Ionicons name="warning-outline" size={20} color={colors.error.main} />
-              <Text style={[styles.actionButtonText, styles.dangerText]}>Request Data Deletion</Text>
-              <Ionicons name="chevron-forward" size={20} color={colors.error.main} />
-            </TouchableOpacity>
+            {renderComingSoonItem(
+              'Request Data Deletion',
+              'Permanently delete all your account data'
+            )}
           </>
         )}
 
@@ -436,43 +290,6 @@ const PrivacySecurityScreen = ({ navigation }) => {
             )}
           </>
         )}
-
-        {/* Reset Settings */}
-        <View style={styles.section}>
-          <TouchableOpacity
-            style={[styles.actionButton]}
-            onPress={() => {
-              Alert.alert(
-                'Reset Privacy Settings',
-                'This will reset all communication and analytics preferences to default. Are you sure?',
-                [
-                  { text: 'Cancel', style: 'cancel' },
-                  {
-                    text: 'Reset',
-                    style: 'destructive',
-                    onPress: () => {
-                      const defaultSettings = {
-                        marketingEmails: false,
-                        productUpdates: true,
-                        securityAlerts: true,
-                        surveyInvitations: false,
-                        analyticsEnabled: true,
-                        crashReporting: true,
-                      };
-                      saveSettings(defaultSettings);
-                      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-                      Alert.alert('Success', 'Settings reset to default');
-                    }
-                  }
-                ]
-              );
-            }}
-          >
-            <Ionicons name="refresh-outline" size={20} color={colors.text.secondary} />
-            <Text style={styles.actionButtonText}>Reset to Default</Text>
-            <Ionicons name="chevron-forward" size={20} color={colors.text.secondary} />
-          </TouchableOpacity>
-        </View>
 
         <View style={styles.bottomPadding} />
       </ScrollView>
@@ -553,16 +370,10 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     marginBottom: 2,
   },
-  settingTitleDisabled: {
-    color: colors.text.secondary,
-  },
   settingSubtitle: {
     fontSize: 14,
     color: colors.text.secondary,
     marginTop: 2,
-  },
-  settingSubtitleDisabled: {
-    color: colors.text.tertiary,
   },
   comingSoonBadge: {
     backgroundColor: colors.warning.background,
@@ -586,18 +397,12 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
-  dangerButton: {
-    borderBottomWidth: 0,
-  },
   actionButtonText: {
     flex: 1,
     fontSize: 16,
     fontWeight: '500',
     color: colors.text.primary,
     marginLeft: 12,
-  },
-  dangerText: {
-    color: colors.error.main,
   },
   bottomPadding: {
     height: 40,

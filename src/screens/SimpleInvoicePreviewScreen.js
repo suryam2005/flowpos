@@ -1,16 +1,130 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef, useCallback } from 'react';
 import { View, StyleSheet, Text, BackHandler } from 'react-native';
 import SimpleInvoicePreview from '../components/SimpleInvoicePreview';
 import InvoiceService from '../services/InvoiceService';
 import { colors } from '../styles/colors';
+import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
+import useInteractiveTour from '../hooks/useInteractiveTour';
+import tourProgressManager from '../services/TourProgressManager';
 
 const SimpleInvoicePreviewScreen = ({ route, navigation }) => {
   const { 
     invoiceData: rawInvoiceData, 
-    fromOrderCompletion = true
+    fromOrderCompletion = true,
+    continueTour = false // Flag to indicate tour continuation from Cart
   } = route.params;
   const [processedInvoiceData, setProcessedInvoiceData] = useState(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [tourCountdown, setTourCountdown] = useState(10);
+  const tourTimerRef = useRef(null);
+  const overlayRef = useRef(null);
+
+  // Interactive tour hook for InvoicePreview screen
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    isInitialized,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    setOverlayRef,
+    checkAutoStart,
+  } = useInteractiveTour('InvoicePreview');
+
+  // Set overlay ref for tour
+  useEffect(() => {
+    if (overlayRef.current) {
+      setOverlayRef(overlayRef.current);
+    }
+  }, [setOverlayRef]);
+
+  // Check for tour continuation from Cart screen
+  useEffect(() => {
+    const checkTourContinuation = async () => {
+      if (!isInitialized) return;
+
+      // Check if we should continue the tour from Cart
+      if (continueTour) {
+        console.log('🎯 [SimpleInvoicePreviewScreen] Continuing tour from Cart');
+        // Small delay to let the screen render first
+        setTimeout(() => {
+          startTour();
+        }, 500);
+        return;
+      }
+
+      // Check for auto-start conditions
+      const shouldAutoStart = await checkAutoStart();
+      if (shouldAutoStart) {
+        console.log('🎯 [SimpleInvoicePreviewScreen] Auto-starting tour');
+      }
+    };
+
+    checkTourContinuation();
+  }, [isInitialized, continueTour, startTour, checkAutoStart]);
+
+  // Tour countdown timer - syncs with the existing 10-sec display
+  // When tour is active, we show a countdown and auto-advance after 10 seconds
+  useEffect(() => {
+    if (showTour && currentStep?.id === 'invoice-preview-view') {
+      setTourCountdown(10);
+      
+      tourTimerRef.current = setInterval(() => {
+        setTourCountdown(prev => {
+          if (prev <= 1) {
+            // Clear timer and advance to next step
+            if (tourTimerRef.current) {
+              clearInterval(tourTimerRef.current);
+              tourTimerRef.current = null;
+            }
+            // Auto-advance to navigation hint step
+            setTimeout(() => {
+              nextStep();
+            }, 0);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        if (tourTimerRef.current) {
+          clearInterval(tourTimerRef.current);
+          tourTimerRef.current = null;
+        }
+      };
+    }
+  }, [showTour, currentStep?.id, nextStep]);
+
+  // Handle tour completion - guide to Analytics
+  const handleTourComplete = useCallback(async () => {
+    console.log('🎯 [SimpleInvoicePreviewScreen] Tour complete, guiding to Analytics');
+    
+    // Set continuation to Analytics
+    await tourProgressManager.setContinueTourTo('Analytics');
+    
+    // Navigate to Analytics screen
+    navigation.navigate('Main', { 
+      screen: 'Stats',
+      params: { continueTour: true }
+    });
+  }, [navigation]);
+
+  // Handle next step - check if we need to navigate to Analytics
+  const handleNextStep = useCallback(async () => {
+    if (currentStep?.nextScreen === 'Analytics') {
+      // This is the last step, navigate to Analytics
+      await handleTourComplete();
+    } else {
+      nextStep();
+    }
+  }, [currentStep, nextStep, handleTourComplete]);
 
   // Navigate to POS screen (used for both auto-redirect and back button)
   const navigateToPOS = () => {
@@ -98,8 +212,31 @@ const SimpleInvoicePreviewScreen = ({ route, navigation }) => {
         visible={true}
         invoiceData={processedInvoiceData}
         onClose={handleClose}
-        showSkipOption={fromOrderCompletion}
+        showSkipOption={fromOrderCompletion && !showTour} // Hide skip option when tour is active
       />
+      
+      {/* Interactive Tour Overlay */}
+      {showTour && currentStep && (
+        <InteractiveTourOverlay
+          ref={overlayRef}
+          visible={showTour}
+          currentStep={{
+            ...currentStep,
+            // Add countdown to the text for the invoice preview step
+            text: currentStep.id === 'invoice-preview-view' 
+              ? `${currentStep.text}\n\n⏱️ Continuing in ${tourCountdown}s...`
+              : currentStep.text,
+          }}
+          totalSteps={totalSteps}
+          stepIndex={stepIndex}
+          onNext={handleNextStep}
+          onSkip={skipScreen}
+          onSkipAll={skipAll}
+          onSkipStep={skipStep}
+          showHint={showHint}
+          showSkipStep={showSkipStep}
+        />
+      )}
     </View>
   );
 };

@@ -1068,6 +1068,74 @@ export const StoreSettingsProvider = ({ children }) => {
 // ============================================================================
 
 /**
+ * Distribute store data to StoreSettingsContext (called from AuthContext)
+ * This receives the full store data from a consolidated GET /api/store call
+ * and stores it in the StoreSettingsContext cache.
+ * 
+ * Also handles one-time migration if needed.
+ * 
+ * @param {Object} storeData - Full store data from GET /api/store
+ * @param {string} token - Auth token for migration if needed
+ */
+export const distributeStoreDataToStoreSettings = (storeData, token) => {
+  if (!storeData) {
+    console.log('[StoreSettingsContext] No store data to distribute');
+    return;
+  }
+
+  // Set login timestamp for health check
+  if (globalStoreSettingsActions.setLoginTimestamp) {
+    globalStoreSettingsActions.setLoginTimestamp();
+  }
+
+  // Transform backend response to context format
+  // NOTE: Excludes store_phone and store_email (auth-bound)
+  const settings = {
+    // Store Profile (6 fields)
+    store_name: storeData?.store_name || '',
+    store_address: storeData?.store_address || '',
+    store_website: storeData?.store_website || '',
+    business_type: storeData?.business_type || '',
+    gst_number: storeData?.gst_number || '',
+    currency: storeData?.currency || 'INR',
+    
+    // Payment Settings (4 fields)
+    upi_id: storeData?.upi_id || '',
+    upi_id_2: storeData?.upi_id_2 || '',
+    upi_id_3: storeData?.upi_id_3 || '',
+    payment_methods: storeData?.payment_methods || ['Cash', 'QR Pay'],
+    
+    // JSONB Settings (preserve as objects)
+    tax_settings: storeData?.tax_settings || null,
+    receipt_settings: storeData?.receipt_settings || null,
+    business_settings: storeData?.business_settings || null
+  };
+
+  // Store in AsyncStorage and trigger refresh
+  (async () => {
+    try {
+      const timestamp = Date.now();
+      const settingsToStore = settings === null ? {} : settings;
+      
+      await Promise.all([
+        AsyncStorage.setItem('@flowpos_store_settings', JSON.stringify(settingsToStore)),
+        AsyncStorage.setItem('@flowpos_store_settings_timestamp', timestamp.toString())
+      ]);
+      console.log('[StoreSettingsContext] Distributed store data stored in AsyncStorage');
+      
+      // Trigger a refresh to update in-memory state and handle migration
+      if (globalStoreSettingsActions.refreshSettings) {
+        globalStoreSettingsActions.refreshSettings().catch(err => {
+          console.error('[StoreSettingsContext] Error refreshing after distribution:', err.message);
+        });
+      }
+    } catch (err) {
+      console.error('[StoreSettingsContext] Error distributing store data:', err.message);
+    }
+  })();
+};
+
+/**
  * Trigger store settings fetch after login (called from AuthContext)
  * Non-blocking - does not wait for completion
  * Also sets login timestamp for health check monitoring

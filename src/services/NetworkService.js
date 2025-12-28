@@ -1,6 +1,9 @@
 // Enhanced NetworkService with better connection handling
 import { API_BASE_URL, API_FALLBACK_URLS } from '../config/apiConfig';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { retryController, isRetryableMethod } from '../utils/RetryController';
+import { networkGuard, OfflineError } from '../utils/NetworkGuard';
+import { callCounter } from '../utils/CallCounter';
 
 class NetworkService {
   constructor() {
@@ -93,8 +96,18 @@ class NetworkService {
 
   // Main API call method (expected by ProductsService and OrdersService)
   async apiCall(endpoint, options = {}) {
+    const method = (options.method || 'GET').toUpperCase();
+    
     try {
-      console.log(`🌐 [NetworkService] API Call: ${options.method || 'GET'} ${endpoint}`);
+      console.log(`🌐 [NetworkService] API Call: ${method} ${endpoint}`);
+      
+      // Check offline status first - return OfflineError immediately when offline
+      // Requirements 7.1, 7.2: Block API execution immediately when offline
+      const isOnline = await networkGuard.isOnline(true);
+      if (!isOnline) {
+        console.log('📵 [NetworkService] Device is offline, blocking API call');
+        throw new OfflineError();
+      }
       
       await this.ensureConnection();
       
@@ -111,16 +124,45 @@ class NetworkService {
       const url = `${this.baseURL}/api${endpoint}`;
       console.log('🌐 [NetworkService] Request URL:', url);
       
-      let response = await fetch(url, {
-        ...options,
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token && { 'Authorization': `Bearer ${token}` }),
-          ...options.headers,
-        },
-      });
+      // Create the request function
+      const makeRequest = async () => {
+        const response = await fetch(url, {
+          ...options,
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token && { 'Authorization': `Bearer ${token}` }),
+            ...options.headers,
+          },
+        });
+        
+        // Throw error for server errors (5xx) to trigger retry
+        if (response.status >= 500 && response.status < 600) {
+          const error = new Error(`Server error: ${response.status}`);
+          error.status = response.status;
+          throw error;
+        }
+        
+        return response;
+      };
+      
+      let response;
+      
+      // Use retry logic only for GET requests (retryable methods)
+      if (isRetryableMethod(method)) {
+        console.log('🔄 [NetworkService] Using retry logic for GET request');
+        response = await retryController.executeWithRetry(makeRequest, { method });
+      } else {
+        console.log('⚡ [NetworkService] Skipping retry for write operation:', method);
+        response = await makeRequest();
+      }
       
       console.log('🔧 [NetworkService] Response status:', response.status);
+      
+      // Track API call count per endpoint (Requirements 9.1, 9.2, 9.3)
+      // Format: METHOD:/api/endpoint
+      const endpointKey = `${method}:/api${endpoint}`;
+      callCounter.increment(endpointKey);
+      callCounter.checkThreshold(endpointKey);
       
       // Handle different response statuses
       if (response.status === 401) {
@@ -147,6 +189,18 @@ class NetworkService {
       return response;
     } catch (error) {
       console.log('❌ [NetworkService] API Call failed:', error.message);
+      
+      // Check if it's an OfflineError - return immediately without retry
+      if (error.name === 'OfflineError') {
+        console.log('📵 [NetworkService] Offline error - returning clean failure');
+        throw error;
+      }
+      
+      // Check if it's a MaxRetriesError
+      if (error.name === 'MaxRetriesError') {
+        console.log(`❌ [NetworkService] Max retries (${error.attempts}) exceeded for ${endpoint}`);
+        throw error;
+      }
       
       // Check if it's a network connectivity issue
       if (error.message.includes('Network request failed') || 

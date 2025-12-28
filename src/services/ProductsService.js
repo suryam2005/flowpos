@@ -1,7 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NetInfo from '@react-native-community/netinfo';
 import networkService from './NetworkService';
-import { RequestDeduplicator } from '../utils/debounce';
+import { apiDeduplicator, ENDPOINT_KEYS } from '../utils/APIDeduplicator';
 
 class ProductsService {
   constructor() {
@@ -12,8 +12,8 @@ class ProductsService {
     this.syncInProgress = false;
     this.abortController = null;
     
-    // Phase 1 Optimization: Request deduplication
-    this.deduplicator = new RequestDeduplicator();
+    // Phase 1 Optimization: Using global APIDeduplicator for consistent deduplication
+    // The apiDeduplicator singleton is imported from '../utils/APIDeduplicator'
     
     // Initialize network monitoring
     this.initNetworkMonitoring();
@@ -151,9 +151,9 @@ class ProductsService {
         return [];
       }
 
-      // Phase 1 Optimization: Deduplicate concurrent requests
-      const dedupeKey = `getProducts_${JSON.stringify(options)}`;
-      const products = await this.deduplicator.deduplicate(dedupeKey, async () => {
+      // Phase 1 Optimization: Use global APIDeduplicator with standardized endpoint key
+      // This ensures consistent deduplication across all components using ENDPOINT_KEYS.PRODUCTS
+      const products = await apiDeduplicator.deduplicate(ENDPOINT_KEYS.PRODUCTS, async () => {
         // Always fetch fresh data from Supabase - NO LOCAL CACHE
         console.log('📦 [MOBILE DEBUG] Calling getProductsFromCloud...');
         return await this.getProductsFromCloud(options);

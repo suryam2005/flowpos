@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -23,13 +23,19 @@ import productsService from '../services/ProductsService';
 import StoreSettingsScreen from './manage/StoreSettingsScreen';
 import LoadingSpinner from '../components/LoadingSpinner';
 
+// Staleness threshold for focus refresh (5 minutes in milliseconds)
+// API Optimization: Only refresh if cache is older than this threshold
+const FOCUS_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
+
 import featureService from '../services/FeatureService';
 import TagInput from '../components/TagInput';
 import ProductImagePicker from '../components/ProductImagePicker';
 import { generateProductTags } from '../utils/tagGenerator';
 import productImageService from '../services/ProductImageService';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
+import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
+import useInteractiveTour from '../hooks/useInteractiveTour';
+import actionDetectorService, { ACTION_TYPES } from '../services/ActionDetectorService';
+import tourProgressManager from '../services/TourProgressManager';
 import { colors } from '../styles/colors';
 import { buttonStyles } from '../styles/buttonStyles';
 import { typography } from '../styles/typographyStyles';
@@ -59,8 +65,31 @@ const ManageScreen = ({ navigation, route }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [activeTab, setActiveTab] = useState('Products');
   
-  // App tour guide
-  const { showTour, completeTour, startTour } = useAppTour('Manage');
+  // Interactive App Tour - using useInteractiveTour hook
+  // Determine which tour to use based on active tab
+  const currentTourScreen = activeTab === 'Inventory' ? 'ManageInventory' : 'ManageProducts';
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    completeTour,
+    notifyAction,
+    setOverlayRef,
+    checkAutoStart,
+    getDemoValues,
+    isCurrentStepInteractive,
+  } = useInteractiveTour(currentTourScreen);
+  
+  // Ref for InteractiveTourOverlay
+  const overlayRef = useRef(null);
   
   // Tour refs for dynamic positioning
   const headerRef = useRef(null);
@@ -69,6 +98,12 @@ const ManageScreen = ({ navigation, route }) => {
 
   // Note: Back prevention not needed for ManageScreen as modal handles its own navigation
   // The LoadingOverlay already prevents interaction during save operations
+  
+  // Track last fetch timestamp for staleness check (API optimization)
+  const lastFetchRef = useRef(0);
+  
+  // Track if initial load is done
+  const initialLoadDone = useRef(false);
   
   // Refs for maintaining focus
   const lastFocusedInputRef = useRef(null);
@@ -85,16 +120,178 @@ const ManageScreen = ({ navigation, route }) => {
 
   const tabs = ['Products', 'Inventory', 'Store Settings'];
 
+  // Set overlay ref when component mounts
+  useEffect(() => {
+    if (overlayRef.current) {
+      setOverlayRef(overlayRef.current);
+    }
+  }, [setOverlayRef]);
+
+  // Check for auto-start tour when screen loads
+  useEffect(() => {
+    const checkTour = async () => {
+      if (!isLoading) {
+        await checkAutoStart();
+      }
+    };
+    checkTour();
+  }, [isLoading, checkAutoStart]);
+
+  // Handle tour continuation from ManageProducts to ManageInventory
+  // When ManageProducts tour completes, it sets continueToScreen: 'ManageInventory'
+  // We need to switch to Inventory tab and let InventoryScreen's tour auto-start
+  useEffect(() => {
+    const checkTourContinuation = async () => {
+      if (!showTour && activeTab === 'Products') {
+        // Peek at the continuation target without clearing it
+        // We use AsyncStorage directly to avoid clearing the value
+        const continueTo = await AsyncStorage.getItem('continueTourTo');
+        if (continueTo === 'ManageInventory') {
+          console.log('🎯 [ManageScreen] Continuing tour from ManageProducts to ManageInventory');
+          // Switch to Inventory tab - the InventoryScreen will auto-start its tour
+          // and clear the continuation target
+          setActiveTab('Inventory');
+        }
+      }
+    };
+    
+    // Small delay to allow tour completion to process
+    const timer = setTimeout(checkTourContinuation, 500);
+    return () => clearTimeout(timer);
+  }, [showTour, activeTab]);
+
+  // Handle tab change for tour continuation
+  const handleTabChange = useCallback((tab) => {
+    const previousTab = activeTab;
+    setActiveTab(tab);
+    
+    // Notify action detector of tab change for tour
+    if (showTour && currentStep?.actionType === ACTION_TYPES.TAB_CHANGE) {
+      if (tab === 'Inventory' && currentStep?.actionTarget === 'inventory-tab') {
+        console.log('🎯 [ManageScreen] Tab change detected: Inventory');
+        notifyAction(ACTION_TYPES.TAB_CHANGE, 'inventory-tab');
+      }
+    }
+  }, [activeTab, showTour, currentStep, notifyAction]);
+
+  // Handle modal close for tour
+  const handleModalClose = useCallback(() => {
+    setModalVisible(false);
+    
+    // Notify tour of modal close
+    if (showTour && currentStep?.actionTarget === 'add-product-modal') {
+      console.log('🎯 [ManageScreen] Modal closed during tour');
+      notifyAction(ACTION_TYPES.MODAL_CLOSE, 'add-product-modal');
+    }
+  }, [showTour, currentStep, notifyAction]);
+
+  // Handle Edit Product button tap for tour
+  const handleEditProductWithTour = useCallback((product) => {
+    // Notify tour of edit button tap
+    if (showTour && currentStep?.actionTarget === 'edit-product-btn') {
+      console.log('🎯 [ManageScreen] Edit Product button tapped during tour');
+      notifyAction(ACTION_TYPES.TAP, 'edit-product-btn');
+    }
+    
+    // Call original edit handler
+    handleEditProduct(product);
+  }, [showTour, currentStep, notifyAction]);
+
+  // Handle Delete Product button tap for tour
+  const handleDeleteProductWithTour = useCallback((productId) => {
+    // Notify tour of delete button tap
+    if (showTour && currentStep?.actionTarget === 'delete-product-btn') {
+      console.log('🎯 [ManageScreen] Delete Product button tapped during tour');
+      notifyAction(ACTION_TYPES.TAP, 'delete-product-btn');
+    }
+    
+    // Call original delete handler
+    handleDeleteProduct(productId);
+  }, [showTour, currentStep, notifyAction]);
+
+  // Handle Add Product button tap for tour
+  const handleAddProductWithTour = useCallback(async () => {
+    // Notify tour of button tap
+    if (showTour && currentStep?.actionTarget === 'add-product-btn') {
+      console.log('🎯 [ManageScreen] Add Product button tapped during tour');
+      notifyAction(ACTION_TYPES.TAP, 'add-product-btn');
+    }
+    
+    // Call original add product handler
+    await handleAddProduct();
+  }, [showTour, currentStep, notifyAction]);
+
+  // Handle text input changes for tour
+  const handleNameChange = useCallback((text) => {
+    setFormData(prev => ({ ...prev, name: text }));
+    
+    // Notify tour of text input
+    if (showTour && currentStep?.actionTarget === 'product-name-input' && text.length > 0) {
+      console.log('🎯 [ManageScreen] Product name entered during tour');
+      notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-name-input');
+    }
+  }, [showTour, currentStep, notifyAction]);
+
+  const handlePriceChange = useCallback((text) => {
+    setFormData(prev => ({ ...prev, price: text }));
+    
+    // Notify tour of text input
+    if (showTour && currentStep?.actionTarget === 'product-price-input' && text.length > 0) {
+      console.log('🎯 [ManageScreen] Product price entered during tour');
+      notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-price-input');
+    }
+  }, [showTour, currentStep, notifyAction]);
+
+  // Handle save button tap for tour
+  const handleSaveWithTour = useCallback(async () => {
+    // Notify tour of save button tap
+    if (showTour && currentStep?.actionTarget === 'save-product-btn') {
+      console.log('🎯 [ManageScreen] Save button tapped during tour');
+      notifyAction(ACTION_TYPES.TAP, 'save-product-btn');
+    }
+    
+    // Call original save handler
+    await handleSaveProduct();
+  }, [showTour, currentStep, notifyAction]);
+
+  // Pre-fill demo values when tour step requires it
+  useEffect(() => {
+    if (showTour && currentStep?.demoValues) {
+      const demoValues = getDemoValues();
+      if (demoValues.productName && !formData.name) {
+        setFormData(prev => ({ ...prev, name: demoValues.productName }));
+      }
+      if (demoValues.price && !formData.price) {
+        setFormData(prev => ({ ...prev, price: demoValues.price }));
+      }
+    }
+  }, [showTour, currentStep, getDemoValues, formData.name, formData.price]);
+
   // No animations needed
 
   useEffect(() => {
     // Initial load with page loader
     loadProducts(false, true);
+    lastFetchRef.current = Date.now(); // Track initial fetch timestamp
+    initialLoadDone.current = true;
     
     // Focus listener for silent refresh (no loader)
+    // OPTIMIZED: Only refresh if cache is stale (older than 5 minutes)
     const unsubscribe = navigation.addListener('focus', () => {
-      console.log('📦 [ManageScreen] Focus - silent refresh');
-      loadProducts(false, false); // Silent refresh
+      // Only refresh if not initial load
+      if (initialLoadDone.current) {
+        const now = Date.now();
+        const timeSinceLastFetch = now - lastFetchRef.current;
+        const isStale = timeSinceLastFetch > FOCUS_STALENESS_THRESHOLD_MS;
+        
+        if (isStale) {
+          console.log('📦 [ManageScreen] Focus - cache stale, refreshing products');
+          loadProducts(false, false); // Silent refresh
+          lastFetchRef.current = now; // Update fetch timestamp
+        } else {
+          console.log('📦 [ManageScreen] Focus - cache fresh, skipping API call');
+        }
+      }
     });
 
     // FIXED: Subscribe to DataSyncContext for real-time updates from InventoryScreen
@@ -123,13 +320,13 @@ const ManageScreen = ({ navigation, route }) => {
   useEffect(() => {
     if (route?.params?.initialTab) {
       console.log('📦 [ManageScreen] Setting initial tab:', route.params.initialTab);
-      setActiveTab(route.params.initialTab);
+      handleTabChange(route.params.initialTab);
     }
     if (route?.params?.openAddModal) {
       console.log('📦 [ManageScreen] Opening add product modal');
       // Small delay to ensure tab is set and screen is ready
       setTimeout(() => {
-        handleAddProduct();
+        handleAddProductWithTour();
       }, 200);
       // Clear the param to prevent re-triggering
       navigation.setParams({ openAddModal: undefined });
@@ -142,7 +339,7 @@ const ManageScreen = ({ navigation, route }) => {
       }, 1500);
       navigation.setParams({ startTour: undefined });
     }
-  }, [route?.params, navigation, handleAddProduct, startTour]);
+  }, [route?.params, navigation, handleAddProductWithTour, startTour, handleTabChange]);
 
   // Trigger DataSync refresh when modal closes (product updated)
   useEffect(() => {
@@ -257,6 +454,9 @@ const ManageScreen = ({ navigation, route }) => {
       if (isInitialLoad) {
         setIsLoading(false);
       }
+      
+      // Update last fetch timestamp after successful load (API optimization)
+      lastFetchRef.current = Date.now();
     } catch (error) {
       console.error('Error loading products:', error);
       if (isInitialLoad) {
@@ -271,6 +471,7 @@ const ManageScreen = ({ navigation, route }) => {
 
   const onRefresh = () => {
     loadProducts(true);
+    // Note: lastFetchRef is updated inside loadProducts() after successful fetch
   };
 
   const saveProducts = async (updatedProducts) => {
@@ -696,14 +897,14 @@ const ManageScreen = ({ navigation, route }) => {
       <View style={styles.productActions}>
         <TouchableOpacity
           style={buttonStyles.iconSmall}
-          onPress={() => handleEditProduct(item)}
+          onPress={() => handleEditProductWithTour(item)}
           activeOpacity={0.7}
         >
           <Ionicons name="pencil-outline" size={20} color={colors.primary.main} />
         </TouchableOpacity>
         <TouchableOpacity
           style={[buttonStyles.iconSmall, { backgroundColor: colors.error.background }]}
-          onPress={() => handleDeleteProduct(item.id)}
+          onPress={() => handleDeleteProductWithTour(item.id)}
           activeOpacity={0.7}
         >
           <Ionicons name="trash-outline" size={20} color={colors.error.main} />
@@ -830,7 +1031,7 @@ const ManageScreen = ({ navigation, route }) => {
           <TouchableOpacity
             key={tab}
             style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => setActiveTab(tab)}
+            onPress={() => handleTabChange(tab)}
           >
             {false ? (
               null
@@ -868,7 +1069,7 @@ const ManageScreen = ({ navigation, route }) => {
                 buttonStyles.compact,
                 !storeSetupCompleted && buttonStyles.disabled
               ]}
-              onPress={handleAddProduct}
+              onPress={handleAddProductWithTour}
               activeOpacity={0.8}
             >
               <Text style={buttonStyles.compactText}>
@@ -936,7 +1137,7 @@ const ManageScreen = ({ navigation, route }) => {
         </>
       )}
 
-      {activeTab === 'Inventory' && <InventoryScreen isActive={activeTab === 'Inventory'} />}
+      {activeTab === 'Inventory' && <InventoryScreen isActive={activeTab === 'Inventory'} onTourAction={notifyAction} />}
 
       {activeTab === 'Store Settings' && <StoreSettingsScreen navigation={navigation} />}
 
@@ -944,7 +1145,7 @@ const ManageScreen = ({ navigation, route }) => {
         animationType="none"
         transparent={true}
         visible={modalVisible}
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={() => handleModalClose()}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
@@ -960,7 +1161,7 @@ const ManageScreen = ({ navigation, route }) => {
                   </Text>
                   <TouchableOpacity
                     style={styles.closeButton}
-                    onPress={() => setModalVisible(false)}
+                    onPress={() => handleModalClose()}
                   >
                     <Text style={styles.closeButtonText}>✕</Text>
                   </TouchableOpacity>
@@ -970,14 +1171,14 @@ const ManageScreen = ({ navigation, route }) => {
                   style={styles.textInput}
                   placeholder="Product Name"
                   value={formData.name}
-                  onChangeText={(text) => setFormData({ ...formData, name: text })}
+                  onChangeText={handleNameChange}
                 />
 
                 <TextInput
                   style={styles.textInput}
                   placeholder="Price (₹)"
                   value={formData.price}
-                  onChangeText={(text) => setFormData({ ...formData, price: text })}
+                  onChangeText={handlePriceChange}
                   keyboardType="numeric"
                 />
 
@@ -1041,7 +1242,7 @@ const ManageScreen = ({ navigation, route }) => {
 
                 <TouchableOpacity
                   style={buttonStyles.success}
-                  onPress={handleSaveProduct}
+                  onPress={handleSaveWithTour}
                   activeOpacity={0.8}
                 >
                   <Text style={buttonStyles.successText}>
@@ -1056,17 +1257,20 @@ const ManageScreen = ({ navigation, route }) => {
 
 
 
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
+      {/* Interactive App Tour Overlay */}
+      <InteractiveTourOverlay
+        ref={overlayRef}
         visible={showTour}
-        currentScreen="Manage"
-        onComplete={completeTour}
-        navigation={navigation}
-        tourRefs={{
-          header: headerRef,
-          tabBar: tabBarRef,
-          contentArea: contentAreaRef,
-        }}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepIndex={stepIndex}
+        onNext={nextStep}
+        onSkip={skipScreen}
+        onSkipAll={skipAll}
+        onSkipStep={skipStep}
+        onActionComplete={nextStep}
+        showHint={showHint}
+        showSkipStep={showSkipStep}
       />
 
       </View>
@@ -1297,6 +1501,7 @@ const styles = StyleSheet.create({
   },
   productActions: {
     flexDirection: 'row',
+    gap: 8,
   },
   // Action button styles removed - using standardized buttonStyles.iconSmall
   actionIcon: {

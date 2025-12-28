@@ -31,8 +31,10 @@ import DynamicQRGenerator from '../components/DynamicQRGenerator';
 import LoadingSpinner from '../components/LoadingSpinner';
 import { useQRPayment } from '../hooks/useQRPayment';
 import featureService from '../services/FeatureService';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
+import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
+import useInteractiveTour from '../hooks/useInteractiveTour';
+import tourProgressManager from '../services/TourProgressManager';
+import { ACTION_TYPES, setDynamicPosition, clearDynamicPosition } from '../config/tourContent';
 import { colors } from '../styles/colors';
 import { buttonStyles } from '../styles/buttonStyles';
 import { typography } from '../styles/typographyStyles';
@@ -117,14 +119,109 @@ const CartScreen = ({ navigation }) => {
     }
   };
 
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('Cart');
+  // Interactive Tour - using useInteractiveTour hook for Cart screen
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    completeTour,
+    checkAutoStart,
+    notifyAction,
+    setOverlayRef,
+    isCurrentStepInteractive,
+    getCurrentActionTarget,
+  } = useInteractiveTour('Cart');
   
   // Tour refs for dynamic positioning
   const customerSectionRef = useRef(null);
   const itemsListRef = useRef(null);
   const paymentSectionRef = useRef(null);
   const completeButtonRef = useRef(null);
+  const orderSummaryRef = useRef(null);
+  const tourOverlayRef = useRef(null);
+  
+  // Set overlay ref for tour animations
+  useEffect(() => {
+    if (tourOverlayRef.current) {
+      setOverlayRef(tourOverlayRef.current);
+    }
+  }, [setOverlayRef]);
+  
+  // Check for tour continuation from POS screen
+  useEffect(() => {
+    const checkTourContinuation = async () => {
+      // Check if we should continue tour from POS
+      const continueTo = await tourProgressManager.getContinueTourTo();
+      if (continueTo === 'Cart') {
+        console.log('🎯 [CartScreen] Continuing tour from POS');
+        setTimeout(() => startTour(), 500);
+      } else {
+        // Check for auto-start conditions
+        checkAutoStart();
+      }
+    };
+    
+    checkTourContinuation();
+  }, [startTour, checkAutoStart]);
+  
+  // Measure and set dynamic positions for Complete Order button
+  useEffect(() => {
+    const measurePositions = () => {
+      // Measure Complete Order button position
+      if (completeButtonRef.current) {
+        completeButtonRef.current.measureInWindow((x, y, width, height) => {
+          if (typeof y === 'number' && typeof x === 'number' && width > 0 && height > 0) {
+            const btnPosition = {
+              top: y,
+              left: x,
+              width: width,
+              height: height,
+            };
+            setDynamicPosition('CART_COMPLETE_BTN', btnPosition);
+            console.log('🎯 [Cart] Complete button position measured:', btnPosition);
+          }
+        });
+      }
+      
+      // Measure Order Summary section position
+      if (orderSummaryRef.current) {
+        orderSummaryRef.current.measureInWindow((x, y, width, height) => {
+          if (typeof y === 'number' && typeof x === 'number' && width > 0 && height > 0) {
+            const summaryPosition = {
+              top: y,
+              left: x,
+              width: width,
+              height: height,
+            };
+            setDynamicPosition('CART_ORDER_SUMMARY', summaryPosition);
+            console.log('🎯 [Cart] Order summary position measured:', summaryPosition);
+          }
+        });
+      }
+    };
+    
+    // Measure positions when tour is active
+    if (showTour) {
+      // Small delay to ensure layout is complete
+      setTimeout(measurePositions, 300);
+    }
+  }, [showTour, currentStep]);
+  
+  // Cleanup dynamic positions on unmount
+  useEffect(() => {
+    return () => {
+      clearDynamicPosition('CART_COMPLETE_BTN');
+      clearDynamicPosition('CART_ORDER_SUMMARY');
+    };
+  }, []);
 
   // Prevent back navigation only during order completion, not during form filling
   useBackPrevention(completingOrder, {
@@ -476,6 +573,14 @@ const CartScreen = ({ navigation }) => {
   const [orderCompleted, setOrderCompleted] = useState(false);
 
   const handleCompleteOrder = async (paymentDetails = null) => {
+    // Notify tour of Complete Order button tap
+    if (showTour && getCurrentActionTarget() === 'complete-order-btn') {
+      console.log('🎯 [Cart Tour] Complete Order button pressed');
+      notifyAction(ACTION_TYPES.TAP, 'complete-order-btn', { screen: 'InvoicePreview' });
+      // Set continuation to InvoicePreview for tour flow
+      await tourProgressManager.setContinueTourTo('InvoicePreview');
+    }
+    
     // Check order limits
     const canProcess = await featureService.canProcessOrder();
     if (!canProcess) {
@@ -721,7 +826,8 @@ const CartScreen = ({ navigation }) => {
       navigation.navigate('SimpleInvoicePreview', { 
         invoiceData: invoiceOrderData,
         fromOrderCompletion: true,
-        showSkipOption: true // Enable skip countdown after order completion
+        showSkipOption: true, // Enable skip countdown after order completion
+        continueTour: showTour, // Pass tour continuation flag if tour is active
       });
       
       // Loading state will be reset in finally block
@@ -780,7 +886,8 @@ const CartScreen = ({ navigation }) => {
       console.log('🚀 [CartScreen] Error case - Navigating to SimpleInvoicePreview...');
       navigation.navigate('SimpleInvoicePreview', { 
         invoiceData: invoiceOrderData,
-        fromOrderCompletion: true
+        fromOrderCompletion: true,
+        continueTour: showTour, // Pass tour continuation flag if tour is active
       });
     } finally {
       setCompletingOrder(false);
@@ -985,7 +1092,7 @@ const CartScreen = ({ navigation }) => {
           </View>
 
           {/* Order Summary Section */}
-          <View style={styles.summarySection}>
+          <View style={styles.summarySection} ref={orderSummaryRef}>
             <Text style={styles.sectionTitle}>Order Summary</Text>
             <View style={styles.summaryRow}>
               <Text style={styles.summaryLabel}>
@@ -1012,7 +1119,7 @@ const CartScreen = ({ navigation }) => {
             <TouchableOpacity
               ref={completeButtonRef}
               style={[buttonStyles.success, (orderLoading || completingOrder) && buttonStyles.disabled]}
-              onPress={handleCompleteOrder}
+              onPress={paymentMethod === 'QR Pay' && !isQRVisible ? handleQRPayment : handleCompleteOrder}
               disabled={orderLoading || completingOrder}
               activeOpacity={0.8}
             >
@@ -1021,9 +1128,7 @@ const CartScreen = ({ navigation }) => {
                   ? 'Processing...'
                   : paymentMethod === 'QR Pay' 
                     ? (isQRVisible ? 'Waiting for Payment...' : 'Generate QR Code')
-                    : paymentMethod === 'Cash' 
-                      ? 'Collect Cash Payment' 
-                      : 'Complete Order'
+                    : 'Complete Order'
                 }
               </Text>
             </TouchableOpacity>
@@ -1053,17 +1158,24 @@ const CartScreen = ({ navigation }) => {
         onClose={() => setShowAlert(false)}
       />
 
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
+      {/* Interactive Tour Overlay */}
+      <InteractiveTourOverlay
+        ref={tourOverlayRef}
         visible={showTour}
-        currentScreen="Cart"
-        onComplete={completeTour}
-        navigation={navigation}
-        tourRefs={{
-          customerSection: customerSectionRef,
-          itemsList: itemsListRef,
-          paymentSection: paymentSectionRef,
-          completeButton: completeButtonRef,
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepIndex={stepIndex}
+        onNext={nextStep}
+        onSkip={skipScreen}
+        onSkipAll={skipAll}
+        onSkipStep={skipStep}
+        onActionComplete={() => {
+          console.log('🎯 [Cart Tour] Action complete callback');
+        }}
+        showHint={showHint}
+        showSkipStep={showSkipStep}
+        onOutsideTap={() => {
+          console.log('🎯 [Cart Tour] Outside tap detected');
         }}
       />
     </SafeAreaView>

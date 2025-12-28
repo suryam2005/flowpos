@@ -14,10 +14,11 @@ import * as Haptics from 'expo-haptics';
 import ordersService from '../services/OrdersService';
 import productsService from '../services/ProductsService';
 import featureService from '../services/FeatureService';
+import tourProgressManager from '../services/TourProgressManager';
 
 import LoadingSpinner from '../components/LoadingSpinner';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
+import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
+import useInteractiveTour from '../hooks/useInteractiveTour';
 import { colors } from '../styles/colors';
 import { getProductImageUrl } from '../utils/imageUtils';
 import { analyticsStyles, spacing } from '../styles/analyticsStyles';
@@ -230,7 +231,7 @@ const calculatePeriodAnalytics = (orders, period) => {
   };
 };
 
-const AnalyticsScreen = ({ navigation }) => {
+const AnalyticsScreen = ({ navigation, route }) => {
   // Tab state for 3-tab structure
   const [activeTab, setActiveTab] = useState('revenue'); // revenue, orders, products
   
@@ -268,8 +269,27 @@ const AnalyticsScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('Analytics');
+  // App tour guide - using interactive tour hook
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    completeTour,
+    checkAutoStart,
+    setOverlayRef,
+    isInitialized,
+  } = useInteractiveTour('Analytics');
+  
+  // Tour overlay ref
+  const tourOverlayRef = useRef(null);
   
   // Tour refs for dynamic positioning
   const headerRef = useRef(null);
@@ -286,6 +306,69 @@ const AnalyticsScreen = ({ navigation }) => {
     };
     init();
   }, []);
+
+  // Check if tour should auto-start when initialized
+  useEffect(() => {
+    if (isInitialized) {
+      checkAutoStart();
+    }
+  }, [isInitialized, checkAutoStart]);
+
+  // Handle tour trigger from route params (startTour or continueTour)
+  useEffect(() => {
+    if (route?.params?.startTour) {
+      console.log('🎯 [AnalyticsScreen] Tour trigger received from route params (startTour)');
+      setTimeout(() => {
+        startTour();
+      }, 1500);
+      navigation.setParams({ startTour: undefined });
+    }
+  }, [route?.params?.startTour, startTour, navigation]);
+
+  // Handle tour continuation from Invoice Preview screen
+  useEffect(() => {
+    if (route?.params?.continueTour && isInitialized) {
+      console.log('🎯 [AnalyticsScreen] Tour continuation received from Invoice Preview');
+      // Small delay to let the screen render first
+      setTimeout(() => {
+        startTour();
+      }, 1000);
+      // Clear the param to prevent re-triggering
+      navigation.setParams({ continueTour: undefined });
+    }
+  }, [route?.params?.continueTour, isInitialized, startTour, navigation]);
+
+  // Handle tour completion - guide to Orders screen
+  const handleTourComplete = useCallback(async () => {
+    console.log('🎯 [AnalyticsScreen] Tour complete, guiding to Orders');
+    
+    // Set continuation to Orders
+    await tourProgressManager.setContinueTourTo('Orders');
+    
+    // Navigate to Orders screen with tour continuation flag
+    navigation.navigate('Main', { 
+      screen: 'Orders',
+      params: { continueTour: true }
+    });
+  }, [navigation]);
+
+  // Handle next step - check if we need to navigate to Orders
+  const handleNextStep = useCallback(async () => {
+    // Check if current step has nextScreen set to Orders (last step)
+    if (currentStep?.nextScreen === 'Orders') {
+      // This is the last step, navigate to Orders
+      await handleTourComplete();
+    } else {
+      nextStep();
+    }
+  }, [currentStep, nextStep, handleTourComplete]);
+
+  // Set overlay ref for animations
+  useEffect(() => {
+    if (tourOverlayRef.current) {
+      setOverlayRef(tourOverlayRef.current);
+    }
+  }, [setOverlayRef]);
 
   // Optimized focus effect - no automatic refresh
   useFocusEffect(
@@ -869,17 +952,20 @@ const AnalyticsScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
+      {/* Interactive Tour Overlay */}
+      <InteractiveTourOverlay
+        ref={tourOverlayRef}
         visible={showTour}
-        currentScreen="Analytics"
-        onComplete={completeTour}
-        navigation={navigation}
-        tourRefs={{
-          header: headerRef,
-          tabBar: tabBarRef,
-          metricsSection: metricsSectionRef,
-        }}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepIndex={stepIndex}
+        onNext={handleNextStep}
+        onSkip={skipScreen}
+        onSkipAll={skipAll}
+        onSkipStep={skipStep}
+        onActionComplete={completeTour}
+        showHint={showHint}
+        showSkipStep={showSkipStep}
       />
     </SafeAreaView>
   );

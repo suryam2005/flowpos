@@ -3,6 +3,11 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import productsService from '../services/ProductsService';
 import ordersService from '../services/OrdersService';
 import CloudStorageService from '../services/CloudStorageService';
+import { networkGuard } from '../utils/NetworkGuard';
+
+// Phase 1 Optimization: Cache staleness threshold for background sync
+// Background sync will skip API calls if data was fetched within this threshold
+const BACKGROUND_SYNC_STALENESS_MS = 5 * 60 * 1000; // 5 minutes
 
 const DataSyncContext = createContext();
 
@@ -109,11 +114,48 @@ export const DataSyncProvider = ({ children }) => {
   const lastFetchRef = useRef(0);
   const pendingFetchRef = useRef(null); // Track in-flight requests for deduplication
 
-  // Fetch fresh data from backend with debounce and request deduplication
-  const fetchFreshData = async (forceRefresh = false) => {
+  /**
+   * Check if cache is stale based on the staleness threshold
+   * @param {number} threshold - Staleness threshold in milliseconds
+   * @returns {boolean} - True if cache is stale, false if fresh
+   */
+  const isCacheStale = (threshold = BACKGROUND_SYNC_STALENESS_MS) => {
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchRef.current;
+    return lastFetchRef.current === 0 || timeSinceLastFetch > threshold;
+  };
+
+  /**
+   * Fetch fresh data from backend with debounce and request deduplication
+   * 
+   * Phase 1 Optimization:
+   * - For background sync (forceRefresh=false): Check cache staleness and network availability
+   * - For user-triggered (forceRefresh=true): Execute immediately without cache checks
+   * 
+   * @param {boolean} forceRefresh - If true, skip cache staleness check (user-triggered)
+   * @param {boolean} isBackgroundSync - If true, this is a background sync call
+   */
+  const fetchFreshData = async (forceRefresh = false, isBackgroundSync = false) => {
     try {
-      // Debounce: Don't fetch if we fetched less than 1 second ago (unless forced)
       const now = Date.now();
+
+      // Phase 1 Optimization: Background sync checks
+      if (isBackgroundSync || !forceRefresh) {
+        // Requirement 4.4: Check network availability for background sync
+        const isOnline = networkGuard.isOnlineSync();
+        if (!isOnline) {
+          // console.log('⏭️ [DataSync] Skipping background sync - device is offline');
+          return;
+        }
+
+        // Requirement 4.2, 4.3: Check cache staleness for background sync
+        if (!isCacheStale()) {
+          // console.log('⏭️ [DataSync] Skipping background sync - cache is fresh');
+          return;
+        }
+      }
+
+      // Debounce: Don't fetch if we fetched less than 1 second ago (unless forced)
       if (!forceRefresh && now - lastFetchRef.current < 1000) {
         // console.log('⏭️ [DataSync] Skipping fetch - too soon since last fetch');
         return;
@@ -303,12 +345,14 @@ export const DataSyncProvider = ({ children }) => {
   };
 
   // Start background sync - OPTIMIZED: Changed from 5 seconds to 5 minutes
+  // Phase 1 Optimization: Background sync now checks cache staleness and network availability
   const startBackgroundSync = () => {
     if (syncIntervalRef.current) return;
 
     syncIntervalRef.current = setInterval(() => {
       // console.log('🔄 [DataSync] Background sync triggered');
-      fetchFreshData(false); // Fetch from backend (not forced, respects debounce)
+      // Pass isBackgroundSync=true to enable cache staleness and network checks
+      fetchFreshData(false, true); // Not forced, is background sync
     }, 300000); // Check every 5 minutes (300000ms) - Phase 1 optimization
   };
 
@@ -365,6 +409,10 @@ export const DataSyncProvider = ({ children }) => {
     subscribe,
     startBackgroundSync,
     stopBackgroundSync,
+    
+    // Phase 1 Optimization: Cache staleness utilities
+    isCacheStale,
+    getLastFetchTimestamp: () => lastFetchRef.current,
   };
 
   return (

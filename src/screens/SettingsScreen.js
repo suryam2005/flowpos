@@ -21,6 +21,7 @@ import featureService from '../services/FeatureService';
 import { useAuth } from '../context/AuthContext';
 import { useAppSettingsContext } from '../context/AppSettingsContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
+import tourProgressManager from '../services/TourProgressManager';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout } = useAuth();
@@ -354,19 +355,21 @@ const SettingsScreen = ({ navigation }) => {
 
   const handleShowAppTour = async () => {
     Alert.alert(
-      'App Tour',
-      'Would you like to see the app tour again? This will show you how to use different features.',
+      'Restart App Tour',
+      'Would you like to restart the app tour? This will reset all tour progress and guide you through all features from the beginning.',
       [
         { text: 'Cancel', style: 'cancel' },
         { 
-          text: 'Start Tour', 
+          text: 'Restart Tour', 
           onPress: async () => {
             try {
-              console.log('🎯 [Settings] Resetting tour status and starting from POS');
+              Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
+              console.log('🎯 [Settings] Resetting all tour progress via TourProgressManager');
               
-              // Reset tour completion status to allow tour to show again
-              await AsyncStorage.removeItem('hasSeenAppTour');
-              await AsyncStorage.removeItem('completedTours');
+              // Reset all tour progress using TourProgressManager
+              await tourProgressManager.resetAllProgress();
+              
+              console.log('🎯 [Settings] Tour progress reset complete, navigating to POS');
               
               // Navigate to POS screen and trigger tour
               navigation.navigate('Main', { 
@@ -376,7 +379,7 @@ const SettingsScreen = ({ navigation }) => {
               
             } catch (error) {
               console.error('Error resetting tour status:', error);
-              Alert.alert('Error', 'Failed to start tour. Please try again.');
+              Alert.alert('Error', 'Failed to restart tour. Please try again.');
             }
           }
         },
@@ -768,7 +771,7 @@ const SettingsScreen = ({ navigation }) => {
             activeOpacity={0.8}
           >
             <Ionicons name="compass-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
-            <Text style={styles.actionButtonText}>Show App Tour</Text>
+            <Text style={styles.actionButtonText}>Restart App Tour</Text>
           </TouchableOpacity>
           
           <TouchableOpacity 
@@ -936,11 +939,16 @@ const styles = StyleSheet.create({
   aboutLabel: {
     fontSize: 16,
     color: colors.text.secondary,
+    flexShrink: 0,
+    marginRight: 12,
   },
   aboutValue: {
     fontSize: 16,
     fontWeight: '600',
     color: colors.text.primary,
+    flexShrink: 1,
+    textAlign: 'right',
+    flexWrap: 'wrap',
   },
   settingButton: {
     backgroundColor: colors.background.surface,
@@ -983,7 +991,7 @@ const styles = StyleSheet.create({
     padding: 16,
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'flex-start',
     marginBottom: 12,
     shadowColor: colors.shadow.default,
     shadowOffset: { width: 0, height: 1 },
@@ -997,6 +1005,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: '500',
     color: colors.text.primary,
+    textAlign: 'left',
   },
   dangerButton: {
     backgroundColor: colors.error.main,

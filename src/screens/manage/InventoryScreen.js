@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -19,8 +19,15 @@ import productsService from '../../services/ProductsService';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useDataSync } from '../../context/DataSyncContext';
 import { getProductImageUrl } from '../../utils/imageUtils';
+import useInteractiveTour from '../../hooks/useInteractiveTour';
+import actionDetectorService, { ACTION_TYPES } from '../../services/ActionDetectorService';
+import InteractiveTourOverlay from '../../components/InteractiveTourOverlay';
 
-const InventoryScreen = ({ isActive }) => {
+// Staleness threshold for focus refresh (5 minutes in milliseconds)
+// API Optimization: Only refresh if cache is older than this threshold
+const FOCUS_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
+
+const InventoryScreen = ({ isActive, onTourAction }) => {
   const { saveProducts: syncProducts } = useDataSync();
   const [products, setProducts] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
@@ -32,16 +39,104 @@ const InventoryScreen = ({ isActive }) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const hasLoadedOnce = useRef(false);
+  
+  // Track last fetch timestamp for staleness check (API optimization)
+  const lastFetchRef = useRef(0);
+
+  // Interactive Tour for Inventory
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    completeTour,
+    notifyAction,
+    setOverlayRef,
+    checkAutoStart,
+  } = useInteractiveTour('ManageInventory');
+
+  // Ref for InteractiveTourOverlay
+  const overlayRef = useRef(null);
+
+  // Set overlay ref when component mounts
+  useEffect(() => {
+    if (overlayRef.current) {
+      setOverlayRef(overlayRef.current);
+    }
+  }, [setOverlayRef]);
+
+  // Check for auto-start tour when tab becomes active
+  useEffect(() => {
+    const checkTour = async () => {
+      if (isActive && !isLoading) {
+        await checkAutoStart();
+      }
+    };
+    checkTour();
+  }, [isActive, isLoading, checkAutoStart]);
+
+  // Handle product item tap for tour
+  const handleProductTapWithTour = useCallback((item) => {
+    // Notify tour of product tap
+    if (showTour && currentStep?.actionTarget === 'inventory-product-item') {
+      console.log('🎯 [InventoryScreen] Product item tapped during tour');
+      notifyAction(ACTION_TYPES.TAP, 'inventory-product-item');
+    }
+    
+    // Open stock modal
+    setSelectedProduct(item);
+    setNewStock(item.stock.toString());
+    setShowStockModal(true);
+  }, [showTour, currentStep, notifyAction]);
+
+  // Handle stock quantity input for tour
+  const handleStockInputChange = useCallback((text) => {
+    setNewStock(text);
+    
+    // Notify tour of text input
+    if (showTour && currentStep?.actionTarget === 'stock-quantity-input' && text.length > 0) {
+      console.log('🎯 [InventoryScreen] Stock quantity entered during tour');
+      notifyAction(ACTION_TYPES.TEXT_INPUT, 'stock-quantity-input');
+    }
+  }, [showTour, currentStep, notifyAction]);
+
+  // Handle stock update button tap for tour
+  const handleStockUpdateWithTour = useCallback(() => {
+    // Notify tour of update stock button tap
+    if (showTour && currentStep?.actionTarget === 'update-stock-btn') {
+      console.log('🎯 [InventoryScreen] Update Stock button tapped during tour');
+      notifyAction(ACTION_TYPES.TAP, 'update-stock-btn');
+    }
+    
+    // Call original handler
+    handleStockUpdate();
+  }, [showTour, currentStep, notifyAction]);
 
   useEffect(() => {
     loadProducts();
   }, []);
 
   // Refresh when tab becomes active
+  // OPTIMIZED: Only refresh if cache is stale (older than 5 minutes)
   useEffect(() => {
     if (isActive && hasLoadedOnce.current) {
-      console.log('📦 [Inventory] Tab became active - refreshing silently');
-      loadProducts(false); // Silent refresh without loader
+      const now = Date.now();
+      const timeSinceLastFetch = now - lastFetchRef.current;
+      const isStale = timeSinceLastFetch > FOCUS_STALENESS_THRESHOLD_MS;
+      
+      if (isStale) {
+        console.log('📦 [Inventory] Tab became active - cache stale, refreshing silently');
+        loadProducts(false); // Silent refresh without loader
+      } else {
+        console.log('📦 [Inventory] Tab became active - cache fresh, skipping API call');
+      }
     }
     if (isActive) {
       hasLoadedOnce.current = true;
@@ -87,6 +182,10 @@ const InventoryScreen = ({ isActive }) => {
       
       // Update AsyncStorage for future use
       await AsyncStorage.setItem('products', JSON.stringify(productsData));
+      
+      // Update last fetch timestamp (API optimization)
+      lastFetchRef.current = Date.now();
+      
       console.log('📦 [Inventory] Loaded fresh products:', productsData.length);
     } catch (error) {
       console.error('Error loading products:', error);
@@ -114,6 +213,7 @@ const InventoryScreen = ({ isActive }) => {
 
   const onRefresh = () => {
     loadProducts(true);
+    // Note: lastFetchRef is updated inside loadProducts() after successful fetch
   };
 
   const updateStock = async (productId, newStockValue) => {
@@ -272,11 +372,7 @@ const InventoryScreen = ({ isActive }) => {
           
           <TouchableOpacity
             style={styles.updateButton}
-            onPress={() => {
-              setSelectedProduct(item);
-              setNewStock(item.stock.toString());
-              setShowStockModal(true);
-            }}
+            onPress={() => handleProductTapWithTour(item)}
             activeOpacity={0.7}
           >
             <Text style={styles.updateButtonText}>Update</Text>
@@ -393,7 +489,7 @@ const InventoryScreen = ({ isActive }) => {
               style={styles.stockInput}
               placeholder="Enter new stock quantity"
               value={newStock}
-              onChangeText={setNewStock}
+              onChangeText={handleStockInputChange}
               keyboardType="numeric"
               autoFocus={true}
             />
@@ -407,7 +503,7 @@ const InventoryScreen = ({ isActive }) => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.saveButton}
-                onPress={handleStockUpdate}
+                onPress={handleStockUpdateWithTour}
               >
                 <Text style={styles.saveButtonText}>Update Stock</Text>
               </TouchableOpacity>
@@ -415,6 +511,22 @@ const InventoryScreen = ({ isActive }) => {
           </View>
         </View>
       </Modal>
+
+      {/* Interactive App Tour Overlay */}
+      <InteractiveTourOverlay
+        ref={overlayRef}
+        visible={showTour}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepIndex={stepIndex}
+        onNext={nextStep}
+        onSkip={skipScreen}
+        onSkipAll={skipAll}
+        onSkipStep={skipStep}
+        onActionComplete={nextStep}
+        showHint={showHint}
+        showSkipStep={showSkipStep}
+      />
     </View>
   );
 };

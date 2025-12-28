@@ -162,7 +162,6 @@ const ProfileScreen = ({ navigation }) => {
             
             {storeInfo && (
               <View style={styles.storeInfo}>
-                <Text style={styles.storeLabel}>Store:</Text>
                 <Text style={styles.storeName}>{storeInfo.name}</Text>
               </View>
             )}
@@ -289,11 +288,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
-  },
-  storeLabel: {
-    fontSize: 14,
-    color: colors.text.secondary,
-    marginRight: 6,
   },
   storeName: {
     fontSize: 14,

@@ -18,15 +18,19 @@ import { useOrders } from '../hooks/useOrders';
 import * as Haptics from 'expo-haptics';
 import { fadeIn } from '../utils/animations';
 import LoadingSpinner from '../components/LoadingSpinner';
-import ImprovedTourGuide from '../components/ImprovedTourGuide';
-import { useAppTour } from '../hooks/useAppTour';
+import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
+import useInteractiveTour from '../hooks/useInteractiveTour';
+import tourProgressManager from '../services/TourProgressManager';
 import { colors } from '../styles/colors';
 import WhatsAppService from '../services/WhatsAppService';
 import PDFReportsService from '../services/PDFReportsService';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { useAuth } from '../context/AuthContext';
 
-const OrdersScreen = ({ navigation }) => {
+// WhatsApp status cache staleness threshold (5 minutes)
+const WHATSAPP_STATUS_STALENESS_MS = 5 * 60 * 1000;
+
+const OrdersScreen = ({ navigation, route }) => {
   const { 
     orders, 
     loading, 
@@ -42,13 +46,30 @@ const OrdersScreen = ({ navigation }) => {
   const [refreshing, setRefreshing] = useState(false);
   const [whatsappStatus, setWhatsappStatus] = useState(null);
 
-  // Page loading state
-  const [isLoading, setIsLoading] = useState(true);
-  // API operation loading state
+  // API operation loading state (for manual operations like sending invoice)
   const [isLoadingData, setIsLoadingData] = useState(false);
   
-  // App tour guide
-  const { showTour, completeTour } = useAppTour('Orders');
+  // App tour guide - using interactive tour hook
+  const {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    completeTour,
+    checkAutoStart,
+    setOverlayRef,
+    isInitialized,
+  } = useInteractiveTour('Orders');
+  
+  // Tour overlay ref
+  const overlayRef = useRef(null);
   
   // Tour refs for dynamic positioning
   const headerRef = useRef(null);
@@ -56,36 +77,113 @@ const OrdersScreen = ({ navigation }) => {
 
   // Track if initial load is done
   const initialLoadDone = useRef(false);
+  
+  // Track last WhatsApp status fetch timestamp for staleness check
+  const whatsappStatusLastFetchRef = useRef(null);
 
   useEffect(() => {
     // Orders are loaded automatically by useOrders hook
-    setIsLoading(false);
+    // The 'loading' state from useOrders() tracks the initial load
     initialLoadDone.current = true;
     
-    // Check WhatsApp status
+    // Check WhatsApp status on initial mount
     checkWhatsAppStatus();
   }, []);
+
+  // Check if tour should auto-start when initialized
+  useEffect(() => {
+    if (isInitialized) {
+      checkAutoStart();
+    }
+  }, [isInitialized, checkAutoStart]);
+
+  // Handle tour trigger from route params
+  useEffect(() => {
+    if (route?.params?.startTour) {
+      console.log('🎯 [OrdersScreen] Tour trigger received from route params');
+      setTimeout(() => {
+        startTour();
+      }, 1500);
+      navigation.setParams({ startTour: undefined });
+    }
+  }, [route?.params?.startTour, startTour, navigation]);
+
+  // Handle tour continuation from Analytics screen
+  useEffect(() => {
+    if (route?.params?.continueTour && isInitialized) {
+      console.log('🎯 [OrdersScreen] Tour continuation received from Analytics');
+      // Small delay to let the screen render first
+      setTimeout(() => {
+        startTour();
+      }, 1000);
+      // Clear the param to prevent re-triggering
+      navigation.setParams({ continueTour: undefined });
+    }
+  }, [route?.params?.continueTour, isInitialized, startTour, navigation]);
+
+  // Handle tour completion - guide to Manage screen
+  // Requirements: 5.3 - After Orders tour completes, show hint to tap Manage
+  const handleTourComplete = useCallback(async () => {
+    console.log('🎯 [OrdersScreen] Tour complete, guiding to Manage');
+    
+    // Set continuation to ManageProducts (first tab of Manage screen)
+    await tourProgressManager.setContinueTourTo('ManageProducts');
+    
+    // Navigate to Manage screen with tour continuation flag
+    navigation.navigate('Main', { 
+      screen: 'Manage',
+      params: { continueTour: true }
+    });
+  }, [navigation]);
+
+  // Handle next step - check if we need to navigate to Manage
+  const handleNextStep = useCallback(async () => {
+    // Check if current step has nextScreen set to ManageProducts (last step)
+    if (currentStep?.nextScreen === 'ManageProducts') {
+      // This is the last step, navigate to Manage
+      await handleTourComplete();
+    } else {
+      nextStep();
+    }
+  }, [currentStep, nextStep, handleTourComplete]);
+
+  // Set overlay ref for animations
+  useEffect(() => {
+    if (overlayRef.current) {
+      setOverlayRef(overlayRef.current);
+    }
+  }, [setOverlayRef]);
 
   const checkWhatsAppStatus = async () => {
     try {
       const status = await WhatsAppService.getStatus();
       setWhatsappStatus(status);
+      // Update last fetch timestamp
+      whatsappStatusLastFetchRef.current = Date.now();
+      console.log('📱 [Orders] WhatsApp status fetched and cached');
     } catch (error) {
       console.error('Error checking WhatsApp status:', error);
     }
   };
 
-  // OPTIMIZED: Only refresh on manual pull-to-refresh, not on every focus
+  // OPTIMIZED: Only refresh WhatsApp status on focus if cache is stale
   // This prevents unnecessary API calls when navigating between tabs
   useFocusEffect(
     useCallback(() => {
-      // Skip automatic refresh - user can manually refresh if needed
+      // Skip automatic orders refresh - user can manually refresh if needed
       // This is Phase 1 optimization to reduce API calls
       console.log('📋 [Orders] Screen focused - using cached data (manual refresh available)');
       
-      // Always refresh WhatsApp status when screen comes into focus
-      // This ensures send buttons are properly synced with settings
-      checkWhatsAppStatus();
+      // Check if WhatsApp status cache is stale before refreshing
+      const lastFetch = whatsappStatusLastFetchRef.current;
+      const isStale = !lastFetch || (Date.now() - lastFetch > WHATSAPP_STATUS_STALENESS_MS);
+      
+      if (isStale) {
+        console.log('📱 [Orders] WhatsApp status cache is stale, refreshing...');
+        checkWhatsAppStatus();
+      } else {
+        console.log('📱 [Orders] WhatsApp status cache is fresh, skipping refresh');
+      }
     }, [])
   );
 
@@ -441,7 +539,7 @@ const OrdersScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      {(isLoading || isLoadingData) && <LoadingSpinner />}
+      {(loading || isLoadingData) && <LoadingSpinner />}
 
       <View style={styles.content}>
         <View style={styles.header} ref={headerRef}>
@@ -483,16 +581,20 @@ const OrdersScreen = ({ navigation }) => {
         </View>
       </View>
 
-      {/* App Tour Guide */}
-      <ImprovedTourGuide
+      {/* Interactive Tour Overlay */}
+      <InteractiveTourOverlay
+        ref={overlayRef}
         visible={showTour}
-        currentScreen="Orders"
-        onComplete={completeTour}
-        navigation={navigation}
-        tourRefs={{
-          header: headerRef,
-          ordersList: ordersListRef,
-        }}
+        currentStep={currentStep}
+        totalSteps={totalSteps}
+        stepIndex={stepIndex}
+        onNext={handleNextStep}
+        onSkip={skipScreen}
+        onSkipAll={skipAll}
+        onSkipStep={skipStep}
+        onActionComplete={completeTour}
+        showHint={showHint}
+        showSkipStep={showSkipStep}
       />
     </SafeAreaView>
   );
