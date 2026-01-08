@@ -12,7 +12,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 
 import Icon from '../components/SVGIcons';
 
-import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useOrders } from '../hooks/useOrders';
 import * as Haptics from 'expo-haptics';
@@ -26,9 +25,6 @@ import WhatsAppService from '../services/WhatsAppService';
 import PDFReportsService from '../services/PDFReportsService';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { useAuth } from '../context/AuthContext';
-
-// WhatsApp status cache staleness threshold (5 minutes)
-const WHATSAPP_STATUS_STALENESS_MS = 5 * 60 * 1000;
 
 const OrdersScreen = ({ navigation, route }) => {
   const { 
@@ -78,16 +74,29 @@ const OrdersScreen = ({ navigation, route }) => {
   // Track if initial load is done
   const initialLoadDone = useRef(false);
   
-  // Track last WhatsApp status fetch timestamp for staleness check
-  const whatsappStatusLastFetchRef = useRef(null);
+  // Track last fetch timestamp for staleness check (API optimization)
+  const lastFetchRef = useRef(0);
+
+  // Simple timestamp guard to prevent rapid refetches on remount (30 seconds)
+  const REMOUNT_GUARD_MS = 30 * 1000;
 
   useEffect(() => {
     // Orders are loaded automatically by useOrders hook
     // The 'loading' state from useOrders() tracks the initial load
     initialLoadDone.current = true;
     
-    // Check WhatsApp status on initial mount
-    checkWhatsAppStatus();
+    // Simple guard: check if we fetched recently to prevent rapid remount refetches
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchRef.current;
+    
+    if (timeSinceLastFetch > REMOUNT_GUARD_MS || lastFetchRef.current === 0) {
+      // Check WhatsApp status on initial mount
+      console.log('📱 [Orders] Initial mount - checking WhatsApp status');
+      checkWhatsAppStatus();
+      lastFetchRef.current = now; // Track fetch timestamp
+    } else {
+      console.log('📱 [Orders] Mount guard active - skipping API call (recently fetched)');
+    }
   }, []);
 
   // Check if tour should auto-start when initialized
@@ -158,40 +167,30 @@ const OrdersScreen = ({ navigation, route }) => {
     try {
       const status = await WhatsAppService.getStatus();
       setWhatsappStatus(status);
-      // Update last fetch timestamp
-      whatsappStatusLastFetchRef.current = Date.now();
-      console.log('📱 [Orders] WhatsApp status fetched and cached');
+      console.log('📱 [Orders] WhatsApp status fetched on mount');
     } catch (error) {
       console.error('Error checking WhatsApp status:', error);
     }
   };
 
-  // OPTIMIZED: Only refresh WhatsApp status on focus if cache is stale
-  // This prevents unnecessary API calls when navigating between tabs
-  useFocusEffect(
-    useCallback(() => {
-      // Skip automatic orders refresh - user can manually refresh if needed
-      // This is Phase 1 optimization to reduce API calls
-      console.log('📋 [Orders] Screen focused - using cached data (manual refresh available)');
-      
-      // Check if WhatsApp status cache is stale before refreshing
-      const lastFetch = whatsappStatusLastFetchRef.current;
-      const isStale = !lastFetch || (Date.now() - lastFetch > WHATSAPP_STATUS_STALENESS_MS);
-      
-      if (isStale) {
-        console.log('📱 [Orders] WhatsApp status cache is stale, refreshing...');
-        checkWhatsAppStatus();
-      } else {
-        console.log('📱 [Orders] WhatsApp status cache is fresh, skipping refresh');
-      }
-    }, [])
-  );
+  // PHASE 1 OPTIMIZATION: Remove focus-based refetching
+  // WhatsApp status is fetched only on mount and via user-triggered refresh
+  // This eliminates unnecessary API calls when navigating between tabs
 
   const onRefresh = async () => {
     setRefreshing(true);
     setIsLoadingData(true);
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    await refreshOrders();
+    
+    // Refresh both orders and WhatsApp status on user-triggered refresh
+    await Promise.all([
+      refreshOrders(),
+      checkWhatsAppStatus()
+    ]);
+    
+    // Update fetch timestamp after successful refresh (API optimization)
+    lastFetchRef.current = Date.now();
+    
     setRefreshing(false);
     setIsLoadingData(false);
   };

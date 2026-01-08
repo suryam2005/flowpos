@@ -63,6 +63,50 @@ import AccountSettingsScreen from './src/screens/profile/AccountSettingsScreen';
 import PrivacySecurityScreen from './src/screens/profile/PrivacySecurityScreen';
 import HelpSupportScreen from './src/screens/profile/HelpSupportScreen';
 
+// Import notification payment reader for headless task
+import notificationPaymentReader from './src/services/NotificationPaymentReader';
+
+// First-launch payment permission request helper
+const requestFirstLaunchPaymentPermissions = async () => {
+  try {
+    // Check if we've already requested permissions on first launch
+    const hasRequestedPermissions = await AsyncStorage.getItem('hasRequestedPaymentPermissions');
+    
+    if (hasRequestedPermissions) {
+      console.log('📱 Payment permissions already requested on first launch');
+      return;
+    }
+
+    // Only request on Android
+    if (Platform.OS !== 'android') {
+      await AsyncStorage.setItem('hasRequestedPaymentPermissions', 'true');
+      return;
+    }
+
+    console.log('📱 First launch detected - requesting SMS permissions for payment detection');
+    
+    // Small delay to let the app fully initialize
+    await new Promise(resolve => setTimeout(resolve, 1500));
+    
+    // Request permissions
+    const permissions = await notificationPaymentReader.requestPermissions();
+    
+    console.log('📱 First launch permission results:', permissions);
+    
+    // Mark as requested regardless of result
+    await AsyncStorage.setItem('hasRequestedPaymentPermissions', 'true');
+    
+  } catch (error) {
+    console.error('Error requesting first launch payment permissions:', error);
+    // Still mark as requested to avoid repeated attempts
+    try {
+      await AsyncStorage.setItem('hasRequestedPaymentPermissions', 'true');
+    } catch (e) {
+      // Ignore storage error
+    }
+  }
+};
+
 // Configure notification handler for payment detection
 Notifications.setNotificationHandler({
   handleNotification: async () => ({
@@ -257,6 +301,10 @@ export default function App() {
           console.log('✅ Store setup marked as completed based on existing store data');
         }
         setAppState('main');
+        
+        // Request payment detection permissions on first launch (Android only)
+        // This runs after app state is set to avoid blocking the UI
+        requestFirstLaunchPaymentPermissions();
       }
     } catch (error) {
       console.error('Error checking app state:', error);

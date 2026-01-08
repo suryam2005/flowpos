@@ -34,7 +34,8 @@ const DynamicQRGenerator = ({
   const [paymentId, setPaymentId] = useState('');
   const [isAutoListening, setIsAutoListening] = useState(false);
   const [showUpiError, setShowUpiError] = useState(false);
-  const [autoPaymentDetectionEnabled, setAutoPaymentDetectionEnabled] = useState(true);
+  // Default to FALSE for safety - auto-detection should be explicitly enabled
+  const [autoPaymentDetectionEnabled, setAutoPaymentDetectionEnabled] = useState(false);
   
   // Import cache function for reading auto payment detection setting
   const { getAppSettingFromCache } = require('../context/AppSettingsContext');
@@ -53,12 +54,25 @@ const DynamicQRGenerator = ({
   // Enhanced notification payment reader hook
   const { 
     isListening, 
+    startListening,
+    stopListening,
     trackPayment, 
     stopTrackingPayment, 
     lastConfirmation
   } = useNotificationPaymentReader();
   
   const stopTrackingPaymentRef = useRef(stopTrackingPayment);
+  const startListeningRef = useRef(startListening);
+  const stopListeningRef = useRef(stopListening);
+  
+  // Keep startListening/stopListening refs in sync
+  useEffect(() => {
+    startListeningRef.current = startListening;
+  }, [startListening]);
+  
+  useEffect(() => {
+    stopListeningRef.current = stopListening;
+  }, [stopListening]);
 
   // Keep refs in sync with props
   useEffect(() => {
@@ -132,19 +146,34 @@ const DynamicQRGenerator = ({
               setAutoPaymentDetectionEnabled(JSON.parse(setting));
               console.log('📱 [DynamicQRGenerator] autoPaymentDetection fallback to AsyncStorage:', JSON.parse(setting));
             } else {
-              // Default to true if no setting exists
-              setAutoPaymentDetectionEnabled(true);
-              console.log('📱 [DynamicQRGenerator] autoPaymentDetection using default: true');
+              // Default to FALSE if no setting exists - user must explicitly enable
+              setAutoPaymentDetectionEnabled(false);
+              console.log('📱 [DynamicQRGenerator] autoPaymentDetection using default: false (must be explicitly enabled)');
             }
           });
         }
       } catch (error) {
         console.error('Error loading auto payment detection setting:', error);
-        setAutoPaymentDetectionEnabled(true); // Default to enabled on error
+        setAutoPaymentDetectionEnabled(false); // Default to disabled on error for safety
       }
     };
     loadAutoDetectionSetting();
   }, []);
+
+  // Start/stop notification listening based on setting and visibility
+  // Only start listening when QR is visible AND auto-detection is enabled
+  useEffect(() => {
+    if (visible && autoPaymentDetectionEnabled) {
+      console.log('📱 [DynamicQRGenerator] Starting notification listener (setting enabled)');
+      startListeningRef.current();
+    } else if (!visible || !autoPaymentDetectionEnabled) {
+      // Stop listening when QR closes or setting is disabled
+      if (isListening) {
+        console.log('📱 [DynamicQRGenerator] Stopping notification listener');
+        stopListeningRef.current();
+      }
+    }
+  }, [visible, autoPaymentDetectionEnabled, isListening]);
 
   const loadStoreInfo = async () => {
     try {

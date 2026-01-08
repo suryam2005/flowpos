@@ -222,7 +222,8 @@ const ManageScreen = ({ navigation, route }) => {
   }, [showTour, currentStep, notifyAction]);
 
   // Handle text input changes for tour
-  const handleNameChange = useCallback((text) => {
+  // NOTE: Not using useCallback to ensure formData is always current
+  const handleNameChange = (text) => {
     setFormData(prev => ({ ...prev, name: text }));
     
     // Notify tour of text input
@@ -230,9 +231,9 @@ const ManageScreen = ({ navigation, route }) => {
       console.log('🎯 [ManageScreen] Product name entered during tour');
       notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-name-input');
     }
-  }, [showTour, currentStep, notifyAction]);
+  };
 
-  const handlePriceChange = useCallback((text) => {
+  const handlePriceChange = (text) => {
     setFormData(prev => ({ ...prev, price: text }));
     
     // Notify tour of text input
@@ -240,10 +241,11 @@ const ManageScreen = ({ navigation, route }) => {
       console.log('🎯 [ManageScreen] Product price entered during tour');
       notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-price-input');
     }
-  }, [showTour, currentStep, notifyAction]);
+  };
 
   // Handle save button tap for tour
-  const handleSaveWithTour = useCallback(async () => {
+  // NOTE: Not using useCallback here to ensure we always have the latest handleSaveProduct
+  const handleSaveWithTour = async () => {
     // Notify tour of save button tap
     if (showTour && currentStep?.actionTarget === 'save-product-btn') {
       console.log('🎯 [ManageScreen] Save button tapped during tour');
@@ -252,7 +254,7 @@ const ManageScreen = ({ navigation, route }) => {
     
     // Call original save handler
     await handleSaveProduct();
-  }, [showTour, currentStep, notifyAction]);
+  };
 
   // Pre-fill demo values when tour step requires it
   useEffect(() => {
@@ -270,31 +272,17 @@ const ManageScreen = ({ navigation, route }) => {
   // No animations needed
 
   useEffect(() => {
-    // Initial load with page loader
+    // Phase 1 API Optimization: Single initial load only
+    // Removed focus-based refresh - use DataSyncContext for updates
     loadProducts(false, true);
     lastFetchRef.current = Date.now(); // Track initial fetch timestamp
     initialLoadDone.current = true;
     
-    // Focus listener for silent refresh (no loader)
-    // OPTIMIZED: Only refresh if cache is stale (older than 5 minutes)
-    const unsubscribe = navigation.addListener('focus', () => {
-      // Only refresh if not initial load
-      if (initialLoadDone.current) {
-        const now = Date.now();
-        const timeSinceLastFetch = now - lastFetchRef.current;
-        const isStale = timeSinceLastFetch > FOCUS_STALENESS_THRESHOLD_MS;
-        
-        if (isStale) {
-          console.log('📦 [ManageScreen] Focus - cache stale, refreshing products');
-          loadProducts(false, false); // Silent refresh
-          lastFetchRef.current = now; // Update fetch timestamp
-        } else {
-          console.log('📦 [ManageScreen] Focus - cache fresh, skipping API call');
-        }
-      }
-    });
+    // Phase 1 API Optimization: Removed focus listener to eliminate duplicate API calls
+    // Focus-based refresh is now handled by DataSyncContext subscription below
 
-    // FIXED: Subscribe to DataSyncContext for real-time updates from InventoryScreen
+    // Phase 1 API Optimization: Subscribe to DataSyncContext for real-time updates
+    // This replaces focus-based API calls with context-driven updates
     const unsubscribeSync = subscribe((event) => {
       if (event.type === 'products') {
         console.log('📦 [ManageScreen] Received products update from DataSyncContext');
@@ -308,10 +296,7 @@ const ManageScreen = ({ navigation, route }) => {
       setActiveTab('Products'); // Set initial tab to Products
     }
 
-    // No animations needed
-
     return () => {
-      unsubscribe();
       unsubscribeSync();
     };
   }, [navigation]);
@@ -385,6 +370,35 @@ const ManageScreen = ({ navigation, route }) => {
     });
   };
 
+  // Phase 1 API Optimization: Centralized product refresh function
+  // This eliminates duplicate getProducts() calls by providing a single refresh method
+  const refreshProductsFromAPI = useCallback(async (showLoader = false) => {
+    try {
+      if (showLoader) {
+        setRefreshing(true);
+      }
+      
+      const supabaseProducts = await productsService.getProducts();
+      const normalizedProducts = normalizeProducts(supabaseProducts);
+      setProducts(normalizedProducts);
+      
+      // Also save to AsyncStorage for compatibility
+      await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
+      
+      // Update last fetch timestamp
+      lastFetchRef.current = Date.now();
+      
+      return normalizedProducts;
+    } catch (error) {
+      console.error('❌ Error refreshing products:', error);
+      throw error;
+    } finally {
+      if (showLoader) {
+        setRefreshing(false);
+      }
+    }
+  }, []);
+
   const loadProducts = async (isRefresh = false, isInitialLoad = false) => {
     if (isRefresh) {
       setRefreshing(true);
@@ -392,24 +406,8 @@ const ManageScreen = ({ navigation, route }) => {
     }
 
     try {
-      // No animation delays needed
-
-      // Load products from Supabase using ProductsService
-      console.log('\n📦 MANAGESCREEN: Loading products from Supabase...');
-      
-      const supabaseProducts = await productsService.getProducts();
-      console.log('✅ Raw products from Supabase:', supabaseProducts.length);
-      
-      if (supabaseProducts.length > 0) {
-        console.log('📦 First raw product:', {
-          name: supabaseProducts[0].name,
-          track_stock: supabaseProducts[0].track_stock,
-          track_stock_type: typeof supabaseProducts[0].track_stock,
-          track_stock_strict_false: supabaseProducts[0].track_stock === false
-        });
-      }
-      
-      const normalizedProducts = normalizeProducts(supabaseProducts);
+      // Phase 1 API Optimization: Use centralized refresh function
+      const normalizedProducts = await refreshProductsFromAPI(isRefresh);
       
       console.log('✅ MANAGESCREEN: Normalized products:', normalizedProducts.length);
       if (normalizedProducts.length > 0) {
@@ -419,11 +417,6 @@ const ManageScreen = ({ navigation, route }) => {
           trackStock: normalizedProducts[0].trackStock
         });
       }
-      
-      setProducts(normalizedProducts);
-      
-      // Also save to AsyncStorage for compatibility
-      await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
       
       // Check store setup via StoreSettingsContext (migrated from getStore())
       const storeProfile = getStoreProfile();
@@ -455,23 +448,17 @@ const ManageScreen = ({ navigation, route }) => {
         setIsLoading(false);
       }
       
-      // Update last fetch timestamp after successful load (API optimization)
-      lastFetchRef.current = Date.now();
     } catch (error) {
       console.error('Error loading products:', error);
       if (isInitialLoad) {
         setIsLoading(false);
       }
-    } finally {
-      if (isRefresh) {
-        setRefreshing(false);
-      }
     }
   };
 
   const onRefresh = () => {
+    // Phase 1 API Optimization: Use loadProducts which calls centralized refresh
     loadProducts(true);
-    // Note: lastFetchRef is updated inside loadProducts() after successful fetch
   };
 
   const saveProducts = async (updatedProducts) => {
@@ -583,12 +570,8 @@ const ManageScreen = ({ navigation, route }) => {
               console.log('🚨 MANAGESCREEN: Deleting product from Supabase:', productId);
               await productsService.deleteProduct(productId);
               
-              // Refresh products list from Supabase
-              const updatedProducts = await productsService.getProducts();
-              setProducts(updatedProducts);
-              
-              // Also update AsyncStorage for compatibility
-              await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
+              // Phase 1 API Optimization: Use centralized refresh function
+              await refreshProductsFromAPI();
               
               console.log('✅ MANAGESCREEN: Product deleted successfully');
             } catch (error) {
@@ -621,17 +604,9 @@ const ManageScreen = ({ navigation, route }) => {
       return;
     }
 
-    // Check for duplicate product name (case-insensitive)
-    // Fetch fresh products list to ensure we have the latest data
-    let currentProducts = products;
-    try {
-      const freshProducts = await productsService.getProducts();
-      if (freshProducts && freshProducts.length > 0) {
-        currentProducts = freshProducts;
-      }
-    } catch (err) {
-      console.log('Using cached products for duplicate check');
-    }
+    // Phase 1 API Optimization: Use existing products for duplicate check
+    // Avoid additional API call - use current state which is kept fresh by DataSyncContext
+    const currentProducts = products;
     
     const productNameLower = formData.name.trim().toLowerCase();
     const duplicateProduct = currentProducts.find(p => {
@@ -787,14 +762,13 @@ const ManageScreen = ({ navigation, route }) => {
       // Close modal first to give immediate feedback
       setModalVisible(false);
       
-      // Force refresh products list from Supabase (bypass any cache)
+      // Phase 1 API Optimization: Use centralized refresh function after save
       console.log('🔄 Forcing product refresh after update...');
       
       try {
         // Small delay to ensure database commit completes
         await new Promise(resolve => setTimeout(resolve, 100));
-        const updatedProducts = await productsService.getProducts();
-        const normalizedProducts = normalizeProducts(updatedProducts);
+        const normalizedProducts = await refreshProductsFromAPI();
         
         console.log('✅ Products refreshed:', normalizedProducts.length);
         
@@ -813,11 +787,8 @@ const ManageScreen = ({ navigation, route }) => {
           console.log('📦 New product created successfully');
         }
         
-        setProducts(normalizedProducts);
-        
-        // Also save to AsyncStorage for compatibility
-        await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
-        if (updatedProducts.length > 0) {
+        // Mark onboarding as complete when first product is added
+        if (normalizedProducts.length > 0) {
           await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
         }
         

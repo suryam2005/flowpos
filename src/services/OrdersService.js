@@ -148,6 +148,7 @@ class OrdersService {
       
       // Phase 1 Optimization: Use global APIDeduplicator with standardized endpoint key
       // This ensures consistent deduplication across all components using ENDPOINT_KEYS.ORDERS
+      // Single API call per endpoint, eliminates duplicate calls from multiple components
       const orders = await apiDeduplicator.deduplicate(ENDPOINT_KEYS.ORDERS, async () => {
         // Always fetch fresh data from Supabase - NO LOCAL CACHE
         return await this.getOrdersFromCloud(options);
@@ -598,6 +599,13 @@ class OrdersService {
         
         if (!product) {
           stockIssues.push(`Product "${productName}" not found in inventory`);
+          continue;
+        }
+
+        // 🔒 CRITICAL: Skip stock validation if track_stock is disabled
+        // Products with trackStock: false should not have stock limits
+        if (product.trackStock === false) {
+          console.log(`⏭️ [MOBILE DEBUG] Skipping stock validation for "${productName}" - track_stock is disabled`);
           continue;
         }
 

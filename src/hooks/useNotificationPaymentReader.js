@@ -144,14 +144,18 @@ export const useNotificationPaymentReader = () => {
     return () => clearInterval(cleanupInterval);
   }, []);
 
-  // Auto-start listening when component mounts
+  // DON'T auto-start listening - let the component decide based on settings
+  // The DynamicQRGenerator will call startListening() only if autoPaymentDetection is enabled
+  // This prevents unwanted notification processing when the feature is disabled
+  
+  // Cleanup on unmount only
   useEffect(() => {
-    startListening();
-
     return () => {
-      stopListening();
+      if (isListening) {
+        stopListening();
+      }
     };
-  }, [startListening, stopListening]);
+  }, [isListening, stopListening]);
 
   // Load payment history on mount
   useEffect(() => {

@@ -153,6 +153,7 @@ class ProductsService {
 
       // Phase 1 Optimization: Use global APIDeduplicator with standardized endpoint key
       // This ensures consistent deduplication across all components using ENDPOINT_KEYS.PRODUCTS
+      // Single API call per endpoint, eliminates duplicate calls from multiple components
       const products = await apiDeduplicator.deduplicate(ENDPOINT_KEYS.PRODUCTS, async () => {
         // Always fetch fresh data from Supabase - NO LOCAL CACHE
         console.log('📦 [MOBILE DEBUG] Calling getProductsFromCloud...');

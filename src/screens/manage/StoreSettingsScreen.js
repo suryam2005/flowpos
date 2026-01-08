@@ -11,7 +11,6 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
-import { useFocusEffect } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { Linking } from 'react-native';
@@ -19,6 +18,7 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import { colors } from '../../styles/colors';
 import { useAuth } from '../../context/AuthContext';
 import { useStoreSettings } from '../../context/StoreSettingsContext';
+import notificationPaymentReader from '../../services/NotificationPaymentReader';
 
 const StoreSettingsScreen = ({ navigation }) => {
   const { user } = useAuth();
@@ -32,7 +32,6 @@ const StoreSettingsScreen = ({ navigation }) => {
     getTaxSettings,
     getBusinessSettings,
     updateStoreSettings: contextUpdateStoreSettings,
-    refreshSettings,
   } = useStoreSettings();
   
   const [isLoading, setIsLoading] = useState(true);
@@ -78,15 +77,9 @@ const StoreSettingsScreen = ({ navigation }) => {
     loadSettingsFromContext();
   }, [storeSettings]);
 
-  // Reload settings when screen comes into focus
-  useFocusEffect(
-    useCallback(() => {
-      // Only refresh if we have stale data or no data
-      if (!storeSettings) {
-        refreshSettings();
-      }
-    }, [storeSettings, refreshSettings])
-  );
+  // REMOVED: Focus-based refresh to eliminate tab switch API calls
+  // The context already loads data on mount and maintains cache
+  // Tab switches should use cached data instead of triggering API calls
 
   // Update loading state based on context
   useEffect(() => {
@@ -534,6 +527,23 @@ const StoreSettingsScreen = ({ navigation }) => {
                           }
                         } else {
                           newMethods = [...currentMethods, method.id];
+                          
+                          // Prompt for notification access when QR Pay is enabled
+                          if (method.id === 'QR Pay' && Platform.OS === 'android') {
+                            // Check and prompt for notification listener permission
+                            notificationPaymentReader.promptNotificationAccess().then((granted) => {
+                              if (granted) {
+                                console.log('✅ Notification access granted for payment detection');
+                              } else {
+                                // Show info about manual payment confirmation
+                                Alert.alert(
+                                  'Auto Payment Detection',
+                                  'For automatic payment detection from GPay, PhonePe, and Paytm, you can enable notification access later in Settings.\n\nYou can still confirm payments manually.',
+                                  [{ text: 'OK' }]
+                                );
+                              }
+                            });
+                          }
                         }
                         
                         setStoreInfo({ ...storeInfo, paymentMethods: newMethods });

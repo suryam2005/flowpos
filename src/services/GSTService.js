@@ -64,26 +64,35 @@ class GSTService {
   }
 
   getSettings() {
-    // Always refresh from cache to get latest settings
-    this.refreshFromCache();
+    // Phase 1 API Optimization: Removed duplicate refreshFromCache() call
+    // initialize() already calls refreshFromCache(), so no need to call it again
+    if (!this.initialized) {
+      this.initialize();
+    }
     return { ...this.taxSettings };
   }
 
   isGSTEnabled() {
-    // Always refresh from cache to get latest settings
-    this.refreshFromCache();
+    // Phase 1 API Optimization: Removed duplicate refreshFromCache() call
+    if (!this.initialized) {
+      this.initialize();
+    }
     return this.taxSettings.enableGST;
   }
 
   getGSTRate() {
-    // Always refresh from cache to get latest settings
-    this.refreshFromCache();
+    // Phase 1 API Optimization: Removed duplicate refreshFromCache() call
+    if (!this.initialized) {
+      this.initialize();
+    }
     return this.taxSettings.gstRate || 18;
   }
 
   isTaxIncludedInPrice() {
-    // Always refresh from cache to get latest settings
-    this.refreshFromCache();
+    // Phase 1 API Optimization: Removed duplicate refreshFromCache() call
+    if (!this.initialized) {
+      this.initialize();
+    }
     return this.taxSettings.includeTaxInPrice;
   }
 

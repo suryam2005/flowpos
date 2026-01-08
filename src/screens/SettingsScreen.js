@@ -21,12 +21,32 @@ import featureService from '../services/FeatureService';
 import { useAuth } from '../context/AuthContext';
 import { useAppSettingsContext } from '../context/AppSettingsContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
+import { useSubscriptionContext } from '../context/SubscriptionContext';
 import tourProgressManager from '../services/TourProgressManager';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout } = useAuth();
   const { settings, getSetting, updateSetting, isLoading: settingsLoading, refreshSettings } = useAppSettingsContext();
   const { getReceiptSettings, updateReceiptSettings } = useStoreSettings();
+  const { subscription } = useSubscriptionContext();
+  
+  // Helper function to check if a feature is available based on subscription
+  const canUseFeature = (featureName) => {
+    if (!subscription) {
+      // If subscription data is not loaded, allow all features (safe default)
+      return true;
+    }
+    
+    // Check if feature is available in current plan
+    return subscription.features?.[featureName] === true;
+  };
+  
+  // Helper function to show upgrade prompt
+  const showUpgradePrompt = (featureName) => {
+    // For now, use the existing featureService method
+    // TODO: This could be moved to SubscriptionContext in the future
+    featureService.showUpgradePrompt(featureName);
+  };
   
   // Local state for UI (initialized to null - will be set from context)
   // Using null as initial state to distinguish "not loaded" from "loaded as false"
@@ -53,7 +73,6 @@ const SettingsScreen = ({ navigation }) => {
   useEffect(() => {
     loadSettingsFromContext();
     loadReceiptSettings(); // Receipt settings still from AsyncStorage
-    initializeFeatureService();
   }, [settings]);
 
   // Reload settings when screen comes into focus
@@ -63,14 +82,6 @@ const SettingsScreen = ({ navigation }) => {
       loadReceiptSettings();
     }, [settings])
   );
-
-  const initializeFeatureService = async () => {
-    try {
-      await featureService.initialize();
-    } catch (error) {
-      console.error('Error initializing FeatureService:', error);
-    }
-  };
 
   /**
    * Load the 6 cached settings from AppSettingsContext
@@ -107,9 +118,9 @@ const SettingsScreen = ({ navigation }) => {
     });
     
     // Update local state from context
-    // If value is undefined (not set in DB), default to true for better UX
-    // If value is explicitly false, use false
-    setAutoPaymentDetection(autoDetection !== undefined ? autoDetection : true);
+    // If value is undefined (not set in DB), default to FALSE for auto-detection (safety)
+    // Other settings default to true for better UX
+    setAutoPaymentDetection(autoDetection !== undefined ? autoDetection : false);
     setNotifications(notificationsValue !== undefined ? notificationsValue : true);
     setRequireCustomerDetails(customerDetailsRequired !== undefined ? customerDetailsRequired : true);
     setShowStoreNameOnInvoice(invoiceStoreName !== undefined ? invoiceStoreName : true);
@@ -136,18 +147,87 @@ const SettingsScreen = ({ navigation }) => {
   /**
    * Handle auto payment detection toggle
    * Uses write-through cache update via context
+   * Requests SMS permissions when enabled
    */
   const handleAutoPaymentDetectionToggle = async (value) => {
     const previousValue = autoPaymentDetection;
-    // Optimistic UI update
-    setAutoPaymentDetection(value);
     
-    // Write-through to backend via context
-    const success = await updateSetting('autoPaymentDetection', value);
-    if (!success) {
-      // Revert on failure
-      setAutoPaymentDetection(previousValue);
-      Alert.alert('Error', 'Failed to save setting. Please try again.');
+    // If turning ON, request permissions first
+    if (value === true) {
+      try {
+        // Import the notification payment reader to request permissions
+        const notificationPaymentReader = require('../services/NotificationPaymentReader').default;
+        
+        // Request SMS permissions
+        const permissions = await notificationPaymentReader.requestPermissions();
+        
+        console.log('📱 Permission status:', permissions);
+        
+        // Check if SMS permission was granted
+        if (!permissions.sms) {
+          // Show alert explaining why permissions are needed
+          Alert.alert(
+            'SMS Permission Required',
+            'To automatically detect UPI payments, FlowPOS needs SMS permission to read bank payment confirmations.\n\nPlease grant SMS permission to use this feature.',
+            [
+              { 
+                text: 'Cancel', 
+                style: 'cancel',
+                onPress: () => {
+                  // Don't enable the setting
+                  setAutoPaymentDetection(false);
+                }
+              },
+              { 
+                text: 'Try Again', 
+                onPress: async () => {
+                  // Try requesting permissions again
+                  const retryPermissions = await notificationPaymentReader.requestPermissions();
+                  if (retryPermissions.sms) {
+                    // Permissions granted, enable the setting
+                    setAutoPaymentDetection(true);
+                    const success = await updateSetting('autoPaymentDetection', true);
+                    if (!success) {
+                      setAutoPaymentDetection(false);
+                      Alert.alert('Error', 'Failed to save setting.');
+                    }
+                  } else {
+                    setAutoPaymentDetection(false);
+                  }
+                }
+              }
+            ]
+          );
+          return;
+        }
+        
+        // SMS permission granted, proceed with enabling
+        setAutoPaymentDetection(true);
+        const success = await updateSetting('autoPaymentDetection', true);
+        if (!success) {
+          setAutoPaymentDetection(previousValue);
+          Alert.alert('Error', 'Failed to save setting. Please try again.');
+        } else {
+          // Show success message
+          Alert.alert(
+            'Payment Detection Enabled',
+            'FlowPOS will now automatically detect UPI payment confirmations from bank SMS when you show a QR code.',
+            [{ text: 'OK' }]
+          );
+        }
+      } catch (error) {
+        console.error('Error requesting permissions:', error);
+        setAutoPaymentDetection(previousValue);
+        Alert.alert('Error', 'Failed to request permissions. Please try again.');
+      }
+    } else {
+      // Turning OFF - just update the setting
+      setAutoPaymentDetection(value);
+      const success = await updateSetting('autoPaymentDetection', value);
+      if (!success) {
+        setAutoPaymentDetection(previousValue);
+        Alert.alert('Error', 'Failed to save setting. Please try again.');
+      }
     }
   };
 
@@ -472,11 +552,11 @@ const SettingsScreen = ({ navigation }) => {
 
   // Feature Button with lock check
   const FeatureButton = ({ title, icon, featureKey, onPress }) => {
-    const isLocked = !featureService.canUseFeature(featureKey);
+    const isLocked = !canUseFeature(featureKey);
     
     const handlePress = () => {
       if (isLocked) {
-        featureService.showUpgradePrompt(featureKey);
+        showUpgradePrompt(featureKey);
       } else {
         onPress();
       }
@@ -540,10 +620,10 @@ const SettingsScreen = ({ navigation }) => {
           <Text style={styles.sectionTitle}>WhatsApp Settings</Text>
           
           {/* Check if WhatsApp feature is available */}
-          {!featureService.canUseFeature('whatsapp_integration') ? (
+          {!canUseFeature('whatsapp_integration') ? (
             <TouchableOpacity 
               style={[styles.settingItem, styles.settingItemDisabled]}
-              onPress={() => featureService.showUpgradePrompt('whatsapp_integration')}
+              onPress={() => showUpgradePrompt('whatsapp_integration')}
               activeOpacity={0.8}
             >
               <View style={styles.settingInfo}>
@@ -638,10 +718,10 @@ const SettingsScreen = ({ navigation }) => {
           <Text style={styles.sectionTitle}>Invoice Settings</Text>
           
           {/* Custom branding feature check */}
-          {!featureService.canUseFeature('custom_branding') ? (
+          {!canUseFeature('custom_branding') ? (
             <TouchableOpacity 
               style={[styles.settingItem, styles.settingItemDisabled]}
-              onPress={() => featureService.showUpgradePrompt('customizable_invoice')}
+              onPress={() => showUpgradePrompt('customizable_invoice')}
               activeOpacity={0.8}
             >
               <View style={styles.settingInfo}>

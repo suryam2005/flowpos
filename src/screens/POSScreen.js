@@ -10,7 +10,7 @@ import {
   TextInput,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useFocusEffect } from '@react-navigation/native';
+// Removed useFocusEffect import - Phase 1 optimization eliminates focus-based API calls
 import { Ionicons } from '@expo/vector-icons';
 import * as Haptics from 'expo-haptics';
 import { useCart } from '../context/CartContext';
@@ -31,9 +31,6 @@ import { buttonStyles } from '../styles/buttonStyles';
 import { typography } from '../styles/typographyStyles';
 import { useTheme } from '../context/ThemeContext';
 import { getProductImageUrl } from '../utils/imageUtils';
-
-// Staleness threshold for focus refresh (5 minutes in milliseconds)
-const FOCUS_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
 
 
 
@@ -79,36 +76,33 @@ const POSScreen = ({ navigation, route }) => {
   const storeName = storeProfile?.store_name || 'My Store';
 
   // Initialize feature service and trigger initial load
+  // Simple timestamp guard to prevent rapid refetches on remount (30 seconds)
+  const REMOUNT_GUARD_MS = 30 * 1000;
+  
   useEffect(() => {
+    // Phase 1 Optimization: Single initialization call
+    // Removed duplicate featureService.initialize() - only call once
     featureService.initialize();
     
-    // Trigger initial products fetch
-    console.log('🏪 [POS] Initial mount - fetching products');
-    refreshProducts();
-    lastFetchRef.current = Date.now(); // Track initial fetch timestamp
+    // Simple guard: check if we fetched recently to prevent rapid remount refetches
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchRef.current;
+    
+    if (timeSinceLastFetch > REMOUNT_GUARD_MS || lastFetchRef.current === 0) {
+      // Trigger initial products fetch - single API call per mount
+      console.log('🏪 [POS] Initial mount - fetching products');
+      refreshProducts();
+      lastFetchRef.current = now; // Track fetch timestamp
+    } else {
+      console.log('🏪 [POS] Mount guard active - skipping API call (recently fetched)');
+    }
+    
     initialLoadDone.current = true;
-  }, []);
+  }, [refreshProducts]);
 
-  // Auto-refresh on focus to sync data from other screens (Inventory, ManageScreen)
-  // OPTIMIZED: Only refresh if cache is stale (older than 5 minutes)
-  useFocusEffect(
-    useCallback(() => {
-      // Only refresh if not initial load
-      if (initialLoadDone.current) {
-        const now = Date.now();
-        const timeSinceLastFetch = now - lastFetchRef.current;
-        const isStale = timeSinceLastFetch > FOCUS_STALENESS_THRESHOLD_MS;
-        
-        if (isStale) {
-          console.log('🏪 [POS] Screen focused - cache stale, refreshing products');
-          refreshProducts();
-          lastFetchRef.current = now; // Update fetch timestamp
-        } else {
-          console.log('🏪 [POS] Screen focused - cache fresh, skipping API call');
-        }
-      }
-    }, [refreshProducts])
-  );
+  // REMOVED: useFocusEffect API call - eliminated focus-based refetching
+  // Focus-based refetching removed as per Phase 1 optimization requirements
+  // Data will be fetched only on mount and user-triggered refresh
 
   // Interactive App Tour
   const {

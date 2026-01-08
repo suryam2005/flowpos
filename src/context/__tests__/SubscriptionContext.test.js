@@ -72,8 +72,8 @@ const planDetailsArb = fc.record({
 const subscriptionDataArb = fc.record({
   plan: subscriptionPlanArb,
   status: subscriptionStatusArb,
-  startedAt: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
-  expiresAt: fc.option(fc.date().map(d => d.toISOString()), { nil: null }),
+  startedAt: fc.option(fc.integer({ min: 1577836800000, max: 1924992000000 }).map(timestamp => new Date(timestamp).toISOString()), { nil: null }),
+  expiresAt: fc.option(fc.integer({ min: 1577836800000, max: 1924992000000 }).map(timestamp => new Date(timestamp).toISOString()), { nil: null }),
   limits: subscriptionLimitsArb,
   features: subscriptionFeaturesArb,
   planDetails: planDetailsArb

@@ -873,7 +873,13 @@ const AnalyticsScreen = ({ navigation, route }) => {
               if (!featureService.canUseFeature('advanced_analytics')) {
                 featureService.showUpgradePrompt('advanced_analytics');
               } else {
-                navigation.navigate('AdvancedAnalytics');
+                // Pass already-fetched data to avoid duplicate API calls
+                navigation.navigate('AdvancedAnalytics', {
+                  ordersData: orders,
+                  productsData: products,
+                  analyticsData: analytics,
+                  chartData: chartData
+                });
               }
             }}
           >

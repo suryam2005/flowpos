@@ -1,0 +1,987 @@
+{
+  "timestamp": "2026-01-08T07:05:21.345Z",
+  "phase": "Phase 1 API Optimization",
+  "task": "Task 15 - Final Checkpoint",
+  "validations": {
+    "staticAnalysis": {
+      "status": "FAILED",
+      "results": {
+        "timestamp": "2026-01-08T07:05:21.347Z",
+        "phase1Goals": {
+          "calmBehavior": {
+            "passed": false,
+            "issues": [
+              {
+                "severity": "HIGH",
+                "type": "rapid_fire_apis",
+                "description": "Multiple API calls to same endpoint detected",
+                "files": [
+                  {
+                    "file": "src\\components\\SimpleInvoicePreview.js",
+                    "duplicateEndpoints": [
+                      "sendInvoiceMessage",
+                      "WhatsAppService"
+                    ]
+                  },
+                  {
+                    "file": "src\\components\\SubscriptionManager.js",
+                    "duplicateEndpoints": [
+                      "featureService"
+                    ]
+                  },
+                  {
+                    "file": "src\\context\\DataSyncContext.js",
+                    "duplicateEndpoints": [
+                      "canStoreAdditionalData",
+                      "calculateStorageUsage",
+                      "CloudStorageService"
+                    ]
+                  },
+                  {
+                    "file": "src\\hooks\\useActionDetection.js",
+                    "duplicateEndpoints": [
+                      "notifyAction",
+                      "actionDetectorService"
+                    ]
+                  },
+                  {
+                    "file": "src\\hooks\\useInteractiveTour.js",
+                    "duplicateEndpoints": [
+                      "unregisterAction",
+                      "deactivate",
+                      "clearAllActions",
+                      "actionDetectorService",
+                      "productsService",
+                      "initialize()"
+                    ]
+                  },
+                  {
+                    "file": "src\\hooks\\useOrders.js",
+                    "duplicateEndpoints": [
+                      "getPendingCount",
+                      "forceSyncNow",
+                      "getLastSyncTime",
+                      "ordersService",
+                      "loadOrders()"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\AnalyticsScreen.js",
+                    "duplicateEndpoints": [
+                      "canUseFeature",
+                      "featureService"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\auth\\PinSetupScreen.js",
+                    "duplicateEndpoints": [
+                      "AuthenticationService"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\CartScreen.js",
+                    "duplicateEndpoints": [
+                      "featureService",
+                      "WhatsAppService"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\DataExportScreen.js",
+                    "duplicateEndpoints": [
+                      "csvExportService"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\manage\\InventoryScreen.js",
+                    "duplicateEndpoints": [
+                      "getProducts",
+                      "productsService",
+                      "loadProducts()",
+                      "getProducts()"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\ManageScreen.js",
+                    "duplicateEndpoints": [
+                      "getProducts",
+                      "productsService",
+                      "getProducts()"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\onboarding\\ProductOnboardingScreen.js",
+                    "duplicateEndpoints": [
+                      "getProducts",
+                      "createProduct",
+                      "productsService",
+                      "getProducts()"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\OrdersScreen.js",
+                    "duplicateEndpoints": [
+                      "sendInvoiceMessage",
+                      "WhatsAppService",
+                      "checkWhatsAppStatus()"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\PDFReportsScreen.js",
+                    "duplicateEndpoints": [
+                      "pdfReportsService"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\POSScreen.js",
+                    "duplicateEndpoints": [
+                      "refreshProducts()"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\SettingsScreen.js",
+                    "duplicateEndpoints": [
+                      "WhatsAppService"
+                    ]
+                  },
+                  {
+                    "file": "src\\screens\\SubscriptionScreen.js",
+                    "duplicateEndpoints": [
+                      "featureService",
+                      "CloudStorageService"
+                    ]
+                  },
+                  {
+                    "file": "src\\services\\CSVExportService.js",
+                    "duplicateEndpoints": [
+                      "initialize",
+                      "featureService",
+                      "initialize()"
+                    ]
+                  },
+                  {
+                    "file": "src\\services\\GSTService.js",
+                    "duplicateEndpoints": [
+                      "initialize()"
+                    ]
+                  },
+                  {
+                    "file": "src\\services\\InvoiceService.js",
+                    "duplicateEndpoints": [
+                      "GSTService"
+                    ]
+                  },
+                  {
+                    "file": "src\\services\\OrdersService.js",
+                    "duplicateEndpoints": [
+                      "apiCall",
+                      "networkService",
+                      "getOrders()"
+                    ]
+                  },
+                  {
+                    "file": "src\\services\\PerformanceInsightsService.js",
+                    "duplicateEndpoints": [
+                      "getOrders",
+                      "ordersService",
+                      "getOrders()"
+                    ]
+                  },
+                  {
+                    "file": "src\\services\\ProductsService.js",
+                    "duplicateEndpoints": [
+                      "apiCall",
+                      "networkService"
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          "noFocusAPIs": {
+            "passed": true,
+            "issues": []
+          },
+          "noDuplicateAPIs": {
+            "passed": false,
+            "issues": [
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\components\\SimpleInvoicePreview.js",
+                "endpoints": [
+                  "sendInvoiceMessage",
+                  "WhatsAppService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\components\\SubscriptionManager.js",
+                "endpoints": [
+                  "featureService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\context\\DataSyncContext.js",
+                "endpoints": [
+                  "canStoreAdditionalData",
+                  "calculateStorageUsage",
+                  "CloudStorageService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\hooks\\useActionDetection.js",
+                "endpoints": [
+                  "notifyAction",
+                  "actionDetectorService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\hooks\\useInteractiveTour.js",
+                "endpoints": [
+                  "unregisterAction",
+                  "deactivate",
+                  "clearAllActions",
+                  "actionDetectorService",
+                  "productsService",
+                  "initialize()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\hooks\\useOrders.js",
+                "endpoints": [
+                  "getPendingCount",
+                  "forceSyncNow",
+                  "getLastSyncTime",
+                  "ordersService",
+                  "loadOrders()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\AnalyticsScreen.js",
+                "endpoints": [
+                  "canUseFeature",
+                  "featureService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\auth\\PinSetupScreen.js",
+                "endpoints": [
+                  "AuthenticationService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\CartScreen.js",
+                "endpoints": [
+                  "featureService",
+                  "WhatsAppService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\DataExportScreen.js",
+                "endpoints": [
+                  "csvExportService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\manage\\InventoryScreen.js",
+                "endpoints": [
+                  "getProducts",
+                  "productsService",
+                  "loadProducts()",
+                  "getProducts()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\ManageScreen.js",
+                "endpoints": [
+                  "getProducts",
+                  "productsService",
+                  "getProducts()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\onboarding\\ProductOnboardingScreen.js",
+                "endpoints": [
+                  "getProducts",
+                  "createProduct",
+                  "productsService",
+                  "getProducts()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\OrdersScreen.js",
+                "endpoints": [
+                  "sendInvoiceMessage",
+                  "WhatsAppService",
+                  "checkWhatsAppStatus()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\PDFReportsScreen.js",
+                "endpoints": [
+                  "pdfReportsService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\POSScreen.js",
+                "endpoints": [
+                  "refreshProducts()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\SettingsScreen.js",
+                "endpoints": [
+                  "WhatsAppService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\screens\\SubscriptionScreen.js",
+                "endpoints": [
+                  "featureService",
+                  "CloudStorageService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\services\\CSVExportService.js",
+                "endpoints": [
+                  "initialize",
+                  "featureService",
+                  "initialize()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\services\\GSTService.js",
+                "endpoints": [
+                  "initialize()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\services\\InvoiceService.js",
+                "endpoints": [
+                  "GSTService"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\services\\OrdersService.js",
+                "endpoints": [
+                  "apiCall",
+                  "networkService",
+                  "getOrders()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\services\\PerformanceInsightsService.js",
+                "endpoints": [
+                  "getOrders",
+                  "ordersService",
+                  "getOrders()"
+                ]
+              },
+              {
+                "severity": "HIGH",
+                "type": "duplicate_api_calls",
+                "description": "Same endpoint called multiple times in component",
+                "file": "src\\services\\ProductsService.js",
+                "endpoints": [
+                  "apiCall",
+                  "networkService"
+                ]
+              }
+            ]
+          },
+          "noCacheBypasses": {
+            "passed": false,
+            "issues": [
+              {
+                "severity": "MEDIUM",
+                "type": "context_bypass",
+                "description": "Direct /api/store call without using StoreSettingsContext",
+                "file": "src\\utils\\NetworkBehaviorMonitor.js",
+                "contextType": "store"
+              },
+              {
+                "severity": "MEDIUM",
+                "type": "context_bypass",
+                "description": "Direct /api/subscription call without using SubscriptionContext",
+                "file": "src\\utils\\NetworkBehaviorMonitor.js",
+                "contextType": "subscription"
+              }
+            ]
+          }
+        },
+        "codeAnalysis": {
+          "focusEffectCalls": [],
+          "duplicateEndpoints": [
+            {
+              "file": "src\\components\\SimpleInvoicePreview.js",
+              "duplicateEndpoints": [
+                "sendInvoiceMessage",
+                "WhatsAppService"
+              ]
+            },
+            {
+              "file": "src\\components\\SubscriptionManager.js",
+              "duplicateEndpoints": [
+                "featureService"
+              ]
+            },
+            {
+              "file": "src\\context\\DataSyncContext.js",
+              "duplicateEndpoints": [
+                "canStoreAdditionalData",
+                "calculateStorageUsage",
+                "CloudStorageService"
+              ]
+            },
+            {
+              "file": "src\\hooks\\useActionDetection.js",
+              "duplicateEndpoints": [
+                "notifyAction",
+                "actionDetectorService"
+              ]
+            },
+            {
+              "file": "src\\hooks\\useInteractiveTour.js",
+              "duplicateEndpoints": [
+                "unregisterAction",
+                "deactivate",
+                "clearAllActions",
+                "actionDetectorService",
+                "productsService",
+                "initialize()"
+              ]
+            },
+            {
+              "file": "src\\hooks\\useOrders.js",
+              "duplicateEndpoints": [
+                "getPendingCount",
+                "forceSyncNow",
+                "getLastSyncTime",
+                "ordersService",
+                "loadOrders()"
+              ]
+            },
+            {
+              "file": "src\\screens\\AnalyticsScreen.js",
+              "duplicateEndpoints": [
+                "canUseFeature",
+                "featureService"
+              ]
+            },
+            {
+              "file": "src\\screens\\auth\\PinSetupScreen.js",
+              "duplicateEndpoints": [
+                "AuthenticationService"
+              ]
+            },
+            {
+              "file": "src\\screens\\CartScreen.js",
+              "duplicateEndpoints": [
+                "featureService",
+                "WhatsAppService"
+              ]
+            },
+            {
+              "file": "src\\screens\\DataExportScreen.js",
+              "duplicateEndpoints": [
+                "csvExportService"
+              ]
+            },
+            {
+              "file": "src\\screens\\manage\\InventoryScreen.js",
+              "duplicateEndpoints": [
+                "getProducts",
+                "productsService",
+                "loadProducts()",
+                "getProducts()"
+              ]
+            },
+            {
+              "file": "src\\screens\\ManageScreen.js",
+              "duplicateEndpoints": [
+                "getProducts",
+                "productsService",
+                "getProducts()"
+              ]
+            },
+            {
+              "file": "src\\screens\\onboarding\\ProductOnboardingScreen.js",
+              "duplicateEndpoints": [
+                "getProducts",
+                "createProduct",
+                "productsService",
+                "getProducts()"
+              ]
+            },
+            {
+              "file": "src\\screens\\OrdersScreen.js",
+              "duplicateEndpoints": [
+                "sendInvoiceMessage",
+                "WhatsAppService",
+                "checkWhatsAppStatus()"
+              ]
+            },
+            {
+              "file": "src\\screens\\PDFReportsScreen.js",
+              "duplicateEndpoints": [
+                "pdfReportsService"
+              ]
+            },
+            {
+              "file": "src\\screens\\POSScreen.js",
+              "duplicateEndpoints": [
+                "refreshProducts()"
+              ]
+            },
+            {
+              "file": "src\\screens\\SettingsScreen.js",
+              "duplicateEndpoints": [
+                "WhatsAppService"
+              ]
+            },
+            {
+              "file": "src\\screens\\SubscriptionScreen.js",
+              "duplicateEndpoints": [
+                "featureService",
+                "CloudStorageService"
+              ]
+            },
+            {
+              "file": "src\\services\\CSVExportService.js",
+              "duplicateEndpoints": [
+                "initialize",
+                "featureService",
+                "initialize()"
+              ]
+            },
+            {
+              "file": "src\\services\\GSTService.js",
+              "duplicateEndpoints": [
+                "initialize()"
+              ]
+            },
+            {
+              "file": "src\\services\\InvoiceService.js",
+              "duplicateEndpoints": [
+                "GSTService"
+              ]
+            },
+            {
+              "file": "src\\services\\OrdersService.js",
+              "duplicateEndpoints": [
+                "apiCall",
+                "networkService",
+                "getOrders()"
+              ]
+            },
+            {
+              "file": "src\\services\\PerformanceInsightsService.js",
+              "duplicateEndpoints": [
+                "getOrders",
+                "ordersService",
+                "getOrders()"
+              ]
+            },
+            {
+              "file": "src\\services\\ProductsService.js",
+              "duplicateEndpoints": [
+                "apiCall",
+                "networkService"
+              ]
+            }
+          ],
+          "contextBypasses": [
+            {
+              "file": "src\\utils\\NetworkBehaviorMonitor.js",
+              "type": "store",
+              "issue": "Direct /api/store call without using StoreSettingsContext"
+            },
+            {
+              "file": "src\\utils\\NetworkBehaviorMonitor.js",
+              "type": "subscription",
+              "issue": "Direct /api/subscription call without using SubscriptionContext"
+            }
+          ],
+          "lifecycleMisuse": []
+        },
+        "networkPatterns": {
+          "expectedBehavior": [],
+          "violations": []
+        },
+        "summary": {
+          "overallPassed": false,
+          "criticalIssues": 0,
+          "warningIssues": 27,
+          "recommendations": [
+            {
+              "priority": "HIGH",
+              "action": "Eliminate duplicate API calls",
+              "description": "Fix 24 components with duplicate endpoint calls",
+              "files": [
+                "src\\components\\SimpleInvoicePreview.js",
+                "src\\components\\SubscriptionManager.js",
+                "src\\context\\DataSyncContext.js",
+                "src\\hooks\\useActionDetection.js",
+                "src\\hooks\\useInteractiveTour.js",
+                "src\\hooks\\useOrders.js",
+                "src\\screens\\AnalyticsScreen.js",
+                "src\\screens\\auth\\PinSetupScreen.js",
+                "src\\screens\\CartScreen.js",
+                "src\\screens\\DataExportScreen.js",
+                "src\\screens\\manage\\InventoryScreen.js",
+                "src\\screens\\ManageScreen.js",
+                "src\\screens\\onboarding\\ProductOnboardingScreen.js",
+                "src\\screens\\OrdersScreen.js",
+                "src\\screens\\PDFReportsScreen.js",
+                "src\\screens\\POSScreen.js",
+                "src\\screens\\SettingsScreen.js",
+                "src\\screens\\SubscriptionScreen.js",
+                "src\\services\\CSVExportService.js",
+                "src\\services\\GSTService.js",
+                "src\\services\\InvoiceService.js",
+                "src\\services\\OrdersService.js",
+                "src\\services\\PerformanceInsightsService.js",
+                "src\\services\\ProductsService.js"
+              ],
+              "impact": "Medium - Reduces redundant network requests"
+            },
+            {
+              "priority": "MEDIUM",
+              "action": "Use existing contexts",
+              "description": "Replace 2 direct API calls with context usage",
+              "files": [
+                "src\\utils\\NetworkBehaviorMonitor.js",
+                "src\\utils\\NetworkBehaviorMonitor.js"
+              ],
+              "impact": "Medium - Improves data consistency and reduces API calls"
+            }
+          ]
+        }
+      },
+      "timestamp": "2026-01-08T07:05:21.518Z"
+    },
+    "behaviorTesting": {
+      "status": "FAILED",
+      "results": {
+        "timestamp": "2026-01-08T07:05:21.518Z",
+        "testSuite": "Phase 1 Network Behavior Validation",
+        "tests": [
+          {
+            "name": "Screen Focus API Behavior",
+            "description": "Verify no API calls on screen focus",
+            "critical": true,
+            "tests": [
+              {
+                "name": "focus_POSScreen.js",
+                "status": "passed",
+                "message": "No API calls found in useFocusEffect",
+                "details": {
+                  "focusEffects": 0,
+                  "apiCalls": 0
+                }
+              },
+              {
+                "name": "focus_OrdersScreen.js",
+                "status": "passed",
+                "message": "No API calls found in useFocusEffect",
+                "details": {
+                  "focusEffects": 0,
+                  "apiCalls": 0
+                }
+              },
+              {
+                "name": "focus_InventoryScreen.js",
+                "status": "passed",
+                "message": "No API calls found in useFocusEffect",
+                "details": {
+                  "focusEffects": 0,
+                  "apiCalls": 0
+                }
+              },
+              {
+                "name": "focus_ManageScreen.js",
+                "status": "passed",
+                "message": "No API calls found in useFocusEffect",
+                "details": {
+                  "focusEffects": 0,
+                  "apiCalls": 0
+                }
+              },
+              {
+                "name": "focus_SettingsScreen.js",
+                "status": "passed",
+                "message": "No API calls found in useFocusEffect",
+                "details": {
+                  "focusEffects": 0,
+                  "apiCalls": 0
+                }
+              }
+            ],
+            "passed": 5,
+            "failed": 0,
+            "skipped": 0
+          },
+          {
+            "name": "Screen Mount API Behavior",
+            "description": "Verify single API call on screen mount",
+            "critical": true,
+            "tests": [
+              {
+                "name": "mount_POSScreen.js",
+                "status": "failed",
+                "message": "No mount effects with API calls found",
+                "details": {
+                  "mountEffects": 0
+                }
+              },
+              {
+                "name": "mount_OrdersScreen.js",
+                "status": "passed",
+                "message": "Single mount effect with API calls found",
+                "details": {
+                  "mountEffects": 1,
+                  "apiCalls": 0
+                }
+              },
+              {
+                "name": "mount_InventoryScreen.js",
+                "status": "passed",
+                "message": "Single mount effect with API calls found",
+                "details": {
+                  "mountEffects": 1,
+                  "apiCalls": 1
+                }
+              }
+            ],
+            "passed": 2,
+            "failed": 1,
+            "skipped": 0
+          },
+          {
+            "name": "Context Usage Validation",
+            "description": "Verify contexts are used instead of direct API calls",
+            "critical": false,
+            "tests": [
+              {
+                "name": "context_StoreSettingsContext",
+                "status": "failed",
+                "message": "4 files bypass StoreSettingsContext",
+                "details": {
+                  "directAPIFiles": 7,
+                  "contextFiles": 23,
+                  "violations": 4,
+                  "violatingFiles": [
+                    "src\\utils\\APIDeduplicator.js",
+                    "src\\utils\\CallCounter.js",
+                    "src\\utils\\NetworkBehaviorMonitor.js",
+                    "src\\utils\\__tests__\\utilities.test.js"
+                  ]
+                }
+              },
+              {
+                "name": "context_SubscriptionContext",
+                "status": "failed",
+                "message": "4 files bypass SubscriptionContext",
+                "details": {
+                  "directAPIFiles": 4,
+                  "contextFiles": 6,
+                  "violations": 4,
+                  "violatingFiles": [
+                    "src\\utils\\APIDeduplicator.js",
+                    "src\\utils\\CallCounter.js",
+                    "src\\utils\\NetworkBehaviorMonitor.js",
+                    "src\\utils\\__tests__\\utilities.test.js"
+                  ]
+                }
+              },
+              {
+                "name": "context_AppSettingsContext",
+                "status": "failed",
+                "message": "1 files bypass AppSettingsContext",
+                "details": {
+                  "directAPIFiles": 1,
+                  "contextFiles": 8,
+                  "violations": 1,
+                  "violatingFiles": [
+                    "src\\utils\\NetworkBehaviorMonitor.js"
+                  ]
+                }
+              }
+            ],
+            "passed": 0,
+            "failed": 3,
+            "skipped": 0
+          },
+          {
+            "name": "Parent-Child API Ownership",
+            "description": "Verify only parent components make API calls",
+            "critical": true,
+            "tests": [
+              {
+                "name": "parent_child_CartScreen.js",
+                "status": "failed",
+                "message": "Parent: 23 calls, Children: 9 calls",
+                "details": {
+                  "parentAPICalls": 23,
+                  "childAPICalls": 9,
+                  "childComponents": 5
+                }
+              },
+              {
+                "name": "parent_child_AnalyticsScreen.js",
+                "status": "failed",
+                "message": "Parent: 25 calls, Children: 1 calls",
+                "details": {
+                  "parentAPICalls": 25,
+                  "childAPICalls": 1,
+                  "childComponents": 2
+                }
+              },
+              {
+                "name": "parent_child_ManageScreen.js",
+                "status": "failed",
+                "message": "Parent: 21 calls, Children: 2 calls",
+                "details": {
+                  "parentAPICalls": 21,
+                  "childAPICalls": 2,
+                  "childComponents": 4
+                }
+              }
+            ],
+            "passed": 0,
+            "failed": 3,
+            "skipped": 0
+          },
+          {
+            "name": "User Action Immediacy",
+            "description": "Verify user actions trigger immediate API calls",
+            "critical": true,
+            "tests": [
+              {
+                "name": "user_create",
+                "status": "passed",
+                "message": "User create actions execute immediately (static analysis)",
+                "details": {
+                  "actionType": "create",
+                  "method": "static_analysis"
+                }
+              },
+              {
+                "name": "user_update",
+                "status": "passed",
+                "message": "User update actions execute immediately (static analysis)",
+                "details": {
+                  "actionType": "update",
+                  "method": "static_analysis"
+                }
+              },
+              {
+                "name": "user_refresh",
+                "status": "passed",
+                "message": "User refresh actions execute immediately (static analysis)",
+                "details": {
+                  "actionType": "refresh",
+                  "method": "static_analysis"
+                }
+              }
+            ],
+            "passed": 3,
+            "failed": 0,
+            "skipped": 0
+          }
+        ],
+        "summary": {
+          "total": 17,
+          "passed": 10,
+          "failed": 7,
+          "skipped": 0
+        }
+      },
+      "timestamp": "2026-01-08T07:05:21.683Z"
+    },
+    "runtimeMonitoring": {
+      "status": "CONFIGURED",
+      "instructions": [
+        "NetworkBehaviorMonitor has been created in src/utils/",
+        "Monitor can be integrated into App.js for runtime validation",
+        "Use networkBehaviorMonitor.getValidationSummary() to check status",
+        "Monitor will log violations in development mode"
+      ],
+      "integrationCode": "// Add to App.js for runtime monitoring\nimport { networkBehaviorMonitor } from './src/utils/NetworkBehaviorMonitor';\n\n// In your main App component\nuseEffect(() => {\n  if (__DEV__) {\n    // Enable monitoring in development\n    networkBehaviorMonitor.setEnabled(true);\n    \n    // Optional: Log periodic summaries\n    const interval = setInterval(() => {\n      const summary = networkBehaviorMonitor.getValidationSummary();\n      if (summary.violations.length > 0) {\n        console.warn('🚨 Network behavior violations detected:', summary);\n      }\n    }, 60000); // Check every minute\n    \n    return () => clearInterval(interval);\n  }\n}, []);\n\n// Optional: Add to navigation container to track screen visits\nconst onStateChange = (state) => {\n  if (__DEV__ && state) {\n    const currentScreen = getCurrentScreenName(state);\n    networkBehaviorMonitor.recordScreenVisit(currentScreen, 'navigation');\n  }\n};",
+      "timestamp": "2026-01-08T07:05:21.684Z"
+    }
+  },
+  "summary": {
+    "overallPassed": false,
+    "criticalIssues": 2,
+    "warningIssues": 27,
+    "validationsPassed": 1,
+    "validationsTotal": 3
+  }
+}

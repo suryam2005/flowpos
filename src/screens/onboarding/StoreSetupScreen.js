@@ -8,6 +8,7 @@ import {
   ScrollView,
   KeyboardAvoidingView,
   Platform,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -17,6 +18,7 @@ import CustomAlert from '../../components/CustomAlert';
 import { colors, componentColors } from '../../styles/colors';
 import { createButtonStyle, createButtonTextStyle, createCardStyle, createInputStyle } from '../../styles/theme';
 import { getCurrencySymbol, getSupportedCurrencies } from '../../utils/currencyUtils';
+import notificationPaymentReader from '../../services/NotificationPaymentReader';
 
 const StoreSetupScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -437,6 +439,21 @@ const StoreSetupScreen = ({ navigation }) => {
                       } else {
                         // Add method
                         newMethods = [...currentMethods, method.id];
+                        
+                        // Prompt for notification access when QR Pay is enabled (for auto payment detection)
+                        if (method.id === 'QR Pay' && Platform.OS === 'android') {
+                          notificationPaymentReader.promptNotificationAccess().then((granted) => {
+                            if (granted) {
+                              console.log('✅ Notification access granted for payment detection');
+                            } else {
+                              Alert.alert(
+                                'Auto Payment Detection',
+                                'For automatic payment detection from GPay, PhonePe, and Paytm, you can enable notification access later in Settings.\n\nYou can still confirm payments manually.',
+                                [{ text: 'OK' }]
+                              );
+                            }
+                          });
+                        }
                       }
                       
                       updateStoreData('paymentMethods', newMethods);

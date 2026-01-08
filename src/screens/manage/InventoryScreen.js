@@ -23,10 +23,6 @@ import useInteractiveTour from '../../hooks/useInteractiveTour';
 import actionDetectorService, { ACTION_TYPES } from '../../services/ActionDetectorService';
 import InteractiveTourOverlay from '../../components/InteractiveTourOverlay';
 
-// Staleness threshold for focus refresh (5 minutes in milliseconds)
-// API Optimization: Only refresh if cache is older than this threshold
-const FOCUS_STALENESS_THRESHOLD_MS = 5 * 60 * 1000;
-
 const InventoryScreen = ({ isActive, onTourAction }) => {
   const { saveProducts: syncProducts } = useDataSync();
   const [products, setProducts] = useState([]);
@@ -119,29 +115,20 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
     handleStockUpdate();
   }, [showTour, currentStep, notifyAction]);
 
+  // Mount-based data fetching with simple guard for rapid remount
   useEffect(() => {
+    const now = Date.now();
+    const timeSinceLastFetch = now - lastFetchRef.current;
+    
+    // Simple guard: skip if fetched recently (within 30 seconds)
+    if (lastFetchRef.current && timeSinceLastFetch < 30000) {
+      console.log('📦 [Inventory] Mount - data recently fetched, skipping API call');
+      return;
+    }
+    
+    console.log('📦 [Inventory] Mount - loading products');
     loadProducts();
-  }, []);
-
-  // Refresh when tab becomes active
-  // OPTIMIZED: Only refresh if cache is stale (older than 5 minutes)
-  useEffect(() => {
-    if (isActive && hasLoadedOnce.current) {
-      const now = Date.now();
-      const timeSinceLastFetch = now - lastFetchRef.current;
-      const isStale = timeSinceLastFetch > FOCUS_STALENESS_THRESHOLD_MS;
-      
-      if (isStale) {
-        console.log('📦 [Inventory] Tab became active - cache stale, refreshing silently');
-        loadProducts(false); // Silent refresh without loader
-      } else {
-        console.log('📦 [Inventory] Tab became active - cache fresh, skipping API call');
-      }
-    }
-    if (isActive) {
-      hasLoadedOnce.current = true;
-    }
-  }, [isActive]);
+  }, []); // Phase 1 Optimization: Empty dependency array for mount-only behavior
 
   const loadProducts = async (isRefresh = false) => {
     if (isRefresh) {
@@ -271,7 +258,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
             { 
               text: 'Refresh Again', 
               onPress: () => {
-                // Retry refresh
+                // Phase 1 Optimization: Single refresh call, no duplicate
                 loadProducts(true);
               }
             }

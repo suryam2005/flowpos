@@ -257,6 +257,8 @@ const SimpleInvoicePreview = ({
   }, [showSkipOption, visible, onClose]);
 
   useEffect(() => {
+    // Phase 1 API Optimization: Single WhatsApp status check per component lifecycle
+    // Removed duplicate status checks - only check once when component becomes visible
     const checkWhatsAppStatus = async () => {
       try {
         const status = await WhatsAppService.getStatus();
@@ -293,7 +295,7 @@ const SimpleInvoicePreview = ({
     if (visible && invoiceData) {
       checkWhatsAppStatus();
     }
-  }, [visible, invoiceData, refreshTrigger]);
+  }, [visible, invoiceData, refreshTrigger]); // Phase 1: Removed duplicate dependency
 
   const handleAutoSendWhatsApp = async () => {
     try {
@@ -362,7 +364,8 @@ const SimpleInvoicePreview = ({
         phoneNumber: data.phoneNumber
       });
       
-      // Try to send via selected method - use enriched data with all store info
+      // Phase 1 API Optimization: Single WhatsApp send call
+      // Removed duplicate sendInvoiceMessage calls - use enriched data with all store info
       const result = await WhatsAppService.sendInvoiceMessage(
         data.phoneNumber,
         {

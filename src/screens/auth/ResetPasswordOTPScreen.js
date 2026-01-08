@@ -27,15 +27,16 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
   const [resendAttempts, setResendAttempts] = useState(0);
   const [maxAttempts] = useState(3);
   const [showExpiryModal, setShowExpiryModal] = useState(false);
+  const [isVerified, setIsVerified] = useState(false); // Track if OTP is verified
   
   const inputRefs = useRef([]);
 
-  // ALWAYS block back navigation on OTP screen - user must complete verification
-  // This prevents the issue of going back and triggering resend OTP again
-  useBackPrevention(true, {
+  // Block back navigation ONLY when not verified yet
+  // Once OTP is verified, allow navigation to proceed normally
+  useBackPrevention(!isVerified, {
     message: 'Please complete OTP verification. Going back will require you to restart the password reset process.',
     title: 'Complete Verification',
-    hardBlock: true, // Always hard block - no back allowed
+    hardBlock: true, // Hard block until verified
     showAlert: true,
   });
 
@@ -100,6 +101,9 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
     setIsLoading(true);
     try {
       await verifyResetOTP(email, codeToVerify);
+      
+      // Mark as verified BEFORE navigation to disable back prevention
+      setIsVerified(true);
       
       // Navigate to new password screen
       navigation.navigate('NewPassword', {

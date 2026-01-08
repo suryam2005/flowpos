@@ -130,8 +130,25 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   const summaryCardsRef = useRef(null);
 
   useEffect(() => {
-    // Load analytics data when period changes
-    loadAdvancedAnalytics();
+    // Check if data was passed from parent AnalyticsScreen to avoid duplicate API calls
+    if (route?.params?.ordersData && route?.params?.productsData) {
+      console.log('📈 [AdvancedAnalytics] Using data passed from parent AnalyticsScreen');
+      
+      // Use passed data instead of making API calls
+      setOrders(route.params.ordersData);
+      setProducts(route.params.productsData);
+      
+      // Initialize filteredData with passed orders
+      setFilteredData(route.params.ordersData);
+      
+      // Process the passed data for advanced analytics
+      processPassedData(route.params.ordersData, route.params.productsData);
+      
+      setIsLoading(false);
+    } else {
+      // Fallback: Load analytics data when no data is passed or period changes
+      loadAdvancedAnalytics();
+    }
   }, [selectedPeriod]);
 
   // Check if tour should auto-start when initialized
@@ -299,7 +316,96 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   };
 
   const onRefresh = () => {
+    // Always make fresh API calls on user-triggered refresh, regardless of passed data
     loadAdvancedAnalytics(true);
+  };
+
+  // Process data passed from parent AnalyticsScreen to avoid duplicate API calls
+  const processPassedData = (ordersData, productsData) => {
+    try {
+      console.log('📈 [AdvancedAnalytics] Processing passed data:', ordersData.length, 'orders,', productsData.length, 'products');
+      
+      // Calculate analytics for all periods using passed data
+      const dailyAnalytics = calculatePeriodAnalytics(ordersData, 'daily');
+      const weeklyAnalytics = calculatePeriodAnalytics(ordersData, 'weekly');
+      const monthlyAnalytics = calculatePeriodAnalytics(ordersData, 'monthly');
+      const yearlyAnalytics = calculatePeriodAnalytics(ordersData, 'yearly');
+      const totalRevenue = ordersData.reduce((sum, o) => sum + (o.total || 0), 0);
+      
+      // Calculate advanced metrics
+      const topProducts = calculateTopProducts(ordersData);
+      const categoryBreakdown = calculateCategoryBreakdown(ordersData, productsData);
+      const peakHours = calculatePeakHours(ordersData);
+      const performanceMetrics = calculatePerformanceMetrics(ordersData, productsData);
+      
+      // Generate chart data
+      const revenueTrends = generateRevenueTrends(ordersData, selectedPeriod);
+      const orderTrends = generateOrderTrends(ordersData, selectedPeriod);
+      const productPerformance = generateProductPerformance(ordersData, productsData);
+      const comparisons = generateComparisons(ordersData, selectedPeriod);
+      
+      // Update analytics state
+      setAnalytics({
+        dailyRevenue: Number(dailyAnalytics.revenue || 0),
+        weeklyRevenue: Number(weeklyAnalytics.revenue || 0),
+        monthlyRevenue: Number(monthlyAnalytics.revenue || 0),
+        yearlyRevenue: Number(yearlyAnalytics.revenue || 0),
+        totalRevenue: Number(totalRevenue || 0),
+        revenueGrowth: calculateGrowthRate(weeklyAnalytics.revenue, monthlyAnalytics.revenue),
+        
+        dailyOrders: Number(dailyAnalytics.orderCount || 0),
+        weeklyOrders: Number(weeklyAnalytics.orderCount || 0),
+        monthlyOrders: Number(monthlyAnalytics.orderCount || 0),
+        yearlyOrders: Number(yearlyAnalytics.orderCount || 0),
+        totalOrders: Number(ordersData.length || 0),
+        avgOrderValue: ordersData.length > 0 ? Math.round(totalRevenue / ordersData.length) : 0,
+        orderGrowth: calculateGrowthRate(weeklyAnalytics.orderCount, monthlyAnalytics.orderCount),
+        
+        totalProducts: Number(productsData.length || 0),
+        topProducts: topProducts || [],
+        categoryBreakdown: categoryBreakdown || [],
+        itemsSold: calculateTotalItemsSold(ordersData),
+        inventoryTurnover: calculateInventoryTurnover(ordersData, productsData),
+        
+        peakHours: peakHours || [],
+        customerSegments: [],
+        seasonalTrends: [],
+        performanceMetrics: performanceMetrics || [],
+        
+        // Calculate period-specific analytics based on selectedPeriod
+        periodRevenue: selectedPeriod === 'daily' ? Number(dailyAnalytics.revenue || 0) :
+                      selectedPeriod === 'weekly' ? Number(weeklyAnalytics.revenue || 0) :
+                      selectedPeriod === 'monthly' ? Number(monthlyAnalytics.revenue || 0) :
+                      Number(yearlyAnalytics.revenue || 0),
+        periodOrders: selectedPeriod === 'daily' ? Number(dailyAnalytics.orderCount || 0) :
+                     selectedPeriod === 'weekly' ? Number(weeklyAnalytics.orderCount || 0) :
+                     selectedPeriod === 'monthly' ? Number(monthlyAnalytics.orderCount || 0) :
+                     Number(yearlyAnalytics.orderCount || 0),
+        periodAvgOrderValue: selectedPeriod === 'daily' ? Number(dailyAnalytics.avgOrderValue || 0) :
+                            selectedPeriod === 'weekly' ? Number(weeklyAnalytics.avgOrderValue || 0) :
+                            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.avgOrderValue || 0) :
+                            Number(yearlyAnalytics.avgOrderValue || 0),
+        totalItems: selectedPeriod === 'daily' ? Number(dailyAnalytics.totalItems || 0) :
+                   selectedPeriod === 'weekly' ? Number(weeklyAnalytics.totalItems || 0) :
+                   selectedPeriod === 'monthly' ? Number(monthlyAnalytics.totalItems || 0) :
+                   Number(yearlyAnalytics.totalItems || 0),
+      });
+      
+      // Update chart data
+      setChartData({
+        revenueTrends: revenueTrends || [],
+        orderTrends: orderTrends || [],
+        productPerformance: productPerformance || [],
+        comparisons: comparisons || [],
+        insights: []
+      });
+      
+      console.log('📈 [AdvancedAnalytics] Successfully processed passed data');
+    } catch (error) {
+      console.error('Error processing passed data:', error);
+      // Fallback to loading data via API
+      loadAdvancedAnalytics();
+    }
   };
 
   // Helper Functions for Advanced Analytics

@@ -2,14 +2,25 @@ import { Platform, PermissionsAndroid, Alert } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as Notifications from 'expo-notifications';
 
+// Import Android SMS Listener for payment detection
+let SmsListener = null;
+if (Platform.OS === 'android') {
+  try {
+    SmsListener = require('react-native-android-sms-listener').default;
+  } catch (e) {
+    console.log('SMS Listener not available:', e.message);
+  }
+}
+
 class NotificationPaymentReader {
   constructor() {
     this.isListening = false;
     this.activePayments = new Map();
     this.listeners = new Set();
     this.notificationListener = null;
-    this.smsListener = null;
+    this.smsSubscription = null;
     this.lastProcessedNotifications = new Set();
+    this.lastProcessedSMS = new Set();
     this.notificationHistory = [];
   }
 
@@ -56,6 +67,8 @@ class NotificationPaymentReader {
       const { status: notificationStatus } = await Notifications.requestPermissionsAsync();
       const hasNotificationPermissions = notificationStatus === 'granted';
 
+      let hasSMSPermissions = false;
+
       if (Platform.OS === 'android') {
         // Request SMS permissions for Android
         const smsPermissions = await PermissionsAndroid.requestMultiple([
@@ -69,7 +82,7 @@ class NotificationPaymentReader {
           buttonPositive: 'Allow',
         });
 
-        const hasSMSPermissions = 
+        hasSMSPermissions = 
           smsPermissions['android.permission.READ_SMS'] === PermissionsAndroid.RESULTS.GRANTED &&
           smsPermissions['android.permission.RECEIVE_SMS'] === PermissionsAndroid.RESULTS.GRANTED;
 
@@ -197,7 +210,7 @@ class NotificationPaymentReader {
     if (text.includes('bank') || text.includes('account')) confidence += 5;
 
     // Amount format confidence
-    if (amount && amount.toString().includes('.')) confidence += 5; // Decimal amounts are more specific
+    if (amount && amount.toString().includes('.')) confidence += 5;
 
     return Math.min(confidence, 100);
   }
@@ -239,7 +252,6 @@ class NotificationPaymentReader {
     const receivedAmount = Math.round(parsedPayment.amount);
     
     if (expectedAmount !== receivedAmount) {
-      // Amount doesn't match - return 0 confidence
       return 0;
     }
     
@@ -248,10 +260,10 @@ class NotificationPaymentReader {
 
     // Time proximity bonus (up to 20%)
     const timeDiff = Date.now() - activePayment.timestamp;
-    if (timeDiff < 1 * 60 * 1000) confidence += 20;       // Within 1 minute
-    else if (timeDiff < 2 * 60 * 1000) confidence += 15;  // Within 2 minutes
-    else if (timeDiff < 5 * 60 * 1000) confidence += 10;  // Within 5 minutes
-    else if (timeDiff < 10 * 60 * 1000) confidence += 5;  // Within 10 minutes
+    if (timeDiff < 1 * 60 * 1000) confidence += 20;
+    else if (timeDiff < 2 * 60 * 1000) confidence += 15;
+    else if (timeDiff < 5 * 60 * 1000) confidence += 10;
+    else if (timeDiff < 10 * 60 * 1000) confidence += 5;
 
     // Content quality bonus (up to 10%)
     if (parsedPayment.confidence >= 80) confidence += 10;
@@ -260,42 +272,28 @@ class NotificationPaymentReader {
     return Math.min(confidence, 100);
   }
 
-  // Start listening for notifications and SMS
+  // Start listening for SMS payments
   async startListening() {
     if (this.isListening) {
       return true;
     }
 
-    console.log('🔄 Starting notification payment reader...');
+    console.log('🔄 Starting payment reader (SMS-based)...');
 
     const permissions = await this.requestPermissions();
     
     try {
-      // Start notification listening if permissions granted
-      if (permissions.notifications) {
-        this.startNotificationListening();
-        console.log('✅ Notification listening started');
-      } else {
-        console.log('⚠️ Notification permissions not granted');
-      }
-
       // Start SMS listening (Android only)
       if (permissions.sms && Platform.OS === 'android') {
         this.startSMSListening();
         console.log('✅ SMS listening started');
-      } else {
-        console.log('⚠️ SMS listening not available on this platform');
-      }
-
-      // Start even if only one permission is granted
-      if (permissions.notifications || permissions.sms) {
         this.isListening = true;
-        console.log('✅ Payment reader started with available permissions');
         return true;
-      } else {
+      } else if (Platform.OS === 'android') {
+        console.log('⚠️ SMS permissions not granted');
         Alert.alert(
-          'Permissions Required',
-          'To automatically detect UPI payments, please grant notification or SMS permissions. This allows FlowPOS to detect payment confirmations automatically.',
+          'SMS Permission Required',
+          'To automatically detect UPI payments from bank SMS, please grant SMS permissions. This allows FlowPOS to detect payment confirmations automatically.',
           [
             { text: 'Continue Manually', style: 'cancel' },
             { text: 'Grant Permissions', onPress: () => this.requestPermissions() }
@@ -305,133 +303,72 @@ class NotificationPaymentReader {
         this.isListening = true;
         return true;
       }
+      
+      // For non-Android platforms, just enable manual mode
+      this.isListening = true;
+      return true;
     } catch (error) {
-      console.error('Error starting notification reader:', error);
+      console.error('Error starting payment reader:', error);
       return false;
     }
   }
 
-  // Start listening for notifications
-  startNotificationListening() {
+  // Start SMS listening (Android) - Uses react-native-android-sms-listener
+  startSMSListening() {
+    if (Platform.OS !== 'android' || !SmsListener) {
+      console.log('📨 SMS listening not available on this platform');
+      return;
+    }
+
     try {
-      // Listen for incoming notifications
-      this.notificationListener = Notifications.addNotificationReceivedListener(notification => {
-        this.processNotification(notification);
+      // Subscribe to incoming SMS messages
+      this.smsSubscription = SmsListener.addListener(message => {
+        console.log('📨 SMS received:', message.originatingAddress);
+        this.processSMSMessage(message.body, message.originatingAddress, Date.now());
       });
 
-      console.log('📱 Notification listener started');
+      console.log('📨 ✅ Real SMS listener started successfully');
     } catch (error) {
-      console.error('Error starting notification listener:', error);
+      console.error('❌ Error starting SMS listener:', error);
     }
   }
 
-  // Process incoming notification
-  processNotification(notification) {
+  // Process incoming SMS
+  processSMSMessage(messageBody, sender, timestamp) {
     try {
-      const notificationId = notification.request.identifier;
+      // Create unique ID for this SMS to prevent duplicate processing
+      const smsId = `${sender}_${timestamp}_${messageBody.substring(0, 20)}`;
       
-      // Prevent duplicate processing
-      if (this.lastProcessedNotifications.has(notificationId)) {
+      if (this.lastProcessedSMS.has(smsId)) {
+        console.log('📨 Skipping duplicate SMS');
         return;
       }
       
-      this.lastProcessedNotifications.add(notificationId);
+      this.lastProcessedSMS.add(smsId);
       
-      // Keep only last 100 notification IDs to prevent memory issues
-      if (this.lastProcessedNotifications.size > 100) {
-        const firstId = this.lastProcessedNotifications.values().next().value;
-        this.lastProcessedNotifications.delete(firstId);
+      // Keep only last 50 SMS IDs to prevent memory issues
+      if (this.lastProcessedSMS.size > 50) {
+        const firstId = this.lastProcessedSMS.values().next().value;
+        this.lastProcessedSMS.delete(firstId);
       }
 
-      console.log('📱 Processing notification:', notification.request.content.title);
-
-      // Extract notification content
-      const title = notification.request.content.title || '';
-      const body = notification.request.content.body || '';
-      const content = `${title} ${body}`;
-
-      // Parse payment information
-      const parsedPayment = this.parsePaymentContent(content, 'notification');
-      
-      if (parsedPayment) {
-        // Add notification metadata
-        parsedPayment.notificationId = notificationId;
-        parsedPayment.appName = this.extractAppName(title, body);
-        
-        this.processPaymentConfirmation(parsedPayment);
-      }
-    } catch (error) {
-      console.error('Error processing notification:', error);
-    }
-  }
-
-  // Extract app name from notification
-  extractAppName(title, body) {
-    const content = `${title} ${body}`.toLowerCase();
-    
-    if (content.includes('google pay') || content.includes('gpay')) return 'Google Pay';
-    if (content.includes('phonepe')) return 'PhonePe';
-    if (content.includes('paytm')) return 'Paytm';
-    if (content.includes('bhim')) return 'BHIM UPI';
-    if (content.includes('amazon pay')) return 'Amazon Pay';
-    if (content.includes('mobikwik')) return 'MobiKwik';
-    if (content.includes('freecharge')) return 'FreeCharge';
-    
-    return 'UPI App';
-  }
-
-  // Start SMS listening (Android)
-  startSMSListening() {
-    // Enhanced SMS listening with better pattern recognition
-    this.smsCheckInterval = setInterval(() => {
-      this.checkRecentSMS();
-    }, 2000); // Check every 2 seconds for faster detection
-
-    console.log('📨 Enhanced SMS listener started');
-  }
-
-  // Process incoming SMS (enhanced implementation)
-  processSMSMessage(messageBody, sender, timestamp) {
-    try {
       console.log('📨 Processing SMS from:', sender);
+      console.log('📨 SMS Content:', messageBody.substring(0, 100) + '...');
 
       // Check if it's a payment confirmation SMS
       const parsedPayment = this.parsePaymentContent(messageBody, 'sms');
       
       if (parsedPayment) {
-        // Add sender and timestamp info
+        console.log('💰 Payment detected in SMS:', parsedPayment);
         parsedPayment.sender = parsedPayment.sender || sender;
         parsedPayment.timestamp = timestamp || Date.now();
         
         this.processPaymentConfirmation(parsedPayment);
+      } else {
+        console.log('📨 SMS does not contain payment info');
       }
     } catch (error) {
       console.error('Error processing SMS:', error);
-    }
-  }
-
-  // Check recent SMS messages
-  async checkRecentSMS() {
-    try {
-      // This is a simplified implementation
-      // In production, you'd want to use a native module for real SMS access
-      const recentSMS = await AsyncStorage.getItem('recentSMSMessages');
-      
-      if (recentSMS) {
-        const messages = JSON.parse(recentSMS);
-        const now = Date.now();
-        
-        // Process messages from last 3 minutes for faster detection
-        const recentMessages = messages.filter(msg => 
-          now - msg.timestamp < 3 * 60 * 1000
-        );
-
-        for (const sms of recentMessages) {
-          this.processSMSMessage(sms.body, sms.sender, sms.timestamp);
-        }
-      }
-    } catch (error) {
-      console.error('Error checking SMS:', error);
     }
   }
 
@@ -515,14 +452,15 @@ class NotificationPaymentReader {
       this.notificationListener = null;
     }
 
-    // Stop SMS checking
-    if (this.smsCheckInterval) {
-      clearInterval(this.smsCheckInterval);
-      this.smsCheckInterval = null;
+    // Stop SMS listener subscription
+    if (this.smsSubscription) {
+      this.smsSubscription.remove();
+      this.smsSubscription = null;
+      console.log('📨 SMS listener stopped');
     }
 
     this.isListening = false;
-    console.log('🛑 Enhanced payment reader stopped');
+    console.log('🛑 Payment reader stopped');
   }
 
   // Clean up old payments
