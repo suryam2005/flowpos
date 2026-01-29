@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   View,
   Text,
@@ -18,45 +18,52 @@ import { safeGoBack } from '../utils/navigationUtils';
 import { colors } from '../styles/colors';
 import { spacing } from '../styles/spacingStyles';
 import featureService from '../services/FeatureService';
+import useFeatureFlags from '../hooks/useFeatureFlags';
 import { useAuth } from '../context/AuthContext';
 import { useAppSettingsContext } from '../context/AppSettingsContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { useSubscriptionContext } from '../context/SubscriptionContext';
-import tourProgressManager from '../services/TourProgressManager';
+// TOUR TEMPORARILY DISABLED
+// import tourProgressManager from '../services/TourProgressManager';
 
 const SettingsScreen = ({ navigation }) => {
   const { logout } = useAuth();
   const { settings, getSetting, updateSetting, isLoading: settingsLoading, refreshSettings } = useAppSettingsContext();
   const { getReceiptSettings, updateReceiptSettings } = useStoreSettings();
   const { subscription } = useSubscriptionContext();
-  
+
+  // Phase C Implementation: Use feature flag caching
+  const featureFlags = useFeatureFlags();
+
+  // Helper function to check if a feature is available based on subscription
   // Helper function to check if a feature is available based on subscription
   const canUseFeature = (featureName) => {
-    if (!subscription) {
-      // If subscription data is not loaded, allow all features (safe default)
-      return true;
-    }
-    
-    // Check if feature is available in current plan
-    return subscription.features?.[featureName] === true;
+    // Use FeatureService as the source of truth to ensure consistency across the app
+    // This allows the recent 'trial/enterprise' override in FeatureService to work here too
+    return featureService.canUseFeature(featureName);
   };
-  
+
   // Helper function to show upgrade prompt
   const showUpgradePrompt = (featureName) => {
     // For now, use the existing featureService method
     // TODO: This could be moved to SubscriptionContext in the future
     featureService.showUpgradePrompt(featureName);
   };
-  
+
   // Local state for UI (initialized to null - will be set from context)
   // Using null as initial state to distinguish "not loaded" from "loaded as false"
   const [autoPaymentDetection, setAutoPaymentDetection] = useState(null);
   const [notifications, setNotifications] = useState(null);
   const [requireCustomerDetails, setRequireCustomerDetails] = useState(null);
-  
+
   // Invoice Settings
   const [showStoreNameOnInvoice, setShowStoreNameOnInvoice] = useState(null);
-  
+
+  // Phase C Implementation: Cache feature flag evaluation results
+  const [canUseWhatsAppIntegration, setCanUseWhatsAppIntegration] = useState(false);
+  const [canUseCustomBranding, setCanUseCustomBranding] = useState(false);
+  const [canUseCustomizableInvoice, setCanUseCustomizableInvoice] = useState(false);
+
   // Receipt Settings (now from StoreSettingsContext)
   const [receiptSettings, setReceiptSettings] = useState({
     showAddress: true,
@@ -64,10 +71,13 @@ const SettingsScreen = ({ navigation }) => {
     showEmail: false,
     showGST: true,
   });
-  
+
   // WhatsApp Settings
   const [whatsappMethod, setWhatsappMethod] = useState(null);
   const [sendInvoiceEnabled, setSendInvoiceEnabled] = useState(null);
+
+  // Ref to track last loaded settings to prevent unnecessary reloads
+  const lastLoadedSettings = useRef(null);
 
   // Load settings from context on mount and when settings change
   useEffect(() => {
@@ -75,11 +85,45 @@ const SettingsScreen = ({ navigation }) => {
     loadReceiptSettings(); // Receipt settings still from AsyncStorage
   }, [settings]);
 
+  // Phase C Implementation: Evaluate feature flags once per render cycle
+  useEffect(() => {
+    const evaluateFeatureFlags = async () => {
+      try {
+        const [canUseWhatsApp, canUseBranding, canUseInvoice] = await Promise.all([
+          featureFlags.canUseFeature('whatsapp_integration'),
+          featureFlags.canUseFeature('custom_branding'),
+          featureFlags.canUseFeature('customizable_invoice')
+        ]);
+        setCanUseWhatsAppIntegration(canUseWhatsApp);
+        setCanUseCustomBranding(canUseBranding);
+        setCanUseCustomizableInvoice(canUseInvoice);
+      } catch (error) {
+        console.error('⚙️ [SettingsScreen] Error evaluating feature flags:', error);
+        // Fallback to direct service calls
+        setCanUseWhatsAppIntegration(featureService.canUseFeature('whatsapp_integration'));
+        setCanUseCustomBranding(featureService.canUseFeature('custom_branding'));
+        setCanUseCustomizableInvoice(featureService.canUseFeature('customizable_invoice'));
+      }
+    };
+    evaluateFeatureFlags();
+  }, [featureFlags]);
+
   // Reload settings when screen comes into focus
   useFocusEffect(
     useCallback(() => {
-      loadSettingsFromContext();
-      loadReceiptSettings();
+      // Only reload if settings have changed or are null (not loaded yet)
+      // This prevents overriding optimistic UI updates
+      const shouldReload = settings === null ||
+        (settings && JSON.stringify(settings) !== JSON.stringify(lastLoadedSettings.current));
+
+      if (shouldReload) {
+        console.log('[SettingsScreen] Reloading settings on focus');
+        loadSettingsFromContext();
+        loadReceiptSettings();
+        lastLoadedSettings.current = settings;
+      } else {
+        console.log('[SettingsScreen] Skipping settings reload - no changes detected');
+      }
     }, [settings])
   );
 
@@ -99,7 +143,7 @@ const SettingsScreen = ({ navigation }) => {
       console.log('[SettingsScreen] Settings not loaded yet, keeping current state');
       return;
     }
-    
+
     // Read from context cache (no async needed - already in memory)
     const autoDetection = getSetting('autoPaymentDetection');
     const notificationsValue = getSetting('notifications');
@@ -107,7 +151,7 @@ const SettingsScreen = ({ navigation }) => {
     const invoiceStoreName = getSetting('showStoreNameOnInvoice');
     const whatsappMethodValue = getSetting('whatsappMethod');
     const sendInvoiceValue = getSetting('sendInvoiceEnabled');
-    
+
     console.log('[SettingsScreen] Loading settings from context:', {
       autoDetection,
       notificationsValue,
@@ -116,7 +160,7 @@ const SettingsScreen = ({ navigation }) => {
       whatsappMethodValue,
       sendInvoiceValue
     });
-    
+
     // Update local state from context
     // If value is undefined (not set in DB), default to FALSE for auto-detection (safety)
     // Other settings default to true for better UX
@@ -149,49 +193,73 @@ const SettingsScreen = ({ navigation }) => {
    * Uses write-through cache update via context
    * Requests SMS permissions when enabled
    */
+
   const handleAutoPaymentDetectionToggle = async (value) => {
-    const previousValue = autoPaymentDetection;
+    console.log('🔄 [DEBUG] Toggle handler called with value:', value);
+    console.log('🔄 [DEBUG] Current autoPaymentDetection state:', autoPaymentDetection);
     
+    const previousValue = autoPaymentDetection;
+    console.log('🔄 [DEBUG] Previous value stored:', previousValue);
+
     // If turning ON, request permissions first
     if (value === true) {
       try {
+        console.log('🔄 [DEBUG] Attempting to turn ON auto payment detection');
+        
         // Import the notification payment reader to request permissions
-        const notificationPaymentReader = require('../services/NotificationPaymentReader').default;
-        
+        console.log('🔄 [DEBUG] Importing NotificationPaymentReader...');
+        const { default: notificationPaymentReader } = await import('../services/NotificationPaymentReader');
+        console.log('🔄 [DEBUG] NotificationPaymentReader imported successfully');
+
         // Request SMS permissions
+        console.log('🔄 [DEBUG] Requesting permissions...');
         const permissions = await notificationPaymentReader.requestPermissions();
-        
-        console.log('📱 Permission status:', permissions);
-        
+        console.log('🔄 [DEBUG] Permission status received:', permissions);
+
         // Check if SMS permission was granted
         if (!permissions.sms) {
+          console.log('🔄 [DEBUG] SMS permission not granted, showing alert');
           // Show alert explaining why permissions are needed
           Alert.alert(
             'SMS Permission Required',
             'To automatically detect UPI payments, FlowPOS needs SMS permission to read bank payment confirmations.\n\nPlease grant SMS permission to use this feature.',
             [
-              { 
-                text: 'Cancel', 
+              {
+                text: 'Cancel',
                 style: 'cancel',
                 onPress: () => {
+                  console.log('🔄 [DEBUG] User cancelled permission request');
                   // Don't enable the setting
                   setAutoPaymentDetection(false);
                 }
               },
-              { 
-                text: 'Try Again', 
+              {
+                text: 'Try Again',
                 onPress: async () => {
+                  console.log('🔄 [DEBUG] User wants to try permission request again');
                   // Try requesting permissions again
                   const retryPermissions = await notificationPaymentReader.requestPermissions();
+                  console.log('🔄 [DEBUG] Retry permission status:', retryPermissions);
                   if (retryPermissions.sms) {
+                    console.log('🔄 [DEBUG] Retry successful, enabling setting');
                     // Permissions granted, enable the setting
                     setAutoPaymentDetection(true);
                     const success = await updateSetting('autoPaymentDetection', true);
+                    console.log('🔄 [DEBUG] Setting update result:', success);
                     if (!success) {
+                      console.log('🔄 [DEBUG] Setting update failed, reverting');
                       setAutoPaymentDetection(false);
                       Alert.alert('Error', 'Failed to save setting.');
+                    } else {
+                      console.log('🔄 [DEBUG] Setting saved successfully');
+                      Alert.alert(
+                        'Payment Detection Enabled',
+                        'FlowPOS will now automatically detect UPI payment confirmations from bank SMS when you show a QR code.',
+                        [{ text: 'OK' }]
+                      );
                     }
                   } else {
+                    console.log('🔄 [DEBUG] Retry failed, keeping disabled');
                     setAutoPaymentDetection(false);
                   }
                 }
@@ -200,14 +268,21 @@ const SettingsScreen = ({ navigation }) => {
           );
           return;
         }
-        
+
+        console.log('🔄 [DEBUG] SMS permission granted, proceeding with enable');
         // SMS permission granted, proceed with enabling
         setAutoPaymentDetection(true);
+        console.log('🔄 [DEBUG] State updated to true, calling updateSetting');
+        
         const success = await updateSetting('autoPaymentDetection', true);
+        console.log('🔄 [DEBUG] updateSetting result:', success);
+        
         if (!success) {
+          console.log('🔄 [DEBUG] updateSetting failed, reverting state');
           setAutoPaymentDetection(previousValue);
           Alert.alert('Error', 'Failed to save setting. Please try again.');
         } else {
+          console.log('🔄 [DEBUG] Setting saved successfully, showing success message');
           // Show success message
           Alert.alert(
             'Payment Detection Enabled',
@@ -216,17 +291,25 @@ const SettingsScreen = ({ navigation }) => {
           );
         }
       } catch (error) {
-        console.error('Error requesting permissions:', error);
+        console.error('🔄 [DEBUG] Error in toggle handler:', error);
         setAutoPaymentDetection(previousValue);
         Alert.alert('Error', 'Failed to request permissions. Please try again.');
       }
     } else {
+      console.log('🔄 [DEBUG] Attempting to turn OFF auto payment detection');
       // Turning OFF - just update the setting
       setAutoPaymentDetection(value);
+      console.log('🔄 [DEBUG] State updated to false, calling updateSetting');
+      
       const success = await updateSetting('autoPaymentDetection', value);
+      console.log('🔄 [DEBUG] updateSetting result:', success);
+      
       if (!success) {
+        console.log('🔄 [DEBUG] updateSetting failed, reverting state');
         setAutoPaymentDetection(previousValue);
         Alert.alert('Error', 'Failed to save setting. Please try again.');
+      } else {
+        console.log('🔄 [DEBUG] Setting disabled successfully');
       }
     }
   };
@@ -239,7 +322,7 @@ const SettingsScreen = ({ navigation }) => {
     const previousValue = notifications;
     // Optimistic UI update
     setNotifications(value);
-    
+
     // Write-through to backend via context
     const success = await updateSetting('notifications', value);
     if (!success) {
@@ -257,7 +340,7 @@ const SettingsScreen = ({ navigation }) => {
     const previousValue = requireCustomerDetails;
     // Optimistic UI update
     setRequireCustomerDetails(value);
-    
+
     // Write-through to backend via context
     const success = await updateSetting('requireCustomerDetails', value);
     if (!success) {
@@ -275,7 +358,7 @@ const SettingsScreen = ({ navigation }) => {
     const previousValue = showStoreNameOnInvoice;
     // Optimistic UI update
     setShowStoreNameOnInvoice(value);
-    
+
     // Write-through to backend via context
     const success = await updateSetting('showStoreNameOnInvoice', value);
     if (!success) {
@@ -293,7 +376,7 @@ const SettingsScreen = ({ navigation }) => {
     const previousValue = whatsappMethod;
     // Optimistic UI update
     setWhatsappMethod(method);
-    
+
     // Write-through to backend via context
     const success = await updateSetting('whatsappMethod', method);
     if (!success) {
@@ -302,7 +385,7 @@ const SettingsScreen = ({ navigation }) => {
       Alert.alert('Error', 'Failed to save setting. Please try again.');
       return;
     }
-    
+
     // Also update the WhatsApp service
     const WhatsAppService = require('../services/WhatsAppService').default;
     await WhatsAppService.setWhatsAppMethod(method);
@@ -316,7 +399,7 @@ const SettingsScreen = ({ navigation }) => {
     const previousValue = sendInvoiceEnabled;
     // Optimistic UI update
     setSendInvoiceEnabled(value);
-    
+
     // Write-through to backend via context
     const success = await updateSetting('sendInvoiceEnabled', value);
     if (!success) {
@@ -325,7 +408,7 @@ const SettingsScreen = ({ navigation }) => {
       Alert.alert('Error', 'Failed to save setting. Please try again.');
       return;
     }
-    
+
     // Also update the WhatsApp service
     const WhatsAppService = require('../services/WhatsAppService').default;
     await WhatsAppService.setSendInvoiceEnabled(value);
@@ -338,7 +421,7 @@ const SettingsScreen = ({ navigation }) => {
   const handleReceiptSettingChange = async (settingKey, value) => {
     const newReceiptSettings = { ...receiptSettings, [settingKey]: value };
     setReceiptSettings(newReceiptSettings);
-    
+
     try {
       // Write-through to backend via StoreSettingsContext
       const result = await updateReceiptSettings({ [settingKey]: value });
@@ -364,7 +447,7 @@ const SettingsScreen = ({ navigation }) => {
 
   const handleResetAllData = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    
+
     Alert.alert(
       'Reset All Data',
       'This will log you out of the app. You can log back in anytime with your credentials.\n\nYour data remains safe on the server.',
@@ -382,10 +465,10 @@ const SettingsScreen = ({ navigation }) => {
   const performLogout = async () => {
     try {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
-      
+
       // Simply logout the user
       await logout();
-      
+
       Alert.alert(
         'Logged Out',
         'You have been logged out successfully. You can log back in anytime.',
@@ -419,9 +502,11 @@ const SettingsScreen = ({ navigation }) => {
       'Need help? Contact our support team.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Email Support', onPress: () => {
-          Alert.alert('Email', 'support@flowpos.com\n\nPlease describe your issue in detail.');
-        }},
+        {
+          text: 'Email Support', onPress: () => {
+            Alert.alert('Email', 'support@flowpos.com\n\nPlease describe your issue in detail.');
+          }
+        },
       ]
     );
   };
@@ -436,27 +521,26 @@ const SettingsScreen = ({ navigation }) => {
   const handleShowAppTour = async () => {
     Alert.alert(
       'Restart App Tour',
-      'Would you like to restart the app tour? This will reset all tour progress and guide you through all features from the beginning.',
+      'Would you like to restart the simple app tour? This will reset all tour progress and guide you through the key features.',
       [
         { text: 'Cancel', style: 'cancel' },
-        { 
-          text: 'Restart Tour', 
+        {
+          text: 'Restart Tour',
           onPress: async () => {
             try {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium);
-              console.log('🎯 [Settings] Resetting all tour progress via TourProgressManager');
-              
-              // Reset all tour progress using TourProgressManager
-              await tourProgressManager.resetAllProgress();
-              
-              console.log('🎯 [Settings] Tour progress reset complete, navigating to POS');
-              
-              // Navigate to POS screen and trigger tour
-              navigation.navigate('Main', { 
-                screen: 'POS',
-                params: { startTour: true }
+              console.log('🎯 [Settings] Resetting simple tour progress');
+
+              // Reset simple tour progress
+              await AsyncStorage.removeItem('@flowpos_simple_tour_completed');
+
+              console.log('🎯 [Settings] Simple tour progress reset complete, navigating to POS');
+
+              // Navigate to POS screen to start tour
+              navigation.navigate('Main', {
+                screen: 'POS'
               });
-              
+
             } catch (error) {
               console.error('Error resetting tour status:', error);
               Alert.alert('Error', 'Failed to restart tour. Please try again.');
@@ -473,9 +557,11 @@ const SettingsScreen = ({ navigation }) => {
       'Enjoying FlowPOS? Please rate us on the Play Store!',
       [
         { text: 'Later', style: 'cancel' },
-        { text: 'Rate Now', onPress: () => {
-          Alert.alert('Thank You!', 'Your feedback helps us improve FlowPOS.');
-        }},
+        {
+          text: 'Rate Now', onPress: () => {
+            Alert.alert('Thank You!', 'Your feedback helps us improve FlowPOS.');
+          }
+        },
       ]
     );
   };
@@ -485,7 +571,7 @@ const SettingsScreen = ({ navigation }) => {
     const isLoading = value === null;
     const effectiveValue = value === null ? false : value;
     const effectiveDisabled = disabled || isLoading;
-    
+
     return (
       <View style={[styles.settingItem, effectiveDisabled && styles.settingItemDisabled]}>
         <View style={styles.settingInfo}>
@@ -520,7 +606,7 @@ const SettingsScreen = ({ navigation }) => {
   };
 
   const SettingItemWithNavigation = ({ title, description, value, onToggle, onNavigate }) => (
-    <TouchableOpacity 
+    <TouchableOpacity
       style={styles.settingItem}
       onPress={onNavigate}
       activeOpacity={0.7}
@@ -550,30 +636,45 @@ const SettingsScreen = ({ navigation }) => {
     </View>
   );
 
+  // Phase C Implementation: Helper function to get cached feature flag results
+  const getCachedFeatureFlag = (featureKey) => {
+    switch (featureKey) {
+      case 'whatsapp_integration':
+        return canUseWhatsAppIntegration;
+      case 'custom_branding':
+        return canUseCustomBranding;
+      case 'customizable_invoice':
+        return canUseCustomizableInvoice;
+      default:
+        // Fallback to original canUseFeature for other features
+        return canUseFeature(featureKey);
+    }
+  };
+
   // Feature Button with lock check
   const FeatureButton = ({ title, icon, featureKey, onPress }) => {
-    const isLocked = !canUseFeature(featureKey);
-    
+    const isLocked = !getCachedFeatureFlag(featureKey);
+
     const handlePress = () => {
       if (isLocked) {
-        showUpgradePrompt(featureKey);
+        featureFlags.showUpgradePrompt(featureKey);
       } else {
         onPress();
       }
     };
-    
+
     return (
-      <TouchableOpacity 
+      <TouchableOpacity
         style={[styles.actionButton, isLocked && styles.actionButtonLocked]}
         onPress={handlePress}
         activeOpacity={0.8}
       >
         <View style={styles.featureButtonContent}>
-          <Ionicons 
-            name={icon} 
-            size={20} 
-            color={isLocked ? colors.text.tertiary : colors.primary.main} 
-            style={styles.iconStyle} 
+          <Ionicons
+            name={icon}
+            size={20}
+            color={isLocked ? colors.text.tertiary : colors.primary.main}
+            style={styles.iconStyle}
           />
           <Text style={[styles.actionButtonText, isLocked && styles.actionButtonTextLocked]}>
             {title}
@@ -600,14 +701,14 @@ const SettingsScreen = ({ navigation }) => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Business Settings</Text>
-          
+
           <SettingItem
             title="Auto Payment Detection"
             description="Automatically detect UPI payment confirmations from SMS messages"
             value={autoPaymentDetection}
             onToggle={handleAutoPaymentDetectionToggle}
           />
-          
+
           <SettingItem
             title="Require Customer Details"
             description="Make customer name and phone number mandatory for checkout"
@@ -618,12 +719,12 @@ const SettingsScreen = ({ navigation }) => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>WhatsApp Settings</Text>
-          
+
           {/* Check if WhatsApp feature is available */}
-          {!canUseFeature('whatsapp_integration') ? (
-            <TouchableOpacity 
+          {!canUseWhatsAppIntegration ? (
+            <TouchableOpacity
               style={[styles.settingItem, styles.settingItemDisabled]}
-              onPress={() => showUpgradePrompt('whatsapp_integration')}
+              onPress={() => featureFlags.showUpgradePrompt('whatsapp_integration')}
               activeOpacity={0.8}
             >
               <View style={styles.settingInfo}>
@@ -668,7 +769,7 @@ const SettingsScreen = ({ navigation }) => {
                 <View style={styles.whatsappMethodSection}>
                   <Text style={styles.whatsappMethodTitle}>WhatsApp Method</Text>
                   <Text style={styles.whatsappMethodDescription}>Choose how to send invoices via WhatsApp</Text>
-                  
+
                   <TouchableOpacity
                     style={[
                       styles.whatsappMethodOption,
@@ -681,45 +782,45 @@ const SettingsScreen = ({ navigation }) => {
                       <View style={styles.whatsappMethodInfo}>
                         <Text style={styles.whatsappMethodName}>FlowPOS WhatsApp (Recommended)</Text>
                         <Text style={styles.whatsappMethodDesc}>Automatic sending via FlowPOS servers</Text>
-                  </View>
-                  <View style={[
-                    styles.whatsappMethodRadio,
-                    whatsappMethod === 'flowpos' && styles.whatsappMethodRadioSelected
-                  ]} />
-                </View>
-              </TouchableOpacity>
+                      </View>
+                      <View style={[
+                        styles.whatsappMethodRadio,
+                        whatsappMethod === 'flowpos' && styles.whatsappMethodRadioSelected
+                      ]} />
+                    </View>
+                  </TouchableOpacity>
 
-              <TouchableOpacity
-                style={[
-                  styles.whatsappMethodOption,
-                  whatsappMethod === 'device' && styles.whatsappMethodSelected
-                ]}
-                onPress={() => handleWhatsAppMethodChange('device')}
-                activeOpacity={0.7}
-              >
-                <View style={styles.whatsappMethodContent}>
-                  <View style={styles.whatsappMethodInfo}>
-                    <Text style={styles.whatsappMethodName}>Device WhatsApp</Text>
-                    <Text style={styles.whatsappMethodDesc}>Opens your WhatsApp app to send manually</Text>
-                  </View>
-                  <View style={[
-                    styles.whatsappMethodRadio,
-                    whatsappMethod === 'device' && styles.whatsappMethodRadioSelected
-                  ]} />
+                  <TouchableOpacity
+                    style={[
+                      styles.whatsappMethodOption,
+                      whatsappMethod === 'device' && styles.whatsappMethodSelected
+                    ]}
+                    onPress={() => handleWhatsAppMethodChange('device')}
+                    activeOpacity={0.7}
+                  >
+                    <View style={styles.whatsappMethodContent}>
+                      <View style={styles.whatsappMethodInfo}>
+                        <Text style={styles.whatsappMethodName}>Device WhatsApp</Text>
+                        <Text style={styles.whatsappMethodDesc}>Opens your WhatsApp app to send manually</Text>
+                      </View>
+                      <View style={[
+                        styles.whatsappMethodRadio,
+                        whatsappMethod === 'device' && styles.whatsappMethodRadioSelected
+                      ]} />
+                    </View>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-            </View>
-          )}
+              )}
             </>
           )}
         </View>
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Invoice Settings</Text>
-          
-          {/* Custom branding feature check */}
-          {!canUseFeature('custom_branding') ? (
-            <TouchableOpacity 
+
+          {/* Customizable invoice feature check - Growth+ */}
+          {!canUseCustomizableInvoice ? (
+            <TouchableOpacity
               style={[styles.settingItem, styles.settingItemDisabled]}
               onPress={() => showUpgradePrompt('customizable_invoice')}
               activeOpacity={0.8}
@@ -779,29 +880,30 @@ const SettingsScreen = ({ navigation }) => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Features</Text>
-          
+
+
           <FeatureButton
-            title="Export Data (CSV)"
+            title="CSV Exports"
             icon="download-outline"
-            featureKey="data_export"
+            featureKey="csv_exports"
             onPress={() => navigation.navigate('DataExport')}
           />
-          
+
           <FeatureButton
             title="PDF Reports"
             icon="document-text-outline"
             featureKey="pdf_reports"
             onPress={() => navigation.navigate('PDFReports')}
           />
-          
+
           <FeatureButton
             title="Performance Insights"
             icon="analytics-outline"
             featureKey="performance_insights"
             onPress={() => navigation.navigate('PerformanceInsights')}
           />
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => navigation.navigate('StorageManagement')}
             activeOpacity={0.8}
@@ -809,8 +911,8 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="cloud-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Storage Management</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.dangerButton}
             onPress={handleResetAllData}
             activeOpacity={0.8}
@@ -818,7 +920,7 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="log-out-outline" size={20} color={colors.background.surface} style={styles.iconStyle} />
             <Text style={styles.dangerButtonText}>Logout</Text>
           </TouchableOpacity>
-          
+
           <Text style={styles.warningText}>
             This will log you out of the app. Your data remains safe and you can log back in anytime.
           </Text>
@@ -826,8 +928,8 @@ const SettingsScreen = ({ navigation }) => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Support</Text>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={handleContactSupport}
             activeOpacity={0.8}
@@ -835,8 +937,8 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="mail-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Contact Support</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={handleViewHelp}
             activeOpacity={0.8}
@@ -844,8 +946,8 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="help-circle-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Help & FAQ</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={handleShowAppTour}
             activeOpacity={0.8}
@@ -853,8 +955,8 @@ const SettingsScreen = ({ navigation }) => {
             <Ionicons name="compass-outline" size={20} color={colors.primary.main} style={styles.iconStyle} />
             <Text style={styles.actionButtonText}>Restart App Tour</Text>
           </TouchableOpacity>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={handleRateApp}
             activeOpacity={0.8}
@@ -866,33 +968,33 @@ const SettingsScreen = ({ navigation }) => {
 
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>About FlowPOS</Text>
-          
+
           <View style={styles.aboutItem}>
             <Text style={styles.aboutLabel}>App Version</Text>
             <Text style={styles.aboutValue}>1.0.0</Text>
           </View>
-          
+
           <View style={styles.aboutItem}>
             <Text style={styles.aboutLabel}>Build</Text>
             <Text style={styles.aboutValue}>FlowPOS v1.0 Enhanced</Text>
           </View>
-          
+
           <View style={styles.aboutItem}>
             <Text style={styles.aboutLabel}>Platform</Text>
             <Text style={styles.aboutValue}>React Native (Expo)</Text>
           </View>
-          
+
           <View style={styles.aboutItem}>
             <Text style={styles.aboutLabel}>Features</Text>
             <Text style={styles.aboutValue}>POS • Analytics • Inventory • Reports</Text>
           </View>
-          
+
           <View style={styles.aboutItem}>
             <Text style={styles.aboutLabel}>Database</Text>
             <Text style={styles.aboutValue}>Supabase (PostgreSQL)</Text>
           </View>
-          
-          <TouchableOpacity 
+
+          <TouchableOpacity
             style={styles.actionButton}
             onPress={() => Alert.alert(
               'FlowPOS Credits',

@@ -178,18 +178,17 @@ class WhatsAppService {
   // Send invoice via device WhatsApp
   async sendViaDeviceWhatsApp(phoneNumber, imageUri, invoiceData) {
     try {
-      // TESTING PHASE: Removed one-time sending restriction
-      // TODO: Re-enable this restriction after testing phase
-      // const invoiceKey = `whatsapp_sent_${invoiceData.invoiceNumber || invoiceData.orderNumber}`;
-      // const alreadySent = await AsyncStorage.getItem(invoiceKey);
-      // if (alreadySent) {
-      //   throw new Error('Invoice has already been sent via WhatsApp. Use share option to send again.');
-      // }
+      // Check if invoice has already been sent (spam prevention)
+      const invoiceKey = `whatsapp_sent_${invoiceData.invoiceNumber || invoiceData.orderNumber}`;
+      const alreadySent = await AsyncStorage.getItem(invoiceKey);
+      if (alreadySent) {
+        throw new Error('Invoice has already been sent via WhatsApp. Use share option to send again.');
+      }
 
       console.log('📱 [WhatsAppService] Opening device WhatsApp for invoice:', {
         invoiceNumber: invoiceData.invoiceNumber || invoiceData.orderNumber,
         phoneNumber: phoneNumber,
-        testingPhase: true
+        spamPrevention: 'enabled'
       });
 
       const message = await this.createInvoiceMessage(invoiceData);
@@ -204,9 +203,9 @@ class WhatsAppService {
       if (canOpen) {
         await Linking.openURL(whatsappUrl);
         
-        // TESTING PHASE: Commented out marking as sent
-        // TODO: Re-enable this after testing phase
-        // await AsyncStorage.setItem(invoiceKey, 'true');
+        // Mark invoice as sent to prevent duplicate sends
+        await AsyncStorage.setItem(invoiceKey, 'true');
+        console.log('✅ [WhatsAppService] Invoice marked as sent:', invoiceKey);
         
         return {
           success: true,
@@ -224,23 +223,27 @@ class WhatsAppService {
 
   // Main send method - uses selected method with fallback
   async sendInvoiceMessage(phoneNumber, invoiceData) {
-    // Check if send invoice feature is enabled
-    if (!this.sendInvoiceEnabled) {
-      throw new Error('Invoice sending is disabled in settings');
-    }
-
     try {
       if (this.whatsappMethod === 'flowpos') {
+        // Check if send invoice feature is enabled for FlowPOS method
+        if (!this.sendInvoiceEnabled) {
+          throw new Error('Invoice sending is disabled in settings');
+        }
+        
         // Try FlowPOS first
         try {
           return await this.sendViaFlowPOS(phoneNumber, invoiceData);
         } catch (error) {
-          console.log('FlowPOS WhatsApp failed, falling back to device:', error.message);
-          // Fallback to device WhatsApp
-          return await this.sendViaDeviceWhatsApp(phoneNumber, null, invoiceData);
+          console.log('FlowPOS WhatsApp failed - no fallback to prevent unwanted device WhatsApp opening:', error.message);
+          // COMMENTED OUT: Fallback to device WhatsApp to prevent unwanted redirection
+          // when user has selected FlowPOS method but credentials are not configured
+          // return await this.sendViaDeviceWhatsApp(phoneNumber, null, invoiceData);
+          throw error; // Re-throw the error instead of falling back
         }
       } else {
-        // Use device WhatsApp directly
+        // FIXED: Device WhatsApp doesn't need sendInvoiceEnabled check
+        // It requires manual user action, so the setting doesn't apply
+        console.log('📱 [WhatsAppService] Using device WhatsApp (manual send, ignoring sendInvoiceEnabled setting)');
         return await this.sendViaDeviceWhatsApp(phoneNumber, null, invoiceData);
       }
     } catch (error) {
@@ -517,7 +520,7 @@ class WhatsAppService {
   }
 
   // Get service status
-  async getStatus() {
+  async getStatus(options = {}) {
     // Always reload settings to ensure we have the latest values
     await this.loadSettings();
     
@@ -530,6 +533,88 @@ class WhatsAppService {
       ready: await this.isReady(),
       sendInvoiceEnabled: this.sendInvoiceEnabled
     };
+  }
+
+  // Get service status with caching (Phase D optimization)
+  async getStatusWithCaching(options = {}) {
+    const { forceRefresh = false, screenName = 'unknown' } = options;
+    
+    // Import ServiceStatusCoordinator dynamically to avoid circular dependencies
+    const ServiceStatusCoordinator = (await import('./ServiceStatusCoordinator')).default;
+    
+    try {
+      // Use coordinator for caching logic
+      const cachedStatus = await ServiceStatusCoordinator.fetchWhatsAppStatus({
+        forceRefresh,
+        screenName
+      });
+      
+      // If we got cached status, combine it with local settings
+      if (cachedStatus && !forceRefresh) {
+        // Always reload settings to ensure we have the latest values
+        await this.loadSettings();
+        
+        return {
+          ...cachedStatus,
+          currentMethod: this.whatsappMethod,
+          deviceReady: true,
+          sendInvoiceEnabled: this.sendInvoiceEnabled
+        };
+      }
+    } catch (error) {
+      console.log('🔧 [WhatsAppService] Caching failed, falling back to direct status check:', error.message);
+    }
+    
+    // Fallback to original getStatus method
+    return await this.getStatus();
+  }
+
+  // Clear WhatsApp sending history (for Settings or troubleshooting)
+  async clearSendingHistory() {
+    try {
+      // Get all AsyncStorage keys
+      const allKeys = await AsyncStorage.getAllKeys();
+      
+      // Filter keys that start with 'whatsapp_sent_'
+      const whatsappKeys = allKeys.filter(key => key.startsWith('whatsapp_sent_'));
+      
+      if (whatsappKeys.length > 0) {
+        // Remove all WhatsApp sending history keys
+        await AsyncStorage.multiRemove(whatsappKeys);
+        console.log(`✅ [WhatsAppService] Cleared ${whatsappKeys.length} invoice sending records`);
+        return {
+          success: true,
+          clearedCount: whatsappKeys.length,
+          message: `Cleared ${whatsappKeys.length} invoice sending records`
+        };
+      } else {
+        console.log('ℹ️ [WhatsAppService] No sending history to clear');
+        return {
+          success: true,
+          clearedCount: 0,
+          message: 'No sending history found'
+        };
+      }
+    } catch (error) {
+      console.error('❌ [WhatsAppService] Error clearing sending history:', error);
+      return {
+        success: false,
+        error: error.message,
+        message: 'Failed to clear sending history'
+      };
+    }
+  }
+
+  // Check if a specific invoice has been sent
+  async hasBeenSent(invoiceNumber) {
+    try {
+      const invoiceKey = `whatsapp_sent_${invoiceNumber}`;
+      const alreadySent = await AsyncStorage.getItem(invoiceKey);
+      return alreadySent === 'true';
+    } catch (error) {
+      console.error('❌ [WhatsAppService] Error checking send status:', error);
+      return false;
+    }
   }
 }
 

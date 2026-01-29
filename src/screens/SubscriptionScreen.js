@@ -43,7 +43,7 @@ const SubscriptionScreen = ({ navigation }) => {
       // Only refresh from database if needed (e.g., user explicitly requested)
       const dbPlan = await getUserSubscriptionPlan(false); // Use cached data
       setCurrentPlan(dbPlan);
-      
+
       // Calculate trial days remaining if on trial
       if (dbPlan === 'trial' && user?.subscription_started_at) {
         const startDate = new Date(user.subscription_started_at);
@@ -56,31 +56,31 @@ const SubscriptionScreen = ({ navigation }) => {
           isExpired: daysRemaining <= 0
         });
       }
-      
+
       // Initialize feature service with real plan
       await featureService.initialize();
       const stats = await featureService.getUsageStats();
-      
+
       // Get cloud storage usage
       const storageUsage = await CloudStorageService.getStorageUsage();
       const quotaStatus = await CloudStorageService.checkQuotaStatus(dbPlan);
-      
+
       // Add storage info to usage stats
       stats.cloud_storage = {
-        current: quotaStatus.usedMB.toFixed(1),
-        limit: quotaStatus.quotaMB.toFixed(1),
+        current: quotaStatus.usedMB,
+        limit: quotaStatus.quotaMB,
         unlimited: false,
-        percentage: quotaStatus.usedPercentage.toFixed(1)
+        percentage: quotaStatus.usedPercentage
       };
-      
+
       setUsageStats(stats);
     } catch (error) {
       console.error('Error loading subscription data:', error);
-      
+
       // Handle token expiration
-      if (error.message.includes('Session expired') || 
-          error.message.includes('Invalid or expired token') ||
-          error.message.includes('Authentication expired')) {
+      if (error.message.includes('Session expired') ||
+        error.message.includes('Invalid or expired token') ||
+        error.message.includes('Authentication expired')) {
         Alert.alert(
           'Session Expired',
           'Your session has expired. Please login again.',
@@ -99,7 +99,7 @@ const SubscriptionScreen = ({ navigation }) => {
         );
         return;
       }
-      
+
       // Fallback to user data from context for other errors
       if (user?.subscription_plan) {
         setCurrentPlan(user.subscription_plan);
@@ -112,7 +112,7 @@ const SubscriptionScreen = ({ navigation }) => {
   const handleUpgrade = (planType) => {
     // Don't allow downgrade to expired_trial
     if (planType === 'expired_trial') return;
-    
+
     const planConfig = featureService.PLAN_CONFIGS[planType];
     if (!planConfig) return;
 
@@ -136,7 +136,7 @@ const SubscriptionScreen = ({ navigation }) => {
     try {
       const token = await AsyncStorage.getItem('accessToken');
       console.log('🔄 Upgrade attempt:', { planType, hasToken: !!token });
-      
+
       if (!token) {
         Alert.alert('Error', 'Please login again to upgrade your plan.');
         setIsUpgrading(false);
@@ -205,77 +205,65 @@ const SubscriptionScreen = ({ navigation }) => {
 
   const getFeaturesToDisplay = (planType, planConfig) => {
     const allFeatures = [];
-    
+
     // Always show UPI & Cash payments
     allFeatures.push('UPI & Cash payment support');
     allFeatures.push('Basic invoice');
-    allFeatures.push('Basic daily analytics');
-    allFeatures.push('Cloud backup');
-    
+    allFeatures.push('Basic analytics');
+
+    // Explicitly add Unlimited Cloud Storage for trial
+    if (planType === 'trial') {
+      allFeatures.push('Unlimited Cloud Storage');
+    }
+
     // Add cloud storage information based on plan
-    if (planConfig.limits.storage_gb) {
-      allFeatures.push(`${planConfig.limits.storage_gb} GB cloud storage`);
-    } else if (planConfig.limits.storage_mb) {
-      allFeatures.push(`${planConfig.limits.storage_mb} MB cloud storage`);
+    if (planConfig.limits?.storage_mb && planType !== 'trial') { // Skip if trial as we added it above
+      if (planConfig.limits.storage_mb >= 1024) {
+        allFeatures.push(`${(planConfig.limits.storage_mb / 1024).toFixed(0)} GB cloud storage`);
+      } else {
+        allFeatures.push(`${planConfig.limits.storage_mb} MB cloud storage`);
+      }
     }
-    
-    // SMS payment detection - Starter+
-    if (planConfig.features.sms_detection) {
-      allFeatures.push('SMS payment detection');
-    }
-    
-    // Daily & weekly analytics - Starter+
-    if (planConfig.features.daily_weekly_analytics) {
-      allFeatures.push('Daily & weekly analytics');
-    }
-    
+
+
+
     // Customizable invoice - Growth+
     if (planConfig.features.customizable_invoice) {
       allFeatures.push('Customizable invoice');
     }
-    
+
     // Advanced analytics - Growth+
     if (planConfig.features.advanced_analytics) {
       allFeatures.push('Advanced analytics');
     }
-    
+
     // WhatsApp integration - Growth+
     if (planConfig.features.whatsapp_integration) {
       allFeatures.push('WhatsApp integration');
     }
-    
-    // Email delivery - Growth+
-    if (planConfig.features.email_delivery) {
-      allFeatures.push('Monthly email invoice delivery');
+
+    // Monthly reports - Growth+
+    if (planConfig.features.monthly_reports) {
+      allFeatures.push('Monthly email reports');
     }
-    
+
     // Performance insights - Enterprise
     if (planConfig.features.performance_insights) {
       allFeatures.push('Performance insights with graphs & detailed analytics');
     }
-    
+
     // PDF reports - Enterprise
     if (planConfig.features.pdf_reports) {
       allFeatures.push('Detailed PDF performance reports');
     }
-    
-    // Monthly reports - Enterprise
-    if (planConfig.features.monthly_reports) {
-      allFeatures.push('Monthly email invoices + analytics reports');
-    }
-    
-    // CSV & PDF export - Enterprise
-    if (planConfig.features.csv_pdf_export) {
-      allFeatures.push('Data export in CSV & PDF format');
-    }
-    
-    // Custom branding - Enterprise
-    if (planConfig.features.custom_branding) {
-      allFeatures.push('Custom branding');
-    }
-    
 
-    
+    // Multi-device sync - Growth+
+    if (planConfig.features.multi_device_sync) {
+      allFeatures.push('Multi-device access');
+    }
+
+
+
     return allFeatures;
   };
 
@@ -330,40 +318,40 @@ const SubscriptionScreen = ({ navigation }) => {
           <ResponsiveText variant="caption" style={styles.featuresTitle}>
             Features:
           </ResponsiveText>
-          
+
           {/* Limits */}
           <View style={styles.limitsContainer}>
             <View style={styles.limitItemRow}>
               <Ionicons name="cube-outline" size={16} color={colors.text.secondary} />
               <Text style={styles.limitItem}>
-                Add up to {planConfig.limits.products === -1 ? 'unlimited' : planConfig.limits.products} products
+                Add up to {planConfig.limits?.products === -1 ? 'unlimited' : planConfig.limits?.products || 0} products
               </Text>
             </View>
             <View style={styles.limitItemRow}>
               <Ionicons name="receipt-outline" size={16} color={colors.text.secondary} />
               <Text style={styles.limitItem}>
-                Manage up to {planConfig.limits.orders_per_month === -1 ? 'unlimited' : planConfig.limits.orders_per_month} orders per month
+                Manage up to {planConfig.limits?.orders_per_month === -1 ? 'unlimited' : planConfig.limits?.orders_per_month || 0} orders per month
               </Text>
             </View>
             <View style={styles.limitItemRow}>
               <Ionicons name="people-outline" size={16} color={colors.text.secondary} />
               <Text style={styles.limitItem}>
-                {planConfig.limits.devices === 1 ? 'Single user access' : 
-                 planConfig.limits.devices === 3 ? '3 user logins' :
-                 planConfig.limits.devices === 10 ? 'Up to 10 user logins' : 
-                 `${planConfig.limits.devices} user${planConfig.limits.devices !== 1 ? 's' : ''}`}
+                {planConfig.limits?.devices === -1 ? 'Unlimited user logins' :
+                  planConfig.limits?.devices === 1 ? 'Single user access' :
+                    planConfig.limits?.devices === 3 ? '3 user logins' :
+                      planConfig.limits?.devices === 10 ? 'Up to 10 user logins' :
+                        `${planConfig.limits?.devices || 1} user${(planConfig.limits?.devices || 1) !== 1 ? 's' : ''}`}
               </Text>
             </View>
-            {(planConfig.limits.storage_gb > 0 || planConfig.limits.storage_mb > 0) && (
-              <View style={styles.limitItemRow}>
-                <Ionicons name="cloud-outline" size={16} color={colors.text.secondary} />
-                <Text style={styles.limitItem}>
-                  {planConfig.limits.storage_gb ? 
-                    `${planConfig.limits.storage_gb} GB cloud backup` : 
-                    `${planConfig.limits.storage_mb} MB cloud backup`}
-                </Text>
-              </View>
-            )}
+            <View style={styles.limitItemRow}>
+              <Ionicons name="cloud-outline" size={16} color={colors.text.secondary} />
+              <Text style={styles.limitItem}>
+                {planConfig.limits?.storage_mb === -1 ? 'Unlimited cloud storage' :
+                  planConfig.limits?.storage_mb >= 1024 ?
+                    `${(planConfig.limits.storage_mb / 1024).toFixed(0)} GB cloud backup` :
+                    `${Math.ceil(planConfig.limits?.storage_mb || 0)} MB cloud backup`}
+              </Text>
+            </View>
           </View>
 
           {/* Key Features */}
@@ -374,7 +362,7 @@ const SubscriptionScreen = ({ navigation }) => {
                 <Text style={styles.featureItem}>{feature}</Text>
               </View>
             ))}
-            
+
             {/* See more/less button for plans with many features */}
             {hasMoreFeatures && (
               <TouchableOpacity
@@ -390,10 +378,10 @@ const SubscriptionScreen = ({ navigation }) => {
                 <Text style={styles.seeMoreText}>
                   {showAll ? 'See less' : `See ${allFeatures.length - maxFeaturesToShow} more features`}
                 </Text>
-                <Ionicons 
-                  name={showAll ? 'chevron-up' : 'chevron-down'} 
-                  size={16} 
-                  color={colors.primary.main} 
+                <Ionicons
+                  name={showAll ? 'chevron-up' : 'chevron-down'}
+                  size={16}
+                  color={colors.primary.main}
                 />
               </TouchableOpacity>
             )}
@@ -427,18 +415,34 @@ const SubscriptionScreen = ({ navigation }) => {
         <ResponsiveText variant="subtitle" style={styles.usageTitle}>
           Current Usage
         </ResponsiveText>
-        
+
         {Object.entries(usageStats).map(([key, stat]) => {
           // Skip certain keys or show them with proper labels
           if (key === 'devices') return null; // Skip devices for now
           if (key === 'storage_gb' || key === 'storage_mb') return null; // Skip original storage keys, use cloud_storage instead
-          
+
           const displayName = {
             products: 'Products Added',
             orders_per_month: 'Monthly Orders',
             cloud_storage: 'Cloud Storage',
             trial_days: 'Trial Period'
           }[key] || key;
+
+          let usageText = '';
+          if (key === 'cloud_storage') {
+            const currentMB = Number(stat.current);
+            const limitMB = Number(stat.limit);
+            const isLarge = limitMB >= 1024 || currentMB >= 1024;
+            const unit = isLarge ? 'GB' : 'MB';
+            const currentDisplay = isLarge ? (currentMB / 1024).toFixed(3) : Math.ceil(currentMB);
+            const limitDisplay = isLarge ? (limitMB / 1024).toFixed(0) : Math.ceil(limitMB);
+
+            usageText = `${currentDisplay} / ${stat.unlimited ? '∞' : limitDisplay} ${unit} (${Math.round(stat.percentage)}%)`;
+          } else if (key === 'trial_days') {
+            usageText = `${stat.current} / ${stat.unlimited ? '∞' : stat.limit} days`;
+          } else {
+            usageText = `${stat.current} / ${stat.unlimited ? '∞' : stat.limit}`;
+          }
 
           return (
             <View key={key} style={styles.usageItem}>
@@ -447,34 +451,29 @@ const SubscriptionScreen = ({ navigation }) => {
                   {displayName}
                 </ResponsiveText>
                 <ResponsiveText variant="caption" style={styles.usageNumbers}>
-                  {key === 'cloud_storage'
-                    ? `${stat.current} / ${stat.unlimited ? '∞' : stat.limit} MB (${stat.percentage}%)`
-                    : key === 'trial_days'
-                    ? `${stat.current} / ${stat.unlimited ? '∞' : stat.limit} days`
-                    : `${stat.current} / ${stat.unlimited ? '∞' : stat.limit}`
-                  }
+                  {usageText}
                 </ResponsiveText>
               </View>
-              
+
               <View style={styles.progressBar}>
-                <View 
+                <View
                   style={[
                     styles.progressFill,
-                    { 
+                    {
                       width: `${Math.min(stat.percentage, 100)}%`,
-                      backgroundColor: stat.percentage > 80 ? colors.error.main : 
-                                     stat.percentage > 60 ? colors.warning.main : colors.success.main
+                      backgroundColor: stat.percentage > 80 ? colors.error.main :
+                        stat.percentage > 60 ? colors.warning.main : colors.success.main
                     }
                   ]}
                 />
               </View>
-              
+
               {stat.percentage > 80 && !stat.unlimited && (
                 <ResponsiveText variant="small" style={styles.warningText}>
                   ⚠️ Approaching limit
                 </ResponsiveText>
               )}
-              
+
 
             </View>
           );
@@ -517,8 +516,8 @@ const SubscriptionScreen = ({ navigation }) => {
             {featureService.PLAN_CONFIGS[currentPlan]?.name || 'Trial Plan'}
           </Text>
           <Text style={styles.currentPlanPrice}>
-            {currentPlan === 'trial' 
-              ? 'Free for 7 days' 
+            {currentPlan === 'trial'
+              ? 'Free for 7 days'
               : `₹${featureService.PLAN_CONFIGS[currentPlan]?.price || 0}/month`
             }
           </Text>
@@ -552,7 +551,7 @@ const SubscriptionScreen = ({ navigation }) => {
           <ResponsiveText variant="subtitle" style={styles.plansTitle}>
             Available Plans
           </ResponsiveText>
-          
+
           <View style={styles.plansGrid}>
             {Object.entries(featureService.PLAN_CONFIGS)
               .filter(([planType]) => planType !== 'expired_trial') // Don't show expired_trial in list
@@ -575,7 +574,7 @@ const SubscriptionScreen = ({ navigation }) => {
           <ResponsiveText variant="subtitle" style={styles.benefitsTitle}>
             Why Upgrade?
           </ResponsiveText>
-          
+
           <View style={styles.benefitsList}>
             <View style={styles.benefitItemRow}>
               <Ionicons name="cash-outline" size={16} color={colors.text.primary} />

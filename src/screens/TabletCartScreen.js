@@ -24,7 +24,7 @@ const TabletCartScreen = ({ navigation }) => {
   const [customerPhone, setCustomerPhone] = useState('');
   const [notes, setNotes] = useState('');
   const { isTablet } = getDeviceInfo();
-  
+
   // QR Payment hook
   const { isQRVisible, paymentData, generatePaymentQR, closeQR, handlePaymentComplete } = useQRPayment();
 
@@ -40,7 +40,7 @@ const TabletCartScreen = ({ navigation }) => {
 
   const handleCheckout = () => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Heavy);
-    
+
     const orderData = {
       items,
       total: getTotal(),
@@ -49,7 +49,7 @@ const TabletCartScreen = ({ navigation }) => {
       notes: notes.trim(),
       timestamp: new Date().toISOString(),
     };
-    
+
     navigation.navigate('Invoice', { orderData });
   };
 
@@ -71,7 +71,7 @@ const TabletCartScreen = ({ navigation }) => {
 
   const handleQRPaymentComplete = async () => {
     const paymentRecord = await handlePaymentComplete();
-    
+
     if (paymentRecord) {
       // Create order data
       const orderData = {
@@ -84,9 +84,9 @@ const TabletCartScreen = ({ navigation }) => {
         paymentMethod: 'QR Pay',
         paymentDetails: paymentRecord,
       };
-      
+
       // Navigate to invoice first, then auto-redirect to home
-      navigation.navigate('Invoice', { 
+      navigation.navigate('Invoice', {
         orderData,
         autoRedirectToHome: true // Flag to auto-redirect after showing invoice
       });
@@ -106,7 +106,7 @@ const TabletCartScreen = ({ navigation }) => {
           </Text>
         </View>
       </View>
-      
+
       <View style={styles.quantityControls}>
         <TouchableOpacity
           style={[styles.quantityButton, isTablet && styles.tabletQuantityButton]}
@@ -115,9 +115,9 @@ const TabletCartScreen = ({ navigation }) => {
         >
           <Text style={[styles.quantityButtonText, isTablet && styles.tabletQuantityButtonText]}>−</Text>
         </TouchableOpacity>
-        
+
         <Text style={[styles.quantity, isTablet && styles.tabletQuantity]}>{item.quantity}</Text>
-        
+
         <TouchableOpacity
           style={[styles.quantityButton, isTablet && styles.tabletQuantityButton]}
           onPress={() => handleIncrement(item)}
@@ -126,7 +126,7 @@ const TabletCartScreen = ({ navigation }) => {
           <Text style={[styles.quantityButtonText, isTablet && styles.tabletQuantityButtonText]}>+</Text>
         </TouchableOpacity>
       </View>
-      
+
       <Text style={[styles.itemTotal, isTablet && styles.tabletItemTotal]}>
         ₹{(item.price * item.quantity).toFixed(2)}
       </Text>
@@ -147,7 +147,7 @@ const TabletCartScreen = ({ navigation }) => {
           <Text style={[styles.title, isTablet && styles.tabletTitle]}>Cart</Text>
           <View style={styles.placeholder} />
         </View>
-        
+
         <View style={styles.emptyCart}>
           <Ionicons name="cart-outline" size={isTablet ? 80 : 64} color={colors.text.tertiary} />
           <Text style={[styles.emptyText, isTablet && styles.tabletEmptyText]}>Your cart is empty</Text>
@@ -170,8 +170,8 @@ const TabletCartScreen = ({ navigation }) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={styles.container} 
+      <KeyboardAvoidingView
+        style={styles.container}
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
       >
         <View style={[styles.header, isTablet && styles.tabletHeader]}>
@@ -193,7 +193,7 @@ const TabletCartScreen = ({ navigation }) => {
             <Text style={[styles.clearButtonText, isTablet && styles.tabletClearButtonText]}>Clear</Text>
           </TouchableOpacity>
         </View>
-        
+
         <View style={styles.content}>
           <FlatList
             data={items}
@@ -203,12 +203,12 @@ const TabletCartScreen = ({ navigation }) => {
             showsVerticalScrollIndicator={false}
             contentContainerStyle={[styles.cartListContent, isTablet && styles.tabletCartListContent]}
           />
-          
+
           <View style={[styles.customerSection, isTablet && styles.tabletCustomerSection]}>
             <Text style={[styles.sectionTitle, isTablet && styles.tabletSectionTitle]}>
               Customer Information (Optional)
             </Text>
-            
+
             <View style={styles.inputRow}>
               <View style={styles.inputContainer}>
                 <Text style={[styles.inputLabel, isTablet && styles.tabletInputLabel]}>Name</Text>
@@ -220,7 +220,7 @@ const TabletCartScreen = ({ navigation }) => {
                   placeholderTextColor={colors.text.tertiary}
                 />
               </View>
-              
+
               <View style={styles.inputContainer}>
                 <Text style={[styles.inputLabel, isTablet && styles.tabletInputLabel]}>Phone</Text>
                 <TextInput
@@ -233,7 +233,7 @@ const TabletCartScreen = ({ navigation }) => {
                 />
               </View>
             </View>
-            
+
             <View style={styles.inputContainer}>
               <Text style={[styles.inputLabel, isTablet && styles.tabletInputLabel]}>Notes</Text>
               <TextInput
@@ -249,13 +249,13 @@ const TabletCartScreen = ({ navigation }) => {
             </View>
           </View>
         </View>
-        
+
         <View style={[styles.footer, isTablet && styles.tabletFooter]}>
           <View style={styles.totalSection}>
             <Text style={[styles.totalLabel, isTablet && styles.tabletTotalLabel]}>Total</Text>
             <Text style={[styles.totalAmount, isTablet && styles.tabletTotalAmount]}>₹{getTotal()}</Text>
           </View>
-          
+
           <View style={styles.checkoutButtons}>
             <TouchableOpacity
               style={[styles.qrPayButton, isTablet && styles.tabletQrPayButton]}
@@ -267,7 +267,7 @@ const TabletCartScreen = ({ navigation }) => {
                 QR Pay
               </Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={[styles.checkoutButton, isTablet && styles.tabletCheckoutButton]}
               onPress={handleCheckout}
@@ -281,7 +281,7 @@ const TabletCartScreen = ({ navigation }) => {
           </View>
         </View>
       </KeyboardAvoidingView>
-      
+
       <DynamicQRGenerator
         amount={paymentData.amount}
         visible={isQRVisible}
@@ -289,6 +289,7 @@ const TabletCartScreen = ({ navigation }) => {
         customerName={paymentData.customerName}
         orderNote={paymentData.orderNote}
         onPaymentComplete={handleQRPaymentComplete}
+        onNavigateToSettings={() => navigation.navigate('Settings')}
       />
     </SafeAreaView>
   );

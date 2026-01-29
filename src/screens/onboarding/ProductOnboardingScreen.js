@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   TextInput,
   ScrollView,
+  RefreshControl,
   Alert,
   Modal,
 } from 'react-native';
@@ -22,6 +23,10 @@ import LoadingSpinner from '../../components/LoadingSpinner';
 import productsService from '../../services/ProductsService';
 import NetworkService from '../../services/NetworkService';
 import { useStoreSettings } from '../../context/StoreSettingsContext';
+// Phase A Implementation: Add ProductFetchCoordinator for consistent product fetching
+import productFetchCoordinator from '../../services/ProductFetchCoordinator';
+// Phase B Implementation: Add UIUpdatePropagator for post-success UI propagation
+import uiUpdatePropagator from '../../services/UIUpdatePropagator';
 
 // Enhanced product validation and security utilities
 const ProductValidation = {
@@ -206,6 +211,7 @@ const ProductOnboardingScreen = ({ navigation }) => {
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
   const [businessType, setBusinessType] = useState('restaurant');
+  const [refreshing, setRefreshing] = useState(false);
   
   // Get store settings from context
   const { getStoreProfile } = useStoreSettings();
@@ -444,27 +450,91 @@ const ProductOnboardingScreen = ({ navigation }) => {
   };
 
   useEffect(() => {
+    // Phase A Implementation: Initialize ProductFetchCoordinator
+    productFetchCoordinator.initialize();
+    
+    // Phase B Implementation: Register with UIUpdatePropagator for product updates
+    console.log('📦 [ProductOnboardingScreen] Registering with UIUpdatePropagator');
+    
+    // Register for UI updates with callback that handles different update types
+    const handleUIUpdate = (updateType, updateData) => {
+      console.log('📦 [ProductOnboardingScreen] Received UI update:', { updateType, hasData: !!updateData });
+      
+      if (updateType === 'ORDER_SUCCESS') {
+        // Order was created successfully - refresh products to show updated stock
+        console.log('📦 [ProductOnboardingScreen] Order success - refreshing products display');
+        refreshProducts(); // Refresh products when order updates occur
+      } else {
+        // Other updates (product changes, etc.)
+        refreshProducts();
+      }
+    };
+    
+    uiUpdatePropagator.registerScreen('ProductOnboardingScreen', handleUIUpdate);
+    
     loadBusinessType();
     loadExistingProducts();
+    
+    // Phase B Implementation: Cleanup - unregister from UIUpdatePropagator
+    return () => {
+      console.log('📦 [ProductOnboardingScreen] Unregistering from UIUpdatePropagator');
+      uiUpdatePropagator.unregisterScreen('ProductOnboardingScreen');
+    };
   }, []);
 
-  const loadExistingProducts = async () => {
+  // Phase A Implementation: Replace direct API calls with ProductFetchCoordinator
+  const refreshProducts = async () => {
     try {
-      console.log('🚨 Loading existing products from Supabase...');
-      const existingProducts = await productsService.getProducts();
-      setProducts(existingProducts);
-      console.log('✅ Loaded products from Supabase:', existingProducts.length);
+      console.log('📦 [ProductOnboardingScreen] Fetching products via ProductFetchCoordinator');
+      
+      const fetchedProducts = await productFetchCoordinator.fetchProducts({
+        forceRefresh: true, // Always force refresh to get latest data
+        screenName: 'ProductOnboardingScreen',
+        apiOptions: {}
+      });
+      
+      setProducts(fetchedProducts);
+      console.log('📦 [ProductOnboardingScreen] Products updated:', fetchedProducts.length);
+      
+      return fetchedProducts;
     } catch (error) {
-      console.error('❌ Error loading products from Supabase:', error);
-      // Fallback to AsyncStorage if Supabase fails
+      console.error('📦 [ProductOnboardingScreen] Error fetching products:', error);
+      // Fallback to AsyncStorage if ProductFetchCoordinator fails
       try {
         const localProducts = await AsyncStorage.getItem('products');
         if (localProducts) {
-          setProducts(JSON.parse(localProducts));
+          const parsedProducts = JSON.parse(localProducts);
+          setProducts(parsedProducts);
+          return parsedProducts;
         }
       } catch (localError) {
         console.error('❌ Error loading local products:', localError);
       }
+      throw error;
+    }
+  };
+
+  // Phase A Implementation: Manual refresh override for pull-to-refresh
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      await refreshProducts(); // This already uses forceRefresh: true
+      console.log('📦 [ProductOnboardingScreen] Manual refresh completed');
+    } catch (error) {
+      console.error('📦 [ProductOnboardingScreen] Manual refresh failed:', error);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const loadExistingProducts = async () => {
+    try {
+      console.log('📦 [ProductOnboardingScreen] Loading existing products via ProductFetchCoordinator...');
+      const existingProducts = await refreshProducts();
+      console.log('✅ Loaded products via ProductFetchCoordinator:', existingProducts.length);
+    } catch (error) {
+      console.error('❌ Error loading products via ProductFetchCoordinator:', error);
+      // Error handling is already done in refreshProducts function
     }
   };
 
@@ -624,14 +694,25 @@ const ProductOnboardingScreen = ({ navigation }) => {
             image_url: sampleProduct.image_url || '',
           };
 
-          await productsService.createProduct(productData);
+          const createdProduct = await productsService.createProduct(productData);
           addedCount++;
+          
+          // Phase B Implementation: Post-success cache updates for bulk product create
+          // Note: We'll do a single UI propagation after all products are created
+          if (createdProduct) {
+            console.log('✅ [ProductOnboardingScreen] Sample product created - updating cache');
+            productFetchCoordinator.onProductCreated(createdProduct);
+          }
         } catch (productError) {
           console.error('❌ Failed to add sample product:', sampleProduct.name, productError);
         }
       }
 
       if (addedCount > 0) {
+        // Phase B Implementation: Propagate UI updates after bulk product creation
+        console.log('✅ [ProductOnboardingScreen] All sample products created - propagating UI updates');
+        uiUpdatePropagator.propagateProductUpdate();
+        
         await refreshProductsList();
         
         setAlertConfig({
@@ -654,9 +735,9 @@ const ProductOnboardingScreen = ({ navigation }) => {
 
   const refreshProductsList = async () => {
     try {
-      const updatedProducts = await productsService.getProducts();
-      console.log(`✅ Refreshed products list: ${updatedProducts.length} products`);
-      setProducts(updatedProducts);
+      // Phase A Implementation: Use ProductFetchCoordinator for refresh
+      const updatedProducts = await refreshProducts();
+      console.log(`✅ Refreshed products list via ProductFetchCoordinator: ${updatedProducts.length} products`);
       
       // Also save to AsyncStorage for onboarding completion tracking
       await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
@@ -721,7 +802,15 @@ const ProductOnboardingScreen = ({ navigation }) => {
       };
 
       console.log('🚨 Creating custom product in Supabase:', productData);
-      await productsService.createProduct(productData);
+      const createdProduct = await productsService.createProduct(productData);
+
+      // Phase A Implementation: Notify ProductFetchCoordinator of the new product
+      if (createdProduct) {
+        productFetchCoordinator.onProductCreated(createdProduct);
+        
+        // Phase B Implementation: Propagate UI updates to all registered screens
+        uiUpdatePropagator.propagateProductUpdate();
+      }
 
       // Refresh products list
       await refreshProductsList();
@@ -767,6 +856,12 @@ const ProductOnboardingScreen = ({ navigation }) => {
     try {
       console.log('🚨 Deleting product from Supabase:', productId);
       await productsService.deleteProduct(productId);
+      
+      // Phase A Implementation: Notify ProductFetchCoordinator of the deletion
+      productFetchCoordinator.onProductDeleted(productId);
+      
+      // Phase B Implementation: Propagate UI updates to all registered screens
+      uiUpdatePropagator.propagateProductUpdate();
       
       // Refresh products list
       await refreshProductsList();
@@ -880,7 +975,18 @@ const ProductOnboardingScreen = ({ navigation }) => {
         </Text>
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={onRefresh}
+            tintColor={colors.primary.main}
+            colors={[colors.primary.main]}
+          />
+        }
+      >
         {products.length === 0 ? (
           <View style={styles.emptyState}>
             <Ionicons name="cube-outline" size={64} color="#6b7280" />
@@ -1087,54 +1193,57 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.background.surface,
     paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 16,
+    paddingTop: 24,
+    paddingBottom: 20,
     borderBottomWidth: 1,
     borderBottomColor: colors.border.light,
   },
   title: {
-    fontSize: 24,
+    fontSize: 28,
     fontWeight: '700',
     color: colors.text.primary,
-    marginBottom: 4,
+    marginBottom: 8,
     textAlign: 'center',
   },
   subtitle: {
     fontSize: 16,
     color: colors.text.secondary,
     textAlign: 'center',
-    lineHeight: 22,
+    lineHeight: 24,
+    paddingHorizontal: 16,
   },
   progressContainer: {
     paddingHorizontal: 24,
-    paddingVertical: 16,
+    paddingVertical: 20,
     backgroundColor: colors.background.surface,
   },
   progressBar: {
-    height: 6,
+    height: 8,
     backgroundColor: colors.gray[200],
-    borderRadius: 3,
+    borderRadius: 4,
     overflow: 'hidden',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   progressFill: {
     height: '100%',
     backgroundColor: colors.success.main,
-    borderRadius: 3,
+    borderRadius: 4,
   },
   progressText: {
-    fontSize: 14,
+    fontSize: 15,
     color: colors.text.secondary,
     textAlign: 'center',
-    fontWeight: '500',
+    fontWeight: '600',
   },
   content: {
     flex: 1,
-    padding: 24,
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
   emptyState: {
     alignItems: 'center',
     paddingVertical: 60,
+    paddingHorizontal: 20,
   },
   emptyIcon: {
     fontSize: 64,
@@ -1157,8 +1266,8 @@ const styles = StyleSheet.create({
   productCard: {
     backgroundColor: '#ffffff',
     borderRadius: 12,
-    padding: 16,
-    marginBottom: 12,
+    padding: 18,
+    marginBottom: 14,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -1205,14 +1314,20 @@ const styles = StyleSheet.create({
     fontSize: 18,
   },
   actionsContainer: {
-    gap: 12,
+    gap: 16,
     marginBottom: 24,
+    marginTop: 8,
   },
   sampleButton: {
     backgroundColor: colors.primary.main,
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   sampleButtonDisabled: {
     backgroundColor: colors.gray[400],
@@ -1229,9 +1344,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.background.surface,
     borderWidth: 2,
     borderColor: colors.primary.main,
-    paddingVertical: 16,
+    paddingVertical: 18,
     borderRadius: 12,
     alignItems: 'center',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   customButtonText: {
     fontSize: 16,
@@ -1306,13 +1426,13 @@ const styles = StyleSheet.create({
   modalContent: {
     backgroundColor: '#ffffff',
     borderRadius: 16,
-    padding: 20,
+    padding: 24,
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   modalTitle: {
     fontSize: 20,
@@ -1329,14 +1449,14 @@ const styles = StyleSheet.create({
   textInput: {
     borderWidth: 1,
     borderColor: '#d1d5db',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 12,
+    borderRadius: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 14,
     fontSize: 16,
     backgroundColor: '#ffffff',
   },
   inputGroup: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   inputError: {
     borderColor: '#EF4444',
@@ -1353,6 +1473,12 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     borderRadius: 12,
     alignItems: 'center',
+    marginTop: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
   saveButtonText: {
     fontSize: 16,

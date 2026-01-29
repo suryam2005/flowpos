@@ -18,12 +18,16 @@ import productsService from '../services/ProductsService';
 import { safeGoBack } from '../utils/navigationUtils';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { useAuth } from '../context/AuthContext';
+// Phase B Implementation: Add UIUpdatePropagator for receiving order updates
+import uiUpdatePropagator from '../services/UIUpdatePropagator';
 
 import { colors } from '../styles/colors';
 import { analyticsStyles, spacing } from '../styles/analyticsStyles';
 import LoadingSpinner from '../components/LoadingSpinner';
-import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
-import useInteractiveTour from '../hooks/useInteractiveTour';
+import featureService from '../services/FeatureService';
+// TOUR TEMPORARILY DISABLED
+// import SimpleTourOverlay from '../components/SimpleTourOverlay';
+// import useSimpleTour from '../hooks/useSimpleTour';
 
 // Import rebuilt chart components
 import { BarChart, LineChart, HorizontalBarChart, DonutChart, PieChart, ProgressChart, ChartCard, NoDataChart } from '../components/ChartComponents';
@@ -33,13 +37,13 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   // Get store settings from context
   const { getStoreProfile } = useStoreSettings();
   const { user } = useAuth();
-  
+
   // Tab state for 4-tab structure
   const [activeTab, setActiveTab] = useState('revenue'); // revenue, orders, products, insights
-  
+
   // Time period state
   const [selectedPeriod, setSelectedPeriod] = useState('daily'); // daily, weekly, monthly, yearly
-  
+
   // Data states
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -51,7 +55,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     yearlyRevenue: 0,
     totalRevenue: 0,
     revenueGrowth: 0,
-    
+
     // Order analytics
     dailyOrders: 0,
     weeklyOrders: 0,
@@ -60,27 +64,27 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     totalOrders: 0,
     avgOrderValue: 0,
     orderGrowth: 0,
-    
+
     // Product analytics
     totalProducts: 0,
     topProducts: [],
     categoryBreakdown: [],
     itemsSold: 0,
     inventoryTurnover: 0,
-    
+
     // Advanced insights
     peakHours: [],
     customerSegments: [],
     seasonalTrends: [],
     performanceMetrics: [],
-    
+
     // Period-specific analytics for current view
     periodRevenue: 0,
     periodOrders: 0,
     periodAvgOrderValue: 0,
     totalItems: 0,
   });
-  
+
   // Chart data states
   const [chartData, setChartData] = useState({
     revenueTrends: [],
@@ -89,92 +93,136 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     comparisons: [],
     insights: []
   });
-  
+
   // Filter states
   const [showFilterModal, setShowFilterModal] = useState(false);
   const [dateRange, setDateRange] = useState({ start: null, end: null });
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [selectedProduct, setSelectedProduct] = useState(null);
   const [filteredData, setFilteredData] = useState([]);
-  
+
   // UI states
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const [isExportingPDF, setIsExportingPDF] = useState(false);
-  
-  // App tour guide - using interactive tour hook
-  const {
-    showTour,
-    currentStep,
-    stepIndex,
-    totalSteps,
-    showHint,
-    showSkipStep,
-    startTour,
-    nextStep,
-    skipScreen,
-    skipAll,
-    skipStep,
-    completeTour,
-    checkAutoStart,
-    setOverlayRef,
-    isInitialized,
-  } = useInteractiveTour('AdvancedAnalytics');
-  
+
+  // Feature access state
+  const [canAccess, setCanAccess] = useState(true);
+  const [features, setFeatures] = useState({
+    pdf: false,
+    csv: false,
+    insights: false
+  });
+
+  // Check feature access on mount/focus
+  useFocusEffect(
+    useCallback(() => {
+      const checkFeatures = async () => {
+        // Check main screen access
+        const allowed = await featureService.canUseFeature('advanced_analytics');
+        if (!allowed) {
+          setCanAccess(false);
+          featureService.showUpgradePrompt('advanced_analytics');
+          navigation.goBack();
+          return;
+        }
+        setCanAccess(true);
+
+        // Check specific features
+        const pdf = await featureService.canUseFeature('pdf_reports');
+        const csv = await featureService.canUseFeature('csv_exports');
+        const insights = await featureService.canUseFeature('performance_insights');
+
+        setFeatures({ pdf, csv, insights });
+
+        console.log('📈 [AdvancedAnalytics] Features checked:', { allowed, pdf, csv, insights });
+      };
+
+      checkFeatures();
+    }, [])
+  );
+
+  // TOUR TEMPORARILY DISABLED
+  // App tour guide - using simple tour hook
+  // const {
+  //   showTour,
+  //   currentStep,
+  //   stepIndex,
+  //   totalSteps,
+  //   isInitialized,
+  //   nextStep,
+  //   skipTour,
+  //   completeTour,
+  // } = useSimpleTour('AdvancedAnalytics', []);
+
   // Tour overlay ref
-  const tourOverlayRef = useRef(null);
-  
+  // const tourOverlayRef = useRef(null);
+
   // Tour refs for dynamic positioning
-  const headerRef = useRef(null);
-  const filterSectionRef = useRef(null);
-  const summaryCardsRef = useRef(null);
+  // const headerRef = useRef(null);
+  // const filterSectionRef = useRef(null);
+  // const summaryCardsRef = useRef(null);
 
   useEffect(() => {
     // Check if data was passed from parent AnalyticsScreen to avoid duplicate API calls
     if (route?.params?.ordersData && route?.params?.productsData) {
       console.log('📈 [AdvancedAnalytics] Using data passed from parent AnalyticsScreen');
-      
+
       // Use passed data instead of making API calls
       setOrders(route.params.ordersData);
       setProducts(route.params.productsData);
-      
+
       // Initialize filteredData with passed orders
       setFilteredData(route.params.ordersData);
-      
+
       // Process the passed data for advanced analytics
       processPassedData(route.params.ordersData, route.params.productsData);
-      
+
       setIsLoading(false);
     } else {
       // Fallback: Load analytics data when no data is passed or period changes
       loadAdvancedAnalytics();
     }
+
+    // Phase B Implementation: Register with UIUpdatePropagator for order updates
+    console.log('📈 [AdvancedAnalyticsScreen] Registering with UIUpdatePropagator');
+
+    // Register for UI updates with callback that handles different update types
+    const handleUIUpdate = (updateType, updateData) => {
+      console.log('📈 [AdvancedAnalyticsScreen] Received UI update:', { updateType, hasData: !!updateData });
+
+      if (updateType === 'ORDER_SUCCESS') {
+        // Order was created successfully - refresh analytics to show updated data
+        console.log('📈 [AdvancedAnalyticsScreen] Order success - refreshing analytics');
+        loadAdvancedAnalytics(); // Refresh analytics data
+      }
+    };
+
+    uiUpdatePropagator.registerScreen('AdvancedAnalyticsScreen', handleUIUpdate);
+
+    // Cleanup: Unregister from UIUpdatePropagator
+    return () => {
+      console.log('📈 [AdvancedAnalyticsScreen] Unregistering from UIUpdatePropagator');
+      uiUpdatePropagator.unregisterScreen('AdvancedAnalyticsScreen');
+    };
   }, [selectedPeriod]);
 
-  // Check if tour should auto-start when initialized
-  useEffect(() => {
-    if (isInitialized) {
-      checkAutoStart();
-    }
-  }, [isInitialized, checkAutoStart]);
+  // Simple tour doesn't need auto-start functionality - removed checkAutoStart
 
+  // TOUR TEMPORARILY DISABLED
   // Handle tour trigger from route params
-  useEffect(() => {
-    if (route?.params?.startTour) {
-      console.log('🎯 [AdvancedAnalyticsScreen] Tour trigger received from route params');
-      setTimeout(() => {
-        startTour();
-      }, 1500);
-      navigation.setParams({ startTour: undefined });
-    }
-  }, [route?.params?.startTour, startTour, navigation]);
+  // useEffect(() => {
+  //   if (route?.params?.startTour) {
+  //     console.log('🎯 [AdvancedAnalyticsScreen] Tour trigger received from route params');
+  //     setTimeout(() => {
+  //       startTour();
+  //     }, 1500);
+  //     navigation.setParams({ startTour: undefined });
+  //   }
+  // }, [route?.params?.startTour, startTour, navigation]);
 
   // Set overlay ref for animations
-  useEffect(() => {
-    if (tourOverlayRef.current) {
-      setOverlayRef(tourOverlayRef.current);
-    }
-  }, [setOverlayRef]);
+  // Simple tour doesn't need overlay refs - removed setOverlayRef usage
 
   useEffect(() => {
     if (orders.length > 0) {
@@ -202,10 +250,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       setRefreshing(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    
+
     try {
       console.log('📈 [AdvancedAnalytics] Loading data...');
-      
+
       // Fetch data from backend
       const [ordersData, productsData] = await Promise.all([
         ordersService.getOrders(),
@@ -213,37 +261,37 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       ]);
 
       console.log('📈 [AdvancedAnalytics] Loaded:', ordersData.length, 'orders,', productsData.length, 'products');
-      
+
       // Store data in state
       setOrders(ordersData);
       setProducts(productsData);
-      
+
       // Initialize filteredData with all orders if no filters are active
       const hasActiveFilters = dateRange.start || dateRange.end || categoryFilter !== 'all' || selectedProduct;
       if (!hasActiveFilters) {
         console.log('📈 [AdvancedAnalytics] No active filters, initializing with all orders');
         setFilteredData(ordersData);
       }
-      
+
       // Calculate analytics for all periods
       const dailyAnalytics = calculatePeriodAnalytics(ordersData, 'daily');
       const weeklyAnalytics = calculatePeriodAnalytics(ordersData, 'weekly');
       const monthlyAnalytics = calculatePeriodAnalytics(ordersData, 'monthly');
       const yearlyAnalytics = calculatePeriodAnalytics(ordersData, 'yearly');
       const totalRevenue = ordersData.reduce((sum, o) => sum + (o.total || 0), 0);
-      
+
       // Calculate advanced metrics
       const topProducts = calculateTopProducts(ordersData);
       const categoryBreakdown = calculateCategoryBreakdown(ordersData, productsData);
       const peakHours = calculatePeakHours(ordersData);
       const performanceMetrics = calculatePerformanceMetrics(ordersData, productsData);
-      
+
       // Generate chart data
       const revenueTrends = generateRevenueTrends(ordersData, selectedPeriod);
       const orderTrends = generateOrderTrends(ordersData, selectedPeriod);
       const productPerformance = generateProductPerformance(ordersData, productsData);
       const comparisons = generateComparisons(ordersData, selectedPeriod);
-      
+
       // Update analytics state
       setAnalytics({
         dailyRevenue: Number(dailyAnalytics.revenue || 0),
@@ -252,7 +300,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         yearlyRevenue: Number(yearlyAnalytics.revenue || 0),
         totalRevenue: Number(totalRevenue || 0),
         revenueGrowth: calculateGrowthRate(weeklyAnalytics.revenue, monthlyAnalytics.revenue),
-        
+
         dailyOrders: Number(dailyAnalytics.orderCount || 0),
         weeklyOrders: Number(weeklyAnalytics.orderCount || 0),
         monthlyOrders: Number(monthlyAnalytics.orderCount || 0),
@@ -260,37 +308,37 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         totalOrders: Number(ordersData.length || 0),
         avgOrderValue: ordersData.length > 0 ? Math.round(totalRevenue / ordersData.length) : 0,
         orderGrowth: calculateGrowthRate(weeklyAnalytics.orderCount, monthlyAnalytics.orderCount),
-        
+
         totalProducts: Number(productsData.length || 0),
         topProducts: topProducts || [],
         categoryBreakdown: categoryBreakdown || [],
         itemsSold: calculateTotalItemsSold(ordersData),
         inventoryTurnover: calculateInventoryTurnover(ordersData, productsData),
-        
+
         peakHours: peakHours || [],
         customerSegments: [],
         seasonalTrends: [],
         performanceMetrics: performanceMetrics || [],
-        
+
         // Calculate period-specific analytics based on selectedPeriod
         periodRevenue: selectedPeriod === 'daily' ? Number(dailyAnalytics.revenue || 0) :
-                      selectedPeriod === 'weekly' ? Number(weeklyAnalytics.revenue || 0) :
-                      selectedPeriod === 'monthly' ? Number(monthlyAnalytics.revenue || 0) :
-                      Number(yearlyAnalytics.revenue || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.revenue || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.revenue || 0) :
+              Number(yearlyAnalytics.revenue || 0),
         periodOrders: selectedPeriod === 'daily' ? Number(dailyAnalytics.orderCount || 0) :
-                     selectedPeriod === 'weekly' ? Number(weeklyAnalytics.orderCount || 0) :
-                     selectedPeriod === 'monthly' ? Number(monthlyAnalytics.orderCount || 0) :
-                     Number(yearlyAnalytics.orderCount || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.orderCount || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.orderCount || 0) :
+              Number(yearlyAnalytics.orderCount || 0),
         periodAvgOrderValue: selectedPeriod === 'daily' ? Number(dailyAnalytics.avgOrderValue || 0) :
-                            selectedPeriod === 'weekly' ? Number(weeklyAnalytics.avgOrderValue || 0) :
-                            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.avgOrderValue || 0) :
-                            Number(yearlyAnalytics.avgOrderValue || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.avgOrderValue || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.avgOrderValue || 0) :
+              Number(yearlyAnalytics.avgOrderValue || 0),
         totalItems: selectedPeriod === 'daily' ? Number(dailyAnalytics.totalItems || 0) :
-                   selectedPeriod === 'weekly' ? Number(weeklyAnalytics.totalItems || 0) :
-                   selectedPeriod === 'monthly' ? Number(monthlyAnalytics.totalItems || 0) :
-                   Number(yearlyAnalytics.totalItems || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.totalItems || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.totalItems || 0) :
+              Number(yearlyAnalytics.totalItems || 0),
       });
-      
+
       // Update chart data
       setChartData({
         revenueTrends: revenueTrends || [],
@@ -324,26 +372,26 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   const processPassedData = (ordersData, productsData) => {
     try {
       console.log('📈 [AdvancedAnalytics] Processing passed data:', ordersData.length, 'orders,', productsData.length, 'products');
-      
+
       // Calculate analytics for all periods using passed data
       const dailyAnalytics = calculatePeriodAnalytics(ordersData, 'daily');
       const weeklyAnalytics = calculatePeriodAnalytics(ordersData, 'weekly');
       const monthlyAnalytics = calculatePeriodAnalytics(ordersData, 'monthly');
       const yearlyAnalytics = calculatePeriodAnalytics(ordersData, 'yearly');
       const totalRevenue = ordersData.reduce((sum, o) => sum + (o.total || 0), 0);
-      
+
       // Calculate advanced metrics
       const topProducts = calculateTopProducts(ordersData);
       const categoryBreakdown = calculateCategoryBreakdown(ordersData, productsData);
       const peakHours = calculatePeakHours(ordersData);
       const performanceMetrics = calculatePerformanceMetrics(ordersData, productsData);
-      
+
       // Generate chart data
       const revenueTrends = generateRevenueTrends(ordersData, selectedPeriod);
       const orderTrends = generateOrderTrends(ordersData, selectedPeriod);
       const productPerformance = generateProductPerformance(ordersData, productsData);
       const comparisons = generateComparisons(ordersData, selectedPeriod);
-      
+
       // Update analytics state
       setAnalytics({
         dailyRevenue: Number(dailyAnalytics.revenue || 0),
@@ -352,7 +400,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         yearlyRevenue: Number(yearlyAnalytics.revenue || 0),
         totalRevenue: Number(totalRevenue || 0),
         revenueGrowth: calculateGrowthRate(weeklyAnalytics.revenue, monthlyAnalytics.revenue),
-        
+
         dailyOrders: Number(dailyAnalytics.orderCount || 0),
         weeklyOrders: Number(weeklyAnalytics.orderCount || 0),
         monthlyOrders: Number(monthlyAnalytics.orderCount || 0),
@@ -360,37 +408,37 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         totalOrders: Number(ordersData.length || 0),
         avgOrderValue: ordersData.length > 0 ? Math.round(totalRevenue / ordersData.length) : 0,
         orderGrowth: calculateGrowthRate(weeklyAnalytics.orderCount, monthlyAnalytics.orderCount),
-        
+
         totalProducts: Number(productsData.length || 0),
         topProducts: topProducts || [],
         categoryBreakdown: categoryBreakdown || [],
         itemsSold: calculateTotalItemsSold(ordersData),
         inventoryTurnover: calculateInventoryTurnover(ordersData, productsData),
-        
+
         peakHours: peakHours || [],
         customerSegments: [],
         seasonalTrends: [],
         performanceMetrics: performanceMetrics || [],
-        
+
         // Calculate period-specific analytics based on selectedPeriod
         periodRevenue: selectedPeriod === 'daily' ? Number(dailyAnalytics.revenue || 0) :
-                      selectedPeriod === 'weekly' ? Number(weeklyAnalytics.revenue || 0) :
-                      selectedPeriod === 'monthly' ? Number(monthlyAnalytics.revenue || 0) :
-                      Number(yearlyAnalytics.revenue || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.revenue || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.revenue || 0) :
+              Number(yearlyAnalytics.revenue || 0),
         periodOrders: selectedPeriod === 'daily' ? Number(dailyAnalytics.orderCount || 0) :
-                     selectedPeriod === 'weekly' ? Number(weeklyAnalytics.orderCount || 0) :
-                     selectedPeriod === 'monthly' ? Number(monthlyAnalytics.orderCount || 0) :
-                     Number(yearlyAnalytics.orderCount || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.orderCount || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.orderCount || 0) :
+              Number(yearlyAnalytics.orderCount || 0),
         periodAvgOrderValue: selectedPeriod === 'daily' ? Number(dailyAnalytics.avgOrderValue || 0) :
-                            selectedPeriod === 'weekly' ? Number(weeklyAnalytics.avgOrderValue || 0) :
-                            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.avgOrderValue || 0) :
-                            Number(yearlyAnalytics.avgOrderValue || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.avgOrderValue || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.avgOrderValue || 0) :
+              Number(yearlyAnalytics.avgOrderValue || 0),
         totalItems: selectedPeriod === 'daily' ? Number(dailyAnalytics.totalItems || 0) :
-                   selectedPeriod === 'weekly' ? Number(weeklyAnalytics.totalItems || 0) :
-                   selectedPeriod === 'monthly' ? Number(monthlyAnalytics.totalItems || 0) :
-                   Number(yearlyAnalytics.totalItems || 0),
+          selectedPeriod === 'weekly' ? Number(weeklyAnalytics.totalItems || 0) :
+            selectedPeriod === 'monthly' ? Number(monthlyAnalytics.totalItems || 0) :
+              Number(yearlyAnalytics.totalItems || 0),
       });
-      
+
       // Update chart data
       setChartData({
         revenueTrends: revenueTrends || [],
@@ -399,7 +447,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         comparisons: comparisons || [],
         insights: []
       });
-      
+
       console.log('📈 [AdvancedAnalytics] Successfully processed passed data');
     } catch (error) {
       console.error('Error processing passed data:', error);
@@ -416,7 +464,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
     let startDate, endDate;
     const now = new Date();
-    
+
     switch (period) {
       case 'daily':
         startDate = new Date(now);
@@ -460,10 +508,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       } else {
         return false;
       }
-      
+
       return orderDate >= startDate && orderDate <= endDate;
     });
-    
+
     const revenue = periodOrders.reduce((sum, order) => sum + (order.total || 0), 0);
     const orderCount = periodOrders.length;
     const avgOrderValue = orderCount > 0 ? Math.round(revenue / orderCount) : 0;
@@ -471,7 +519,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       if (!order.items || !Array.isArray(order.items)) return sum;
       return sum + order.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
     }, 0);
-    
+
     return {
       revenue,
       orderCount,
@@ -483,9 +531,9 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const calculateTopProducts = (orders) => {
     if (!orders || !Array.isArray(orders)) return [];
-    
+
     const productSales = {};
-    
+
     orders.forEach(order => {
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach(item => {
@@ -498,7 +546,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         });
       }
     });
-    
+
     return Object.values(productSales)
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
@@ -506,9 +554,9 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const calculateCategoryBreakdown = (orders, products) => {
     if (!orders || !Array.isArray(orders)) return [];
-    
+
     const categoryData = {};
-    
+
     orders.forEach(order => {
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach(item => {
@@ -521,15 +569,15 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         });
       }
     });
-    
+
     return Object.values(categoryData).sort((a, b) => b.revenue - a.revenue);
   };
 
   const calculatePeakHours = (orders) => {
     if (!orders || !Array.isArray(orders)) return [];
-    
+
     const hourlyData = {};
-    
+
     orders.forEach(order => {
       let orderDate;
       if (order.timestamp) {
@@ -541,29 +589,29 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       } else {
         return;
       }
-      
+
       const hour = orderDate.getHours();
       hourlyData[hour] = (hourlyData[hour] || 0) + 1;
     });
-    
+
     return Object.entries(hourlyData)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
       .map(([hour, count]) => ({
         hour: parseInt(hour),
         count,
-        timeRange: `${hour}:00-${parseInt(hour)+1}:00`
+        timeRange: `${hour}:00-${parseInt(hour) + 1}:00`
       }));
   };
 
   const calculatePerformanceMetrics = (orders, products) => {
     if (!orders || !Array.isArray(orders) || !products || !Array.isArray(products)) return [];
-    
+
     const totalRevenue = orders.reduce((sum, order) => sum + (order.total || 0), 0);
     const totalOrders = orders.length;
     const totalProducts = products.length;
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    
+
     return [
       { metric: 'Total Revenue', value: totalRevenue, format: 'currency' },
       { metric: 'Total Orders', value: totalOrders, format: 'number' },
@@ -574,10 +622,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const generateRevenueTrends = (orders, period) => {
     if (!orders || !Array.isArray(orders)) return [];
-    
+
     const trendData = {};
     const now = new Date();
-    
+
     orders.forEach(order => {
       let orderDate;
       if (order.timestamp) {
@@ -589,7 +637,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       } else {
         return;
       }
-      
+
       let key;
       switch (period) {
         case 'daily':
@@ -609,22 +657,22 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         default:
           key = orderDate.toISOString().split('T')[0];
       }
-      
+
       if (!trendData[key]) {
         trendData[key] = { period: key, revenue: 0, orders: 0 };
       }
       trendData[key].revenue += order.total || 0;
       trendData[key].orders += 1;
     });
-    
+
     return Object.values(trendData).sort((a, b) => b.period.localeCompare(a.period));
   };
 
   const generateOrderTrends = (orders, period) => {
     if (!orders || !Array.isArray(orders)) return [];
-    
+
     const trendData = {};
-    
+
     orders.forEach(order => {
       let orderDate;
       if (order.timestamp) {
@@ -636,7 +684,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       } else {
         return;
       }
-      
+
       let key;
       switch (period) {
         case 'daily':
@@ -656,7 +704,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         default:
           key = orderDate.toISOString().split('T')[0];
       }
-      
+
       if (!trendData[key]) {
         trendData[key] = { period: key, orders: 0, items: 0 };
       }
@@ -665,15 +713,15 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         trendData[key].items += order.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
       }
     });
-    
+
     return Object.values(trendData).sort((a, b) => b.period.localeCompare(a.period));
   };
 
   const generateProductPerformance = (orders, products) => {
     if (!orders || !Array.isArray(orders) || !products || !Array.isArray(products)) return [];
-    
+
     const productPerformance = {};
-    
+
     orders.forEach(order => {
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach(item => {
@@ -692,7 +740,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         });
       }
     });
-    
+
     return Object.values(productPerformance)
       .sort((a, b) => b.totalRevenue - a.totalRevenue)
       .slice(0, 20);
@@ -700,10 +748,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const generateComparisons = (orders, period) => {
     if (!orders || !Array.isArray(orders)) return [];
-    
+
     const now = new Date();
     const currentPeriodData = calculatePeriodAnalytics(orders, period);
-    
+
     // Calculate previous period for comparison
     let previousStartDate, previousEndDate;
     switch (period) {
@@ -736,7 +784,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       default:
         return [];
     }
-    
+
     const previousOrders = orders.filter(order => {
       let orderDate;
       if (order.timestamp) {
@@ -748,13 +796,13 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       } else {
         return false;
       }
-      
+
       return orderDate >= previousStartDate && orderDate <= previousEndDate;
     });
-    
+
     const previousRevenue = previousOrders.reduce((sum, order) => sum + (order.total || 0), 0);
     const previousOrderCount = previousOrders.length;
-    
+
     return [
       {
         metric: 'Revenue',
@@ -778,7 +826,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const calculateTotalItemsSold = (orders) => {
     if (!orders || !Array.isArray(orders)) return 0;
-    
+
     return orders.reduce((total, order) => {
       if (!order.items || !Array.isArray(order.items)) return total;
       return total + order.items.reduce((sum, item) => sum + (item.quantity || 0), 0);
@@ -787,10 +835,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const calculateInventoryTurnover = (orders, products) => {
     if (!orders || !Array.isArray(orders) || !products || !Array.isArray(products)) return 0;
-    
+
     const totalItemsSold = calculateTotalItemsSold(orders);
     const totalInventory = products.reduce((sum, product) => sum + (product.stock || 0), 0);
-    
+
     return totalInventory > 0 ? Math.round((totalItemsSold / totalInventory) * 100) / 100 : 0;
   };
 
@@ -801,32 +849,32 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       setFilteredData([]);
       return;
     }
-    
+
     console.log('📊 [AdvancedAnalytics] Applying filters to', orders.length, 'orders');
     console.log('📊 [AdvancedAnalytics] Active filters:', {
       dateRange: dateRange.start || dateRange.end ? `${dateRange.start || 'any'} to ${dateRange.end || 'any'}` : 'none',
       category: categoryFilter !== 'all' ? categoryFilter : 'all categories',
       product: selectedProduct?.name || 'all products'
     });
-    
+
     let filtered = [...orders];
-    
+
     // Check if any filters are actually active
     const hasActiveFilters = dateRange.start || dateRange.end || categoryFilter !== 'all' || selectedProduct;
-    
+
     if (!hasActiveFilters) {
       console.log('📊 [AdvancedAnalytics] No active filters, showing all orders');
       setFilteredData(filtered);
       return;
     }
-    
+
     console.log('📊 [AdvancedAnalytics] Active filters detected, applying...');
-    
+
     // Date range filter - Start date (beginning of day)
     if (dateRange.start) {
       const startDate = new Date(dateRange.start);
       startDate.setHours(0, 0, 0, 0);
-      
+
       filtered = filtered.filter(order => {
         // Handle multiple date field formats from backend
         let orderDate;
@@ -841,22 +889,22 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
           console.warn('📊 Order missing date field for date filter:', order.id);
           return false; // Skip orders without date when date filter is active
         }
-        
+
         const isValid = !isNaN(orderDate.getTime());
         if (!isValid) {
           console.warn('📊 Invalid date in order:', order.id, order.timestamp, order.createdAt);
           return false;
         }
-        
+
         return orderDate >= startDate;
       });
     }
-    
+
     // Date range filter - End date (end of day)
     if (dateRange.end) {
       const endDate = new Date(dateRange.end);
       endDate.setHours(23, 59, 59, 999);
-      
+
       filtered = filtered.filter(order => {
         // Handle multiple date field formats from backend
         let orderDate;
@@ -869,18 +917,18 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         } else {
           return false; // Skip orders without date
         }
-        
+
         const isValid = !isNaN(orderDate.getTime());
         if (!isValid) {
           return false;
         }
-        
+
         return orderDate <= endDate;
       });
     }
-    
+
     // Amount range filter removed for simplicity
-    
+
     // Category filter
     if (categoryFilter && categoryFilter !== 'all') {
       filtered = filtered.filter(order => {
@@ -888,20 +936,20 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         return order.items.some(item => item.category === categoryFilter);
       });
     }
-    
+
     // Product-specific filter - Fixed to use product name instead of ID
     if (selectedProduct) {
       filtered = filtered.filter(order => {
         if (!order.items || order.items.length === 0) return false;
-        return order.items.some(item => 
-          item.name && selectedProduct.name && 
+        return order.items.some(item =>
+          item.name && selectedProduct.name &&
           item.name.toLowerCase().includes(selectedProduct.name.toLowerCase())
         );
       });
     }
-    
+
     console.log('📊 [AdvancedAnalytics] Filtered results:', filtered.length, 'orders');
-    
+
     // Debug: Show sample filtered order structure
     if (filtered.length > 0) {
       console.log('📊 [AdvancedAnalytics] Sample filtered order:', {
@@ -924,7 +972,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         });
       }
     }
-    
+
     setFilteredData(filtered);
   };
 
@@ -933,12 +981,12 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       // Return empty data when no orders exist - no dummy data
       const emptyData = [];
       const now = new Date();
-      
+
       for (let i = 6; i >= 0; i--) {
         const date = new Date(now);
         date.setDate(now.getDate() - i);
         const dayName = date.toLocaleDateString('en', { weekday: 'short', day: 'numeric' });
-        
+
         emptyData.push({
           date: date.toISOString().split('T')[0],
           revenue: 0,
@@ -947,20 +995,20 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
           label: dayName
         });
       }
-      
+
       return emptyData;
     }
-    
+
     const dailyMap = {};
     const now = new Date();
-    
+
     // Create last 7 days with meaningful labels
     for (let i = 6; i >= 0; i--) {
       const date = new Date(now);
       date.setDate(now.getDate() - i);
       const dateKey = date.toISOString().split('T')[0];
       const dayName = date.toLocaleDateString('en', { weekday: 'short', day: 'numeric' });
-      
+
       dailyMap[dateKey] = {
         date: dateKey,
         revenue: 0,
@@ -969,12 +1017,12 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         label: dayName
       };
     }
-    
+
     // Add order data
     orders.forEach((order) => {
       const orderDate = new Date(order.timestamp || order.createdAt || order.created_at);
       if (isNaN(orderDate.getTime())) return;
-      
+
       const dateKey = orderDate.toISOString().split('T')[0];
       if (dailyMap[dateKey]) {
         dailyMap[dateKey].revenue += order.total || 0;
@@ -984,7 +1032,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         }
       }
     });
-    
+
     return Object.values(dailyMap);
   };
 
@@ -992,10 +1040,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     if (!orders || orders.length === 0) {
       // Return empty data when no orders exist - no dummy data
       const emptyData = [];
-      
+
       for (let i = 7; i >= 0; i--) {
         const weekNum = 8 - i;
-        
+
         emptyData.push({
           week: `W${weekNum}`,
           revenue: 0,
@@ -1004,13 +1052,13 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
           label: `Week ${weekNum}`
         });
       }
-      
+
       return emptyData;
     }
-    
+
     const weeklyMap = {};
     const now = new Date();
-    
+
     // Create last 8 weeks with meaningful labels
     for (let i = 7; i >= 0; i--) {
       const weekNum = 8 - i;
@@ -1023,15 +1071,15 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         label: `Week ${weekNum}`
       };
     }
-    
+
     // Add order data
     orders.forEach((order) => {
       const orderDate = new Date(order.timestamp || order.createdAt || order.created_at);
       if (isNaN(orderDate.getTime())) return;
-      
+
       const weeksDiff = Math.floor((now - orderDate) / (7 * 24 * 60 * 60 * 1000));
       const weekKey = `W${Math.max(1, 8 - weeksDiff)}`;
-      
+
       if (weeklyMap[weekKey]) {
         weeklyMap[weekKey].revenue += order.total || 0;
         weeklyMap[weekKey].orders += 1;
@@ -1040,7 +1088,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         }
       }
     });
-    
+
     return Object.values(weeklyMap);
   };
 
@@ -1050,12 +1098,12 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       const emptyData = [];
       const now = new Date();
       const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-      
+
       for (let i = 11; i >= 0; i--) {
         const date = new Date(now.getFullYear(), now.getMonth() - i, 1);
         const monthName = months[date.getMonth()];
         const year = date.getFullYear().toString().slice(-2);
-        
+
         emptyData.push({
           month: monthName,
           revenue: 0,
@@ -1064,20 +1112,20 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
           label: `${monthName} '${year}`
         });
       }
-      
+
       return emptyData;
     }
-    
+
     const monthlyMap = {};
     const currentDate = new Date();
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    
+
     // Create last 12 months with meaningful labels
     for (let i = 11; i >= 0; i--) {
       const date = new Date(currentDate.getFullYear(), currentDate.getMonth() - i, 1);
       const monthName = months[date.getMonth()];
       const year = date.getFullYear().toString().slice(-2);
-      
+
       monthlyMap[monthName] = {
         month: monthName,
         revenue: 0,
@@ -1086,12 +1134,12 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         label: `${monthName} '${year}`
       };
     }
-    
+
     // Add order data
     orders.forEach((order) => {
       const orderDate = new Date(order.timestamp || order.createdAt || order.created_at);
       if (isNaN(orderDate.getTime())) return;
-      
+
       const monthName = months[orderDate.getMonth()];
       if (monthlyMap[monthName]) {
         monthlyMap[monthName].revenue += order.total || 0;
@@ -1101,7 +1149,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         }
       }
     });
-    
+
     return Object.values(monthlyMap);
   };
 
@@ -1110,10 +1158,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       // Return empty data when no orders exist - no dummy data
       const emptyData = [];
       const now = new Date();
-      
+
       for (let i = 4; i >= 0; i--) {
         const year = (now.getFullYear() - i).toString();
-        
+
         emptyData.push({
           year: year,
           revenue: 0,
@@ -1122,13 +1170,13 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
           label: year
         });
       }
-      
+
       return emptyData;
     }
-    
+
     const yearlyMap = {};
     const now = new Date();
-    
+
     // Create last 5 years
     for (let i = 4; i >= 0; i--) {
       const year = (now.getFullYear() - i).toString();
@@ -1140,12 +1188,12 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         label: year
       };
     }
-    
+
     // Add order data
     orders.forEach((order) => {
       const orderDate = new Date(order.timestamp || order.createdAt || order.created_at);
       if (isNaN(orderDate.getTime())) return;
-      
+
       const yearKey = orderDate.getFullYear().toString();
       if (yearlyMap[yearKey]) {
         yearlyMap[yearKey].revenue += order.total || 0;
@@ -1155,7 +1203,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         }
       }
     });
-    
+
     return Object.values(yearlyMap);
   };
 
@@ -1182,7 +1230,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const generateComprehensiveAnalytics = () => {
     console.log('📊 [AdvancedAnalytics] Generating comprehensive analytics data...');
-    
+
     // Generate all analytics data based on current view and filters
     const viewData = {
       daily: generateDailyData(),
@@ -1190,7 +1238,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       monthly: generateMonthlyData(),
       yearly: generateYearlyData()
     };
-    
+
     // Calculate overall metrics
     const totalRevenue = filteredData.reduce((sum, order) => sum + (order.total || 0), 0);
     const totalOrders = filteredData.length;
@@ -1199,7 +1247,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       return sum + order.items.reduce((itemSum, item) => itemSum + (item.quantity || 0), 0);
     }, 0);
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    
+
     // Product analysis
     const productSales = {};
     filteredData.forEach(order => {
@@ -1214,11 +1262,11 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         });
       }
     });
-    
+
     const topProducts = Object.values(productSales)
       .sort((a, b) => b.revenue - a.revenue)
       .slice(0, 10);
-    
+
     // Category analysis
     const categoryData = {};
     filteredData.forEach(order => {
@@ -1233,7 +1281,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         });
       }
     });
-    
+
     // Payment method analysis - Cash and UPI/QR only (Card payments removed)
     const paymentMethods = {
       cash: filteredData.filter(o => {
@@ -1242,12 +1290,12 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       }).length,
       upi: filteredData.filter(o => {
         const method = (o.paymentMethod || o.payment_method || '').toLowerCase();
-        return method.includes('upi') || method.includes('qr') || method.includes('gpay') || 
-               method.includes('phonepe') || method.includes('paytm') || method.includes('bhim') ||
-               method.includes('google pay') || method.includes('phone pe');
+        return method.includes('upi') || method.includes('qr') || method.includes('gpay') ||
+          method.includes('phonepe') || method.includes('paytm') || method.includes('bhim') ||
+          method.includes('google pay') || method.includes('phone pe');
       }).length
     };
-    
+
     // Time-based analysis
     const hourlyData = {};
     const dailyData = {};
@@ -1255,21 +1303,21 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       const orderDate = new Date(order.timestamp || order.createdAt);
       const hour = orderDate.getHours();
       const dayName = orderDate.toLocaleDateString('en', { weekday: 'long' });
-      
+
       hourlyData[hour] = (hourlyData[hour] || 0) + 1;
       dailyData[dayName] = (dailyData[dayName] || 0) + 1;
     });
-    
+
     const peakHours = Object.entries(hourlyData)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 5)
-      .map(([hour, count]) => ({ hour: parseInt(hour), count, timeRange: `${hour}:00-${parseInt(hour)+1}:00` }));
-    
+      .map(([hour, count]) => ({ hour: parseInt(hour), count, timeRange: `${hour}:00-${parseInt(hour) + 1}:00` }));
+
     const peakDays = Object.entries(dailyData)
-      .sort(([,a], [,b]) => b - a)
+      .sort(([, a], [, b]) => b - a)
       .slice(0, 7)
       .map(([day, count]) => ({ day, count }));
-    
+
     return {
       period: selectedPeriod,
       dateRange: dateRange,
@@ -1293,7 +1341,19 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     };
   };
 
+  const handleCSVExport = async () => {
+    if (!features.csv) {
+      featureService.showUpgradePrompt('csv_exports');
+      return;
+    }
+    navigation.navigate('DataExport');
+  };
+
   const handlePDFExport = async () => {
+    if (!features.pdf) {
+      featureService.showUpgradePrompt('pdf_reports');
+      return;
+    }
     if (orders.length === 0) {
       Alert.alert('No Data', 'No orders available to generate analytics report.');
       return;
@@ -1304,10 +1364,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
     try {
       console.log('📄 [AdvancedAnalytics] Generating detailed analytics PDF...');
-      
+
       // Generate comprehensive analytics data
       const analyticsData = generateComprehensiveAnalytics();
-      
+
       // Generate detailed PDF
       const result = await generateDetailedAnalyticsPDF(analyticsData);
 
@@ -1316,8 +1376,8 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         `${result.filename} has been generated successfully!\n\nChoose how you'd like to save or share your report:`,
         [
           { text: 'Cancel', style: 'cancel' },
-          { 
-            text: 'Save to Device', 
+          {
+            text: 'Save to Device',
             onPress: async () => {
               try {
                 await saveAnalyticsPDFToDevice(result);
@@ -1358,17 +1418,17 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const generateDetailedAnalyticsPDF = async (analyticsData) => {
     const { printToFileAsync } = await import('expo-print');
-    
+
     // Get store information from context (synchronous now)
     const storeInfo = getStoreInfo();
-    
+
     // Generate comprehensive HTML
     const htmlContent = generateDetailedAnalyticsHTML(storeInfo, analyticsData);
-    
+
     // Generate PDF with custom filename
     const dateString = new Date().toISOString().split('T')[0].replace(/-/g, '');
     const filename = `FlowPOS_Detailed_Analytics_${dateString}.pdf`;
-    
+
     const { uri } = await printToFileAsync({
       html: htmlContent,
       base64: false,
@@ -1385,7 +1445,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const shareAnalyticsPDF = async (uri, filename) => {
     const { isAvailableAsync, shareAsync } = await import('expo-sharing');
-    
+
     if (await isAvailableAsync()) {
       await shareAsync(uri, {
         mimeType: 'application/pdf',
@@ -1398,9 +1458,9 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   const saveAnalyticsPDFToDevice = async (reportResult) => {
     try {
       console.log('💾 [AdvancedAnalytics] Saving report to device:', reportResult.filename);
-      
+
       const { isAvailableAsync, shareAsync } = await import('expo-sharing');
-      
+
       if (await isAvailableAsync()) {
         await shareAsync(reportResult.uri, {
           mimeType: 'application/pdf',
@@ -1425,7 +1485,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       // Phone and email come from AuthContext (user-bound)
       const storePhone = user?.phone || '';
       const storeEmail = user?.email || '';
-      
+
       return {
         name: storeProfile.store_name || 'FlowPOS Store',
         address: storeProfile.store_address || 'Store Address',
@@ -1436,7 +1496,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     } catch (error) {
       console.error('Error getting store info:', error);
     }
-    
+
     return {
       name: 'FlowPOS Store',
       address: 'Store Address',
@@ -1449,7 +1509,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   const generateDetailedAnalyticsHTML = (storeInfo, data) => {
     const formatCurrency = (amount) => `₹${parseFloat(amount || 0).toFixed(2)}`;
     const formatDate = (dateString) => new Date(dateString).toLocaleDateString('en-IN');
-    
+
     // FIXED: Generate period analysis rows with safety checks
     const viewDataForPeriod = data.viewData && data.viewData[data.period] ? data.viewData[data.period] : [];
     const periodRows = viewDataForPeriod.slice(0, 20).map(item => {
@@ -1469,7 +1529,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         console.warn('Period label generation error:', error);
         periodLabel = `Period ${periodRows.length + 1}`;
       }
-      
+
       return `
         <tr>
           <td>${periodLabel}</td>
@@ -1521,7 +1581,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         <td>${data.summary && data.summary.totalOrders > 0 ? (((day.count || 0) / data.summary.totalOrders) * 100).toFixed(1) : 0}%</td>
       </tr>
     `).join('');
-    
+
     return `
       <!DOCTYPE html>
       <html>
@@ -1818,7 +1878,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const renderFilterButton = () => {
     const hasActiveFilters = dateRange.start || dateRange.end || categoryFilter !== 'all' || selectedProduct;
-    
+
     return (
       <TouchableOpacity
         style={styles.filterButton}
@@ -1852,7 +1912,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
               <Text style={styles.modalTitle}>Filter Your Data</Text>
               <Text style={styles.modalSubtitle}>Customize what you want to see</Text>
             </View>
-            <TouchableOpacity 
+            <TouchableOpacity
               onPress={() => setShowFilterModal(false)}
               style={styles.closeButton}
             >
@@ -1880,7 +1940,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                     All Time
                   </Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={styles.datePresetButton}
                   onPress={() => {
@@ -1892,7 +1952,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                 >
                   <Text style={styles.datePresetText}>Today</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={styles.datePresetButton}
                   onPress={() => {
@@ -1905,7 +1965,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                 >
                   <Text style={styles.datePresetText}>Last 7 Days</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={styles.datePresetButton}
                   onPress={() => {
@@ -1918,7 +1978,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                 >
                   <Text style={styles.datePresetText}>Last 30 Days</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={styles.datePresetButton}
                   onPress={() => {
@@ -1930,7 +1990,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                 >
                   <Text style={styles.datePresetText}>This Month</Text>
                 </TouchableOpacity>
-                
+
                 <TouchableOpacity
                   style={styles.datePresetButton}
                   onPress={() => {
@@ -1943,7 +2003,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                   <Text style={styles.datePresetText}>This Year</Text>
                 </TouchableOpacity>
               </View>
-              
+
               {(dateRange.start || dateRange.end) && (
                 <View style={styles.selectedDateRange}>
                   <Text style={styles.selectedDateRangeText}>
@@ -2014,7 +2074,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                       All Products
                     </Text>
                   </TouchableOpacity>
-                  
+
                   {products.slice(0, 20).map(product => (
                     <TouchableOpacity
                       key={product.id}
@@ -2051,7 +2111,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
               <Ionicons name="refresh-circle" size={20} color={colors.text.secondary} />
               <Text style={styles.clearButtonText}>Reset All Filters</Text>
             </TouchableOpacity>
-            
+
             <TouchableOpacity
               style={styles.applyButton}
               onPress={() => {
@@ -2072,12 +2132,12 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
   const renderDataCard = (item, index) => {
     // Simplified data card rendering
     let title, subtitle, revenue, orders, items;
-    
+
     try {
       revenue = Number(item.revenue || 0);
       orders = Number(item.orders || 0);
       items = Number(item.items || 0);
-      
+
       title = item.label || `Period ${index + 1}`;
       subtitle = selectedPeriod.charAt(0).toUpperCase() + selectedPeriod.slice(1) + ' Data';
     } catch (error) {
@@ -2100,20 +2160,20 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
             <Text style={styles.dataCardRevenueAmount}>₹{revenue.toFixed(0)}</Text>
           </View>
         </View>
-        
+
         <View style={styles.dataCardStats}>
           <View style={styles.dataCardStat}>
             <Ionicons name="receipt-outline" size={16} color={colors.primary.main} />
             <Text style={styles.dataCardStatLabel}>Orders</Text>
             <Text style={styles.dataCardStatValue}>{orders}</Text>
           </View>
-          
+
           <View style={styles.dataCardStat}>
             <Ionicons name="cube-outline" size={16} color={colors.success.main} />
             <Text style={styles.dataCardStatLabel}>Items</Text>
             <Text style={styles.dataCardStatValue}>{items}</Text>
           </View>
-          
+
           <View style={styles.dataCardStat}>
             <Ionicons name="trending-up-outline" size={16} color={colors.warning.main} />
             <Text style={styles.dataCardStatLabel}>Avg</Text>
@@ -2138,7 +2198,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     // FIXED: Enhanced safety checks for view data calculation
     let viewData = [];
     let periodLabel = '';
-    
+
     try {
       switch (selectedPeriod) {
         case 'daily':
@@ -2170,7 +2230,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
             }, 0);
           }, 0);
           const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-          
+
           const summaryData = [
             {
               icon: 'cash',
@@ -2201,10 +2261,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
               label: 'Avg Order',
             },
           ];
-          
+
           return (
-            <ScrollView 
-              horizontal 
+            <ScrollView
+              horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.summaryContainer}
             >
@@ -2225,7 +2285,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       viewData = [];
       periodLabel = 'Period';
     }
-    
+
     // FIXED: Enhanced safety checks for totals calculation
     const totalRevenue = viewData.reduce((sum, item) => {
       return sum + Number(item.revenue || item.totalRevenue || 0);
@@ -2237,7 +2297,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       return sum + Number(item.items || item.totalQuantity || item.totalItems || 0);
     }, 0);
     const avgOrderValue = totalOrders > 0 ? totalRevenue / totalOrders : 0;
-    
+
     // FIXED: Enhanced safety checks for current period data
     const currentPeriodData = viewData.length > 0 ? viewData[0] : null;
     const currentRevenue = currentPeriodData ? Number(currentPeriodData.revenue || currentPeriodData.totalRevenue || 0) : 0;
@@ -2277,8 +2337,8 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     ];
 
     return (
-      <ScrollView 
-        horizontal 
+      <ScrollView
+        horizontal
         showsHorizontalScrollIndicator={false}
         contentContainerStyle={styles.summaryContainer}
       >
@@ -2297,9 +2357,9 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
   const renderContent = () => {
     console.log('📊 [AdvancedAnalytics] renderContent called, selectedPeriod:', selectedPeriod, 'filteredData:', filteredData.length);
-    
+
     let data = [];
-    
+
     try {
       switch (selectedPeriod) {
         case 'daily':
@@ -2321,18 +2381,18 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
       console.error('📊 [AdvancedAnalytics] Error generating data:', error);
       data = [];
     }
-    
+
     console.log('📊 [AdvancedAnalytics] Generated data for', selectedPeriod, ':', data.length, 'items');
 
     if (data.length === 0) {
       return (
         <View style={styles.emptyContainer}>
-          <NoDataChart 
-            height={200} 
-            message={filteredData.length === 0 
+          <NoDataChart
+            height={200}
+            message={filteredData.length === 0
               ? 'Start making sales to see your analytics here'
               : 'No results match your filters. Try changing them.'
-            } 
+            }
           />
           {filteredData.length > 0 && (
             <TouchableOpacity
@@ -2365,7 +2425,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
 
     // Enhanced product sales data generation with safety checks
     const productSales = {};
-    
+
     try {
       filteredData.forEach((order, orderIndex) => {
         if (order && order.items && Array.isArray(order.items)) {
@@ -2398,9 +2458,9 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         <View style={styles.consistentChartCard}>
           <Text style={styles.chartTitle}>Orders Trend</Text>
           <Text style={styles.chartSubtitle}>Number of orders per period</Text>
-          <BarChart 
-            data={chartData.map(item => ({ 
-              ...item, 
+          <BarChart
+            data={chartData.map(item => ({
+              ...item,
               value: item.orders, // Explicitly set value to orders count
             }))}
             height={200}
@@ -2414,9 +2474,9 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         <View style={styles.consistentChartCard}>
           <Text style={styles.chartTitle}>Items Sold</Text>
           <Text style={styles.chartSubtitle}>Total quantity of items sold</Text>
-          <BarChart 
-            data={chartData.map(item => ({ 
-              ...item, 
+          <BarChart
+            data={chartData.map(item => ({
+              ...item,
               value: item.items, // Explicitly set value to items count
             }))}
             height={200}
@@ -2430,11 +2490,11 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         <View style={styles.consistentChartCard}>
           <Text style={styles.chartTitle}>Avg Order Value</Text>
           <Text style={styles.chartSubtitle}>Average value per order</Text>
-          <HorizontalBarChart 
+          <HorizontalBarChart
             data={chartData.map(item => {
               const avgValue = item.orders > 0 ? Math.round(item.revenue / item.orders) : 0;
-              return { 
-                ...item, 
+              return {
+                ...item,
                 value: avgValue, // Calculated average
               };
             })}
@@ -2450,7 +2510,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
           <View style={styles.consistentChartCard}>
             <Text style={styles.chartTitle}>Top Products Distribution</Text>
             <Text style={styles.chartSubtitle}>Best performing products by revenue</Text>
-            <PieChart 
+            <PieChart
               data={sortedProducts.map(product => ({
                 name: product.name,
                 value: product.revenue,
@@ -2464,11 +2524,25 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         )}
 
         {/* Performance Comparison */}
-        {data.length > 0 && (
+        {!features.insights ? (
+          <View style={[styles.consistentChartCard, { alignItems: 'center', padding: 24, justifyContent: 'center' }]}>
+            <Ionicons name="lock-closed" size={32} color={colors.text.secondary} />
+            <Text style={[styles.chartTitle, { marginTop: 12 }]}>Unlock Performance Insights</Text>
+            <Text style={[styles.chartSubtitle, { textAlign: 'center', marginBottom: 16 }]}>
+              Upgrade to Enterprise to see detailed revenue comparisons and trends.
+            </Text>
+            <TouchableOpacity
+              style={{ backgroundColor: colors.primary.main, paddingVertical: 8, paddingHorizontal: 16, borderRadius: 8 }}
+              onPress={() => featureService.showUpgradePrompt('performance_insights')}
+            >
+              <Text style={{ color: '#fff', fontWeight: '600' }}>Upgrade Now</Text>
+            </TouchableOpacity>
+          </View>
+        ) : data.length > 0 && (
           <View style={styles.consistentChartCard}>
             <Text style={styles.chartTitle}>Revenue Comparison</Text>
             <Text style={styles.chartSubtitle}>Last 4 periods revenue</Text>
-            <ProgressChart 
+            <ProgressChart
               data={data.slice(-4).map((item, index) => {
                 const maxRevenue = Math.max(...data.slice(-4).map(d => Number(d.revenue || 0)));
                 let shortLabel = item.label || `P${index + 1}`;
@@ -2477,7 +2551,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                   shortLabel = shortLabel.split(' ')[0];
                 }
                 if (shortLabel.length > 5) shortLabel = shortLabel.substring(0, 4);
-                
+
                 return {
                   label: shortLabel,
                   value: `₹${Number(item.revenue || 0).toFixed(0)}`,
@@ -2515,10 +2589,10 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
     <SafeAreaView style={styles.container}>
       {isLoading && <LoadingSpinner />}
       {isExportingPDF && <LoadingSpinner />}
-      
+
       <View style={styles.content}>
         {/* Header */}
-        <View style={styles.header} ref={headerRef}>
+        <View style={styles.header}>
           <View style={styles.headerTop}>
             <TouchableOpacity
               style={styles.backButton}
@@ -2530,22 +2604,25 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
           </View>
           <View style={styles.headerButtons}>
             <TouchableOpacity
-              style={styles.pdfButton}
+              style={[styles.pdfButton, { opacity: features.pdf ? 1 : 0.7, marginLeft: 8 }]}
               onPress={handlePDFExport}
               disabled={isExportingPDF}
             >
-              <Ionicons 
-                name="document-text-outline" 
-                size={16} 
-                color={colors.background.surface} 
+              <Ionicons
+                name="document-text-outline"
+                size={16}
+                color={colors.background.surface}
               />
               <Text style={styles.pdfButtonText}>PDF</Text>
+              {!features.pdf && (
+                <Ionicons name="lock-closed" size={12} color={colors.background.surface} style={{ marginLeft: 4 }} />
+              )}
             </TouchableOpacity>
           </View>
         </View>
 
         {/* Period Selector */}
-        <View style={styles.periodSelector} ref={filterSectionRef}>
+        <View style={styles.periodSelector}>
           {['daily', 'weekly', 'monthly', 'yearly'].map((view) => (
             <TouchableOpacity
               key={view}
@@ -2559,76 +2636,77 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
                 styles.periodButtonText,
                 selectedPeriod === view && styles.periodButtonTextActive
               ]}>
-                {view === 'daily' ? 'Today' : 
-                 view === 'weekly' ? 'Week' : 
-                 view === 'monthly' ? 'Month' : 'Year'}
+                {view === 'daily' ? 'Today' :
+                  view === 'weekly' ? 'Week' :
+                    view === 'monthly' ? 'Month' : 'Year'}
               </Text>
             </TouchableOpacity>
           ))}
         </View>
 
         <View style={{ flex: 1 }}>
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-          refreshControl={
-            <RefreshControl
-              refreshing={refreshing}
-              onRefresh={onRefresh}
-              tintColor={colors.primary.main}
-              colors={[colors.primary.main]}
-              progressBackgroundColor={colors.background.surface}
-              title="Pull to refresh analytics..."
-              titleColor={colors.text.secondary}
-            />
-          }
-        >
+          <ScrollView
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={onRefresh}
+                tintColor={colors.primary.main}
+                colors={[colors.primary.main]}
+                progressBackgroundColor={colors.background.surface}
+                title="Pull to refresh analytics..."
+                titleColor={colors.text.secondary}
+              />
+            }
+          >
 
-        {/* Stats Grid - 4 Cards in 2x2 Layout with consistent spacing */}
-        <View style={styles.statsGrid} ref={summaryCardsRef}>
-          <StatCard
-            title={`${selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Week' : selectedPeriod === 'monthly' ? 'Month' : 'Year'} Revenue`}
-            value={`₹${analytics.periodRevenue || 0}`}
-            subtitle={selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Last 7 days' : selectedPeriod === 'monthly' ? 'Last 30 days' : 'This year'}
-            color={colors.primary.main}
-            index={0}
-          />
+            {/* Stats Grid - 4 Cards in 2x2 Layout with consistent spacing */}
+            <View style={styles.statsGrid}>
+              <StatCard
+                title={`${selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Week' : selectedPeriod === 'monthly' ? 'Month' : 'Year'} Revenue`}
+                value={`₹${analytics.periodRevenue || 0}`}
+                subtitle={selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Last 7 days' : selectedPeriod === 'monthly' ? 'Last 30 days' : 'This year'}
+                color={colors.primary.main}
+                index={0}
+              />
 
-          <StatCard
-            title={`${selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Week' : selectedPeriod === 'monthly' ? 'Month' : 'Year'} Orders`}
-            value={analytics.periodOrders || 0}
-            subtitle="Completed"
-            color={colors.success.main}
-            index={1}
-          />
+              <StatCard
+                title={`${selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Week' : selectedPeriod === 'monthly' ? 'Month' : 'Year'} Orders`}
+                value={analytics.periodOrders || 0}
+                subtitle="Completed"
+                color={colors.success.main}
+                index={1}
+              />
 
-          <StatCard
-            title="Avg Order Value"
-            value={`₹${analytics.periodAvgOrderValue || 0}`}
-            subtitle={selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Last 7 days' : selectedPeriod === 'monthly' ? 'Last 30 days' : 'Last year'}
-            color={colors.warning.main}
-            index={2}
-          />
+              <StatCard
+                title="Avg Order Value"
+                value={`₹${analytics.periodAvgOrderValue || 0}`}
+                subtitle={selectedPeriod === 'daily' ? 'Today' : selectedPeriod === 'weekly' ? 'Last 7 days' : selectedPeriod === 'monthly' ? 'Last 30 days' : 'Last year'}
+                color={colors.warning.main}
+                index={2}
+              />
 
-          <StatCard
-            title="Total Items"
-            value={analytics.totalItems || 0}
-            subtitle="Items sold"
-            color={colors.info.main}
-            index={3}
-          />
+              <StatCard
+                title="Total Items"
+                value={analytics.totalItems || 0}
+                subtitle="Items sold"
+                color={colors.info.main}
+                index={3}
+              />
+            </View>
+
+            {/* Advanced Analytics Content */}
+            {renderContent()}
+
+            <View style={{ height: 100 }} />
+          </ScrollView>
         </View>
-
-        {/* Advanced Analytics Content */}
-        {renderContent()}
-        
-        <View style={{ height: 100 }} />
-        </ScrollView>
-      </View>
       </View>
 
+      {/* TOUR TEMPORARILY DISABLED */}
       {/* Interactive Tour Overlay */}
-      <InteractiveTourOverlay
+      {/* <InteractiveTourOverlay
         ref={tourOverlayRef}
         visible={showTour}
         currentStep={currentStep}
@@ -2641,7 +2719,7 @@ const AdvancedAnalyticsScreen = ({ navigation, route }) => {
         onActionComplete={completeTour}
         showHint={showHint}
         showSkipStep={showSkipStep}
-      />
+      /> */}
     </SafeAreaView>
   );
 };
@@ -2770,7 +2848,7 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
     width: '100%',
   },
-  
+
   // Consistent Chart Card Styles - Match 4-card container width
   consistentChartCard: {
     backgroundColor: colors.background.surface,
@@ -2786,19 +2864,19 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.gray[100],
   },
-  
+
   chartWrapper: {
     overflow: 'visible', // FIXED: Allow horizontal scroll for charts
     borderRadius: 8,
   },
-  
+
   chartTitle: {
     fontSize: 18,
     fontWeight: '700',
     color: colors.text.primary,
     marginBottom: 4,
   },
-  
+
   chartSubtitle: {
     fontSize: 13,
     color: colors.text.secondary,

@@ -8,6 +8,7 @@ import {
   Alert,
   KeyboardAvoidingView,
   Platform,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
@@ -30,6 +31,7 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   const [isVerified, setIsVerified] = useState(false); // Track if OTP is verified
   
   const inputRefs = useRef([]);
+  const timerRef = useRef(null);
 
   // Block back navigation ONLY when not verified yet
   // Once OTP is verified, allow navigation to proceed normally
@@ -40,23 +42,34 @@ const OTPVerificationScreen = ({ navigation, route }) => {
     showAlert: true,
   });
 
-  // Enhanced timer with expiry handling and visibility
+  // Single unified timer with expiry handling
   useEffect(() => {
+    // Clear any existing timer
+    if (timerRef.current) {
+      clearInterval(timerRef.current);
+    }
+
+    // Only start timer if countdown is greater than 0
     if (countdown > 0) {
-      const timer = setInterval(() => {
+      timerRef.current = setInterval(() => {
         setCountdown(prev => {
           if (prev <= 1) {
-            clearInterval(timer);
-            // Show expiry modal when timer reaches 0
+            // Timer expired
             setShowExpiryModal(true);
             return 0;
           }
           return prev - 1;
         });
       }, 1000);
-
-      return () => clearInterval(timer);
     }
+
+    // Cleanup on unmount or when countdown changes
+    return () => {
+      if (timerRef.current) {
+        clearInterval(timerRef.current);
+        timerRef.current = null;
+      }
+    };
   }, [countdown]);
 
   // Format timer display (MM:SS)
@@ -100,11 +113,11 @@ const OTPVerificationScreen = ({ navigation, route }) => {
 
     setIsLoading(true);
     try {
+      // Mark as verified IMMEDIATELY when verification starts to disable back prevention
+      setIsVerified(true);
+      
       // Verify OTP with backend
       await verifyOTP(email, codeToVerify);
-      
-      // Mark as verified BEFORE navigation to disable back prevention
-      setIsVerified(true);
       
       // Navigate to password setup after successful verification
       navigation.navigate('PasswordSetup', {
@@ -115,6 +128,10 @@ const OTPVerificationScreen = ({ navigation, route }) => {
       
     } catch (error) {
       console.error('Verification error:', error);
+      
+      // Re-enable back prevention if verification fails
+      setIsVerified(false);
+      
       Alert.alert('Invalid Code', error.message || 'Please check your code and try again');
       
       // Clear OTP fields
@@ -133,15 +150,16 @@ const OTPVerificationScreen = ({ navigation, route }) => {
       await resendOTP(email);
       
       // Increment attempt counter
-      setResendAttempts(prev => prev + 1);
+      const newAttempts = resendAttempts + 1;
+      setResendAttempts(newAttempts);
       
-      // Reset countdown to 3 minutes
+      // Reset countdown to 3 minutes (this will trigger the timer useEffect)
       setCountdown(180);
       setShowExpiryModal(false);
       
       Alert.alert(
         'Code Sent', 
-        `A new verification code has been sent to your email. Attempts remaining: ${maxAttempts - resendAttempts - 1}`
+        `A new verification code has been sent to your email. Attempts remaining: ${maxAttempts - newAttempts}`
       );
       
     } catch (error) {
@@ -236,7 +254,7 @@ const OTPVerificationScreen = ({ navigation, route }) => {
                 (countdown > 0 || isResending || resendAttempts >= maxAttempts) && styles.resendDisabled
               ]}>
                 {isResending ? 'Sending...' : 
-                 countdown > 0 ? `Resend in ${formatTime(countdown)}` : 
+                 countdown > 0 ? 'Resend' : 
                  resendAttempts >= maxAttempts ? 'Max attempts reached' : 'Resend'}
               </Text>
             </TouchableOpacity>

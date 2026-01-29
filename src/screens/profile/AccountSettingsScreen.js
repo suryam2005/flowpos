@@ -22,6 +22,7 @@ import { safeGoBack } from '../../utils/navigationUtils';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
 import networkService from '../../services/NetworkService';
+import sessionStateManager from '../../services/SessionStateManager';
 
 const AccountSettingsScreen = ({ navigation }) => {
   const { changePassword, deleteAccount } = useAuth();
@@ -66,10 +67,67 @@ const AccountSettingsScreen = ({ navigation }) => {
       planName: 'Free Trial'
     }
   });
+  const [deviceSessions, setDeviceSessions] = useState({
+    count: 0,
+    sessions: [],
+    loading: true,
+  });
 
   useEffect(() => {
     loadAccountSettings();
     fetchStorageUsage();
+    fetchDeviceSessions();
+
+    // Add SessionStateManager listener for real-time updates (Requirements 4.1, 4.2)
+    console.log('🔄 Setting up SessionStateManager listener...');
+    const removeListener = sessionStateManager.addListener((eventType, data) => {
+      console.log(`📱 Session state event: ${eventType}`, data);
+      
+      switch (eventType) {
+        case 'sessions_updated':
+        case 'session_operation_completed':
+          // Update device sessions with fresh data
+          if (data.sessions) {
+            setDeviceSessions({
+              count: data.sessions.length,
+              sessions: data.sessions,
+              loading: false,
+            });
+          }
+          break;
+        
+        case 'logout_completed':
+        case 'cache_invalidated':
+          // Refresh session data after operations
+          fetchDeviceSessions();
+          break;
+        
+        default:
+          // Handle other events if needed
+          break;
+      }
+    });
+
+    // Add timeout to prevent infinite loading
+    const loadingTimeout = setTimeout(() => {
+      setDeviceSessions(prev => {
+        if (prev.loading) {
+          console.log('⏰ Device sessions loading timeout, setting to not loading');
+          return {
+            ...prev,
+            loading: false,
+          };
+        }
+        return prev;
+      });
+    }, 20000); // Increased to 20 seconds for initial load
+
+    // Cleanup listener and timeout on unmount
+    return () => {
+      console.log('🧹 Cleaning up SessionStateManager listener and timeout...');
+      removeListener();
+      clearTimeout(loadingTimeout);
+    };
   }, []);
 
   // FIXED: Back prevention during critical operations (password change, account deletion)
@@ -168,6 +226,270 @@ const AccountSettingsScreen = ({ navigation }) => {
     } catch (error) {
       console.error('Error calculating local data usage:', error);
     }
+  };
+
+  // Fetch active device sessions using SessionStateManager with improved error handling
+  const fetchDeviceSessions = async () => {
+    try {
+      setDeviceSessions(prev => ({ ...prev, loading: true }));
+      console.log('📱 Fetching active device sessions via SessionStateManager...');
+      
+      // Check if we have a valid token first
+      const token = await AsyncStorage.getItem('accessToken');
+      if (!token) {
+        console.log('⚠️ No access token found, cannot fetch device sessions');
+        setDeviceSessions({
+          count: 0,
+          sessions: [],
+          loading: false,
+        });
+        return;
+      }
+      
+      console.log('🔑 Access token found, proceeding with API call...');
+      
+      // Add timeout to prevent infinite loading
+      const timeoutPromise = new Promise((_, reject) => 
+        setTimeout(() => reject(new Error('SessionStateManager timeout')), 15000) // Increased to 15 seconds
+      );
+      
+      // Use SessionStateManager for consistent session data (Requirements 4.1, 4.2, 4.3)
+      const sessionsPromise = sessionStateManager.fetchActiveSessions();
+      const sessions = await Promise.race([sessionsPromise, timeoutPromise]);
+      
+      console.log(`✅ Device sessions received via SessionStateManager: ${sessions.length} sessions`);
+      setDeviceSessions({
+        count: sessions.length,
+        sessions: sessions,
+        loading: false,
+      });
+      
+    } catch (error) {
+      console.error('❌ Error fetching device sessions via SessionStateManager:', error);
+      
+      // Fallback to direct API call if SessionStateManager fails
+      console.log('🔄 Falling back to direct API call...');
+      try {
+        const timeoutPromise = new Promise((_, reject) => 
+          setTimeout(() => reject(new Error('Fallback API timeout')), 12000) // Increased to 12 seconds
+        );
+        
+        const apiPromise = networkService.apiCall('/devices/sessions', {
+          method: 'GET'
+        });
+        
+        const response = await Promise.race([apiPromise, timeoutPromise]);
+
+        if (response.ok) {
+          const result = await response.json();
+          if (result.success && result.sessions) {
+            console.log('✅ Device sessions received via fallback:', result.sessions);
+            setDeviceSessions({
+              count: result.totalSessions || result.sessions.length,
+              sessions: result.sessions,
+              loading: false,
+            });
+          } else {
+            console.log('⚠️ No device sessions found');
+            setDeviceSessions({
+              count: 0,
+              sessions: [],
+              loading: false,
+            });
+          }
+        } else {
+          console.log('⚠️ Failed to fetch device sessions, setting empty state');
+          setDeviceSessions({
+            count: 0,
+            sessions: [],
+            loading: false,
+          });
+        }
+      } catch (fallbackError) {
+        console.error('❌ Fallback API call also failed:', fallbackError);
+        // CRITICAL FIX: Always set loading to false, even on complete failure
+        setDeviceSessions({
+          count: 0,
+          sessions: [],
+          loading: false,
+        });
+      }
+    }
+  };
+
+  // Simple direct API call for device sessions (bypass SessionStateManager)
+  const fetchDeviceSessionsDirect = async () => {
+    try {
+      setDeviceSessions(prev => ({ ...prev, loading: true }));
+      console.log('📱 Fetching device sessions directly from API...');
+      
+      const response = await networkService.apiCall('/devices/sessions', {
+        method: 'GET'
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success && result.sessions) {
+          console.log('✅ Device sessions received directly:', result.sessions);
+          setDeviceSessions({
+            count: result.totalSessions || result.sessions.length,
+            sessions: result.sessions,
+            loading: false,
+          });
+        } else {
+          console.log('⚠️ No device sessions found in direct call');
+          setDeviceSessions({
+            count: 0,
+            sessions: [],
+            loading: false,
+          });
+        }
+      } else {
+        console.log('⚠️ Direct API call failed:', response.status);
+        setDeviceSessions({
+          count: 0,
+          sessions: [],
+          loading: false,
+        });
+      }
+    } catch (error) {
+      console.error('❌ Direct API call failed:', error);
+      setDeviceSessions({
+        count: 0,
+        sessions: [],
+        loading: false,
+      });
+    }
+  };
+
+  // Logout all other devices using enhanced session management
+  const handleLogoutAllOtherDevices = () => {
+    const otherDevicesCount = Math.max(0, deviceSessions.count - 1);
+    
+    if (otherDevicesCount === 0) {
+      Alert.alert(
+        'No Other Devices',
+        'You are only logged in on this device.',
+        [{ text: 'OK' }]
+      );
+      return;
+    }
+
+    Alert.alert(
+      'Logout All Other Devices',
+      `This will log you out from ${otherDevicesCount} other device${otherDevicesCount !== 1 ? 's' : ''}. You will remain logged in on this device.\n\nThis action will:\n• End all other active sessions\n• Clear session data from database\n• Keep your current session active`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Logout All',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              setIsLoading(true);
+              console.log('🚪 Logging out all other devices with enhanced session management...');
+              
+              // First try SessionStateManager for consistent state management
+              try {
+                const result = await sessionStateManager.handleLogoutAllOthers();
+                
+                Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                
+                // SessionStateManager will automatically update the UI via listeners
+                setIsLoading(false);
+                
+                Alert.alert(
+                  'Success',
+                  result.message || `Successfully logged out from ${result.loggedOutCount || otherDevicesCount} other device${(result.loggedOutCount || otherDevicesCount) !== 1 ? 's' : ''}. All session data has been cleared from the database.`,
+                  [{ text: 'OK' }]
+                );
+                
+              } catch (sessionManagerError) {
+                console.error('SessionStateManager failed, trying direct API:', sessionManagerError);
+                
+                // Fallback to direct API call with enhanced error handling
+                try {
+                  const response = await networkService.apiCall('/devices/sessions/all/others', {
+                    method: 'DELETE'
+                  });
+
+                  if (response.ok) {
+                    const result = await response.json();
+                    console.log('✅ Logged out from other devices via direct API:', result);
+                    
+                    Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
+                    
+                    // Force refresh session data after successful logout
+                    setTimeout(async () => {
+                      try {
+                        sessionStateManager.invalidateSessionCache();
+                        await fetchDeviceSessions();
+                      } catch (refreshError) {
+                        console.error('Error refreshing sessions after logout:', refreshError);
+                      }
+                      
+                      Alert.alert(
+                        'Success',
+                        `Successfully logged out from ${result.loggedOutCount || otherDevicesCount} other device${(result.loggedOutCount || otherDevicesCount) !== 1 ? 's' : ''}. All session data has been cleared.`,
+                        [{ text: 'OK' }]
+                      );
+                    }, 1000);
+                  } else {
+                    const errorData = await response.json().catch(() => ({}));
+                    throw new Error(errorData.message || `HTTP ${response.status}: Failed to logout other devices`);
+                  }
+                } catch (directApiError) {
+                  console.error('❌ Direct API also failed:', directApiError);
+                  throw directApiError;
+                }
+              }
+              
+            } catch (error) {
+              console.error('❌ Complete failure logging out other devices:', error);
+              setIsLoading(false);
+              
+              // CRITICAL FIX: If logout completely fails, try to clear local session cache anyway
+              try {
+                console.log('🔄 Clearing local session cache as fallback...');
+                sessionStateManager.invalidateSessionCache();
+                await fetchDeviceSessions();
+                
+                Alert.alert(
+                  'Logout Partially Failed',
+                  `Failed to logout other devices from server: ${error.message}\n\nLocal session data has been cleared. Other devices may still be logged in. Please check your connection and try again, or contact support if the issue persists.`,
+                  [
+                    { text: 'OK' },
+                    {
+                      text: 'Refresh & Retry',
+                      onPress: async () => {
+                        await fetchDeviceSessions();
+                        // Allow user to try again after refresh
+                      }
+                    }
+                  ]
+                );
+              } catch (fallbackError) {
+                console.error('❌ Even fallback cache clear failed:', fallbackError);
+                
+                Alert.alert(
+                  'Logout Failed',
+                  `Failed to logout other devices: ${error.message}\n\nUnable to clear local cache. Please restart the app and try again. If the problem persists, contact support.`,
+                  [
+                    { text: 'OK' },
+                    {
+                      text: 'Refresh & Retry',
+                      onPress: async () => {
+                        await fetchDeviceSessions();
+                        // Allow user to try again after refresh
+                      }
+                    }
+                  ]
+                );
+              }
+            }
+          },
+        },
+      ]
+    );
   };
 
 
@@ -356,6 +678,125 @@ const AccountSettingsScreen = ({ navigation }) => {
           </>
         ))}
 
+        {/* Logged In Devices */}
+        {renderSection('Logged In Devices', (
+          <>
+            <View style={styles.deviceSessionsCard}>
+              <View style={styles.deviceSessionsHeader}>
+                <View style={styles.deviceSessionsInfo}>
+                  <Ionicons name="phone-portrait-outline" size={24} color={colors.primary.main} />
+                  <View style={styles.deviceSessionsTextContainer}>
+                    <Text style={styles.deviceSessionsTitle}>Active Devices</Text>
+                    <Text style={styles.deviceSessionsSubtitle}>
+                      {deviceSessions.loading 
+                        ? 'Loading device information...' 
+                        : deviceSessions.count === 0 && deviceSessions.sessions.length === 0
+                          ? 'No active devices found. Try refreshing or check your connection.'
+                          : deviceSessions.count === 1
+                            ? 'Only this device is currently logged in'
+                            : `${deviceSessions.count} devices currently logged in (including this device)`
+                      }
+                    </Text>
+                  </View>
+                </View>
+                <View style={styles.deviceCountBadge}>
+                  <Text style={styles.deviceCountText}>
+                    {deviceSessions.loading ? '...' : deviceSessions.count}
+                  </Text>
+                </View>
+              </View>
+              
+              {!deviceSessions.loading && deviceSessions.sessions.length > 0 && (
+                <View style={styles.deviceSessionsList}>
+                  {deviceSessions.sessions.slice(0, 3).map((session, index) => (
+                    <View key={session.id || index} style={styles.deviceSessionItem}>
+                      <Ionicons 
+                        name={session.isCurrent ? "phone-portrait" : "phone-portrait-outline"} 
+                        size={16} 
+                        color={session.isCurrent ? colors.success.main : colors.text.secondary} 
+                      />
+                      <Text style={styles.deviceSessionName}>
+                        {session.deviceName || 'Unknown Device'}
+                        {session.isCurrent && ' (This device)'}
+                      </Text>
+                    </View>
+                  ))}
+                  {deviceSessions.sessions.length > 3 && (
+                    <Text style={styles.moreDevicesText}>
+                      +{deviceSessions.sessions.length - 3} more device{deviceSessions.sessions.length - 3 > 1 ? 's' : ''}
+                    </Text>
+                  )}
+                </View>
+              )}
+              
+              {!deviceSessions.loading && deviceSessions.sessions.length === 0 && (
+                <View style={styles.noDevicesContainer}>
+                  <Text style={styles.noDevicesText}>
+                    No active devices found. Try refreshing or check your connection.
+                  </Text>
+                </View>
+              )}
+              
+              <TouchableOpacity 
+                style={styles.refreshButton}
+                onPress={async () => {
+                  // Force refresh via SessionStateManager (Requirements 4.1, 4.3)
+                  console.log('🔄 Force refreshing sessions via SessionStateManager...');
+                  setDeviceSessions(prev => ({ ...prev, loading: true }));
+                  
+                  try {
+                    sessionStateManager.invalidateSessionCache();
+                    await fetchDeviceSessions();
+                  } catch (error) {
+                    console.error('❌ Error during manual refresh:', error);
+                    // Ensure loading state is cleared even on error
+                    setDeviceSessions(prev => ({ ...prev, loading: false }));
+                  }
+                }}
+                disabled={deviceSessions.loading}
+              >
+                {deviceSessions.loading ? (
+                  <Text style={styles.refreshButtonText}>Loading...</Text>
+                ) : (
+                  <>
+                    <Ionicons name="refresh-outline" size={16} color={colors.primary.main} />
+                    <Text style={styles.refreshButtonText}>Refresh</Text>
+                  </>
+                )}
+              </TouchableOpacity>
+              
+              {/* Direct API Refresh Button (fallback) */}
+              {!deviceSessions.loading && deviceSessions.count === 0 && (
+                <TouchableOpacity 
+                  style={[styles.refreshButton, { marginTop: 8 }]}
+                  onPress={fetchDeviceSessionsDirect}
+                >
+                  <Ionicons name="cloud-download-outline" size={16} color={colors.info.main} />
+                  <Text style={[styles.refreshButtonText, { color: colors.info.main }]}>
+                    Try Direct Connection
+                  </Text>
+                </TouchableOpacity>
+              )}
+              
+              {/* Logout All Other Devices Button */}
+              {!deviceSessions.loading && deviceSessions.count > 1 && (
+                <TouchableOpacity 
+                  style={styles.logoutAllButton}
+                  onPress={handleLogoutAllOtherDevices}
+                  disabled={isLoading}
+                >
+                  <Ionicons name="log-out-outline" size={16} color={colors.error.main} />
+                  <Text style={styles.logoutAllButtonText}>
+                    {isLoading ? 'Logging out...' : 'Logout All Other Devices'}
+                  </Text>
+                </TouchableOpacity>
+              )}
+              
+
+            </View>
+          </>
+        ))}
+
         {/* Data Usage */}
         {renderSection('Data Usage', (
           <>
@@ -404,7 +845,7 @@ const AccountSettingsScreen = ({ navigation }) => {
                   <Text style={styles.dataUsageValue}>
                     {dataUsage.breakdown?.products?.size || '0 B'}
                     {dataUsage.breakdown?.products?.count !== undefined && 
-                      ` (${dataUsage.breakdown.products.count})`}
+                      ` (${dataUsage.breakdown?.products?.count})`}
                   </Text>
                 </View>
                 <View style={styles.dataUsageItem}>
@@ -415,7 +856,7 @@ const AccountSettingsScreen = ({ navigation }) => {
                   <Text style={styles.dataUsageValue}>
                     {dataUsage.breakdown?.orders?.size || '0 B'}
                     {dataUsage.breakdown?.orders?.count !== undefined && 
-                      ` (${dataUsage.breakdown.orders.count})`}
+                      ` (${dataUsage.breakdown?.orders?.count})`}
                   </Text>
                 </View>
                 <View style={styles.dataUsageItem}>
@@ -966,10 +1407,113 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: colors.primary.main,
   },
+  logoutAllButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    paddingVertical: 10,
+    marginTop: 8,
+    backgroundColor: colors.error.background,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: colors.error.main,
+  },
+  logoutAllButtonText: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: colors.error.main,
+  },
+
   clearCacheText: {
     fontSize: 14,
     fontWeight: '600',
     color: colors.primary.main,
+  },
+  deviceSessionsCard: {
+    backgroundColor: colors.background.surface,
+    borderRadius: 12,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    marginHorizontal: 20,
+  },
+  deviceSessionsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
+  deviceSessionsInfo: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    gap: 12,
+  },
+  deviceSessionsTextContainer: {
+    flex: 1,
+  },
+  deviceSessionsTitle: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+    marginBottom: 2,
+  },
+  deviceSessionsSubtitle: {
+    fontSize: 13,
+    color: colors.text.secondary,
+  },
+  deviceCountBadge: {
+    backgroundColor: colors.primary.background,
+    borderRadius: 20,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    minWidth: 40,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  deviceCountText: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: colors.primary.main,
+  },
+  deviceSessionsList: {
+    marginBottom: 12,
+    paddingTop: 8,
+    borderTopWidth: 1,
+    borderTopColor: colors.border.light,
+  },
+  deviceSessionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingVertical: 6,
+  },
+  deviceSessionName: {
+    fontSize: 14,
+    color: colors.text.secondary,
+  },
+  moreDevicesText: {
+    fontSize: 13,
+    color: colors.text.tertiary,
+    fontStyle: 'italic',
+    marginTop: 4,
+    marginLeft: 24,
+  },
+  noDevicesContainer: {
+    paddingVertical: 16,
+    paddingHorizontal: 12,
+    backgroundColor: colors.background.primary,
+    borderRadius: 8,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+  },
+  noDevicesText: {
+    fontSize: 14,
+    color: colors.text.secondary,
+    textAlign: 'center',
+    lineHeight: 20,
   },
 });
 

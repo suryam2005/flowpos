@@ -63,9 +63,20 @@ export const CartProvider = ({ children }) => {
   const appStateRef = useRef(AppState.currentState);
   const lastActivityRef = useRef(Date.now());
   const hasItemsRef = useRef(false);
+  const isMountedRef = useRef(true);  // Track mount status to prevent memory leaks
 
   useEffect(() => {
+    isMountedRef.current = true;
     loadCart();
+    
+    return () => {
+      isMountedRef.current = false;
+      // Clean up timer on unmount
+      if (inactivityTimerRef.current) {
+        clearTimeout(inactivityTimerRef.current);
+        inactivityTimerRef.current = null;
+      }
+    };
   }, []);
 
   // Keep refs in sync with state
@@ -75,17 +86,22 @@ export const CartProvider = ({ children }) => {
     lastActivityRef.current = state.lastActivity;
   }, [state.items, state.lastActivity]);
 
-  // Simple timer start function
+  // Simple timer start function with memory leak protection
   const startTimer = useCallback(() => {
+    // Always clear existing timer first
     if (inactivityTimerRef.current) {
       clearTimeout(inactivityTimerRef.current);
       inactivityTimerRef.current = null;
     }
     
-    if (hasItemsRef.current) {
+    // Only start new timer if mounted and has items
+    if (isMountedRef.current && hasItemsRef.current) {
       inactivityTimerRef.current = setTimeout(() => {
-        console.log('🕐 [Cart] Inactivity timeout - clearing cart');
-        dispatch({ type: 'CLEAR_CART' });
+        // Double-check still mounted before dispatching
+        if (isMountedRef.current) {
+          console.log('🕐 [Cart] Inactivity timeout - clearing cart');
+          dispatch({ type: 'CLEAR_CART' });
+        }
       }, INACTIVITY_TIMEOUT);
     }
   }, []);
@@ -107,9 +123,12 @@ export const CartProvider = ({ children }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [state.lastActivity]);
 
-  // Handle app state changes
+  // Handle app state changes with memory leak protection
   useEffect(() => {
     const subscription = AppState.addEventListener('change', nextAppState => {
+      // Check if component is still mounted before processing
+      if (!isMountedRef.current) return;
+      
       if (appStateRef.current.match(/inactive|background/) && nextAppState === 'active') {
         const timeSinceLastActivity = Date.now() - lastActivityRef.current;
         if (timeSinceLastActivity >= INACTIVITY_TIMEOUT && hasItemsRef.current) {

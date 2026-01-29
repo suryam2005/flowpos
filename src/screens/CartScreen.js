@@ -55,7 +55,7 @@ const CartScreen = ({ navigation }) => {
   const [phoneNumber, setPhoneNumber] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('Cash');
   const [customerNameError, setCustomerNameError] = useState('');
-  const [availablePaymentMethods, setAvailablePaymentMethods] = useState(['Cash', 'QR Pay']);
+  const [availablePaymentMethods, setAvailablePaymentMethods] = useState(['Cash']);
   const [phoneNumberError, setPhoneNumberError] = useState('');
   const [requireCustomerDetails, setRequireCustomerDetails] = useState(true);
 
@@ -240,14 +240,32 @@ const CartScreen = ({ navigation }) => {
       
       // Get configured methods from StoreSettingsContext (migrated from AsyncStorage)
       const paymentSettings = getPaymentSettings();
-      let configuredMethods = paymentSettings.payment_methods || ['Cash', 'QR Pay']; // Default (Card payment removed)
+      let configuredMethods = paymentSettings.payment_methods || []; // Start with user's selection
       
       console.log('🛒 [CartScreen] Payment methods from context:', configuredMethods);
+      
+      // CRITICAL FIX: If QR Pay is configured, validate that at least one UPI ID exists
+      if (configuredMethods.includes('QR Pay')) {
+        const hasValidUpiId = paymentSettings.upi_id?.trim() || 
+                             paymentSettings.upi_id_2?.trim() || 
+                             paymentSettings.upi_id_3?.trim();
+        
+        if (!hasValidUpiId) {
+          console.warn('🛒 [CartScreen] QR Pay configured but no UPI ID found, removing QR Pay option');
+          configuredMethods = configuredMethods.filter(method => method !== 'QR Pay');
+        }
+      }
       
       // Intersection of plan methods and configured methods
       const availableMethods = configuredMethods.filter(method => 
         planMethods.includes(method)
       );
+      
+      // Ensure at least Cash is available as fallback if user hasn't configured any methods
+      if (availableMethods.length === 0) {
+        availableMethods.push('Cash');
+        console.log('🛒 [CartScreen] No payment methods configured, defaulting to Cash');
+      }
       
       setAvailablePaymentMethods(availableMethods);
       // Set default payment method to first available
@@ -493,86 +511,96 @@ const CartScreen = ({ navigation }) => {
     setShowAlert(true);
   };
 
-  const sendAutoWhatsAppInvoice = async (orderData) => {
-    try {
-      // Check if WhatsApp service is configured and auto-send is appropriate
-      const whatsappMethod = await AsyncStorage.getItem('whatsappMethod');
-      const currentMethod = whatsappMethod || 'flowpos';
-      
-      // Only auto-send for FlowPOS method (backend), not device WhatsApp
-      if (currentMethod !== 'flowpos') {
-        console.log('Auto-send only works with FlowPOS WhatsApp method, skipping');
-        return;
-      }
-
-      if (!WhatsAppService.isReady()) {
-        console.log('WhatsApp service not configured, skipping auto-send');
-        return;
-      }
-
-      // Load store information from context for proper invoice data
-      const storeProfile = getStoreProfile();
-      const actualStoreName = storeProfile.store_name || 'FlowPOS Store';
-      // Phone and email come from AuthContext (user-bound)
-      const storePhone = user?.phone || '';
-      const storeEmail = user?.email || '';
-
-      // Prepare complete invoice data for WhatsApp service
-      const invoiceData = {
-        invoiceNumber: orderData.orderNumber || orderData.id,
-        orderNumber: orderData.orderNumber || orderData.id,
-        storeName: actualStoreName,
-        storeAddress: storeProfile.store_address || '',
-        storePhone: storePhone,
-        storeEmail: storeEmail,
-        customerName: orderData.customerName || 'Walk-in Customer',
-        phoneNumber: orderData.phoneNumber,
-        date: new Date(orderData.timestamp).toLocaleDateString('en-IN'),
-        time: new Date(orderData.timestamp).toLocaleTimeString('en-IN'),
-        items: orderData.items || [],
-        subtotal: orderData.subtotal || 0,
-        tax: orderData.gst || 0,
-        grandTotal: orderData.total || orderData.grandTotal || 0,
-        paymentMethod: orderData.paymentMethod || 'Cash',
-      };
-
-      console.log('📱 [CartScreen] Auto-sending WhatsApp invoice with proper data:', {
-        method: currentMethod,
-        customerName: invoiceData.customerName,
-        phoneNumber: invoiceData.phoneNumber,
-        storeName: invoiceData.storeName,
-        total: invoiceData.grandTotal
-      });
-
-      // Use the proper sendInvoiceMessage method instead of sendTextMessage
-      const result = await WhatsAppService.sendInvoiceMessage(
-        invoiceData.phoneNumber,
-        invoiceData
-      );
-
-      if (result.success) {
-        console.log('✅ Auto WhatsApp invoice sent successfully via FlowPOS backend');
-        // Show success notification
-        setAlertConfig({
-          title: 'Invoice Sent! ✅',
-          message: `Invoice has been automatically sent to ${invoiceData.customerName} via WhatsApp.`,
-          type: 'success',
-          buttons: [{ text: 'Great!', style: 'default' }],
-        });
-        setShowAlert(true);
-      } else {
-        console.log('❌ Auto WhatsApp invoice failed:', result.error);
-      }
-    } catch (error) {
-      console.error('❌ Error sending auto WhatsApp invoice:', error);
-      // Don't show error to user for auto-send, just log it
-    }
-  };
+  // COMMENTED OUT: sendAutoWhatsAppInvoice function to prevent order completion blocking
+  // when FlowPOS WhatsApp method is selected but Twilio credentials are not configured
+  // 
+  // const sendAutoWhatsAppInvoice = async (orderData) => {
+  //   try {
+  //     // Check if WhatsApp service is configured and auto-send is appropriate
+  //     const whatsappMethod = await AsyncStorage.getItem('whatsappMethod');
+  //     const currentMethod = whatsappMethod || 'flowpos';
+  //     
+  //     // Only auto-send for FlowPOS method (backend), not device WhatsApp
+  //     if (currentMethod !== 'flowpos') {
+  //       console.log('Auto-send only works with FlowPOS WhatsApp method, skipping');
+  //       return;
+  //     }
+  //
+  //     if (!WhatsAppService.isReady()) {
+  //       console.log('WhatsApp service not configured, skipping auto-send');
+  //       return;
+  //     }
+  //
+  //     // Load store information from context for proper invoice data
+  //     const storeProfile = getStoreProfile();
+  //     const actualStoreName = storeProfile.store_name || 'FlowPOS Store';
+  //     // Phone and email come from AuthContext (user-bound)
+  //     const storePhone = user?.phone || '';
+  //     const storeEmail = user?.email || '';
+  //
+  //     // Prepare complete invoice data for WhatsApp service
+  //     const invoiceData = {
+  //       invoiceNumber: orderData.orderNumber || orderData.id,
+  //       orderNumber: orderData.orderNumber || orderData.id,
+  //       storeName: actualStoreName,
+  //       storeAddress: storeProfile.store_address || '',
+  //       storePhone: storePhone,
+  //       storeEmail: storeEmail,
+  //       customerName: orderData.customerName || 'Walk-in Customer',
+  //       phoneNumber: orderData.phoneNumber,
+  //       date: new Date(orderData.timestamp).toLocaleDateString('en-IN'),
+  //       time: new Date(orderData.timestamp).toLocaleTimeString('en-IN'),
+  //       items: orderData.items || [],
+  //       subtotal: orderData.subtotal || 0,
+  //       tax: orderData.gst || 0,
+  //       grandTotal: orderData.total || orderData.grandTotal || 0,
+  //       paymentMethod: orderData.paymentMethod || 'Cash',
+  //     };
+  //
+  //     console.log('📱 [CartScreen] Auto-sending WhatsApp invoice with proper data:', {
+  //       method: currentMethod,
+  //       customerName: invoiceData.customerName,
+  //       phoneNumber: invoiceData.phoneNumber,
+  //       storeName: invoiceData.storeName,
+  //       total: invoiceData.grandTotal
+  //     });
+  //
+  //     // Use the proper sendInvoiceMessage method instead of sendTextMessage
+  //     const result = await WhatsAppService.sendInvoiceMessage(
+  //       invoiceData.phoneNumber,
+  //       invoiceData
+  //     );
+  //
+  //     if (result.success) {
+  //       console.log('✅ Auto WhatsApp invoice sent successfully via FlowPOS backend');
+  //       // Show success notification
+  //       setAlertConfig({
+  //         title: 'Invoice Sent! ✅',
+  //         message: `Invoice has been automatically sent to ${invoiceData.customerName} via WhatsApp.`,
+  //         type: 'success',
+  //         buttons: [{ text: 'Great!', style: 'default' }],
+  //       });
+  //       setShowAlert(true);
+  //     } else {
+  //       console.log('❌ Auto WhatsApp invoice failed:', result.error);
+  //     }
+  //   } catch (error) {
+  //     console.error('❌ Error sending auto WhatsApp invoice:', error);
+  //     // Don't show error to user for auto-send, just log it
+  //   }
+  // };
 
   const [completingOrder, setCompletingOrder] = useState(false);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
   const [orderCompleted, setOrderCompleted] = useState(false);
 
   const handleCompleteOrder = async (paymentDetails = null) => {
+    // Prevent duplicate order creation
+    if (confirmingPayment || completingOrder) {
+      console.log('⚠️  Order completion already in progress');
+      return;
+    }
+
     // Notify tour of Complete Order button tap
     if (showTour && getCurrentActionTarget() === 'complete-order-btn') {
       console.log('🎯 [Cart Tour] Complete Order button pressed');
@@ -633,11 +661,22 @@ const CartScreen = ({ navigation }) => {
                   {
                     text: 'Yes, Received',
                     onPress: () => {
-                      handleCompleteOrder({
-                        transactionId: `MANUAL_UPI_${Date.now()}`,
-                        timestamp: new Date().toISOString(),
-                        method: 'QR Pay',
-                      });
+                      // Prevent double-confirmation
+                      if (confirmingPayment || completingOrder) {
+                        console.log('⚠️  Payment confirmation already in progress');
+                        return;
+                      }
+                      setConfirmingPayment(true);
+                      
+                      // Small delay to prevent double-tap
+                      setTimeout(() => {
+                        handleCompleteOrder({
+                          transactionId: `MANUAL_UPI_${Date.now()}`,
+                          timestamp: new Date().toISOString(),
+                          method: 'QR Pay',
+                        });
+                        setConfirmingPayment(false);
+                      }, 300);
                     }
                   }
                 ],
@@ -807,16 +846,25 @@ const CartScreen = ({ navigation }) => {
       
       // Auto-send WhatsApp invoice if enabled and phone number is provided
       // Only for FlowPOS method to avoid interrupting user flow with device WhatsApp
-      if (phoneNumber && phoneNumber.trim()) {
+      // Validate phone number format before attempting send
+      const cleanPhone = phoneNumber?.trim() || '';
+      const isValidPhone = cleanPhone.length === 10 && /^[6-9]/.test(cleanPhone);
+      
+      if (isValidPhone) {
         const autoWhatsAppEnabled = await AsyncStorage.getItem('autoWhatsAppInvoice');
         const whatsappMethod = await AsyncStorage.getItem('whatsappMethod');
         const currentMethod = whatsappMethod || 'flowpos';
         
         if ((autoWhatsAppEnabled === null || JSON.parse(autoWhatsAppEnabled)) && currentMethod === 'flowpos') {
-          await sendAutoWhatsAppInvoice(invoiceOrderData);
+          // COMMENTED OUT: WhatsApp auto-send to prevent order completion blocking
+          // when Twilio credentials are not configured
+          // await sendAutoWhatsAppInvoice(invoiceOrderData);
+          console.log('📱 [CartScreen] WhatsApp auto-send disabled - Twilio credentials not configured');
         } else if (currentMethod === 'device') {
           console.log('📱 [CartScreen] Skipping auto-send for device WhatsApp to avoid flow interruption');
         }
+      } else if (cleanPhone.length > 0) {
+        console.log('📱 [CartScreen] Skipping WhatsApp auto-send - invalid phone format');
       }
       
       // Navigate to SimpleInvoicePreview for better user experience
@@ -827,6 +875,7 @@ const CartScreen = ({ navigation }) => {
         invoiceData: invoiceOrderData,
         fromOrderCompletion: true,
         showSkipOption: true, // Enable skip countdown after order completion
+        showBackButton: true, // Show back button in invoice after order completion
         continueTour: showTour, // Pass tour continuation flag if tour is active
       });
       
@@ -887,6 +936,7 @@ const CartScreen = ({ navigation }) => {
       navigation.navigate('SimpleInvoicePreview', { 
         invoiceData: invoiceOrderData,
         fromOrderCompletion: true,
+        showBackButton: true, // Show back button in invoice after order completion
         continueTour: showTour, // Pass tour continuation flag if tour is active
       });
     } finally {
@@ -970,8 +1020,23 @@ const CartScreen = ({ navigation }) => {
   const handlePaymentMethodChange = async (method) => {
     setPaymentMethod(method);
     
-    // If QR Pay is selected, automatically generate QR code
+    // If QR Pay is selected, validate customer details first
     if (method === 'QR Pay') {
+      // Validate customer details before generating QR
+      const validationError = validateCustomerDetails();
+      if (validationError) {
+        setAlertConfig({
+          title: 'Customer Details Required',
+          message: validationError + ' Please fill in customer details before selecting QR Pay.',
+          type: 'warning',
+          buttons: [{ text: 'OK', style: 'default' }],
+        });
+        setShowAlert(true);
+        // Reset to first available payment method (usually Cash)
+        setPaymentMethod(availablePaymentMethods[0] || 'Cash');
+        return;
+      }
+      
       // Small delay to ensure state is updated
       setTimeout(async () => {
         await handleQRPayment();
@@ -1118,13 +1183,13 @@ const CartScreen = ({ navigation }) => {
           <View style={styles.completeButtonContainer}>
             <TouchableOpacity
               ref={completeButtonRef}
-              style={[buttonStyles.success, (orderLoading || completingOrder) && buttonStyles.disabled]}
+              style={[buttonStyles.success, (orderLoading || completingOrder || confirmingPayment) && buttonStyles.disabled]}
               onPress={paymentMethod === 'QR Pay' && !isQRVisible ? handleQRPayment : handleCompleteOrder}
-              disabled={orderLoading || completingOrder}
+              disabled={orderLoading || completingOrder || confirmingPayment}
               activeOpacity={0.8}
             >
               <Text style={buttonStyles.successText}>
-                {(orderLoading || completingOrder)
+                {(orderLoading || completingOrder || confirmingPayment)
                   ? 'Processing...'
                   : paymentMethod === 'QR Pay' 
                     ? (isQRVisible ? 'Waiting for Payment...' : 'Generate QR Code')

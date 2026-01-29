@@ -30,6 +30,7 @@ Apply a configurable multiplier to database storage calculations to account for 
 
 ## Notes
 
+
 - This is a backend-only change in `flowposbackend/routes/subscription.js`
 - No frontend changes required - API response format is backward compatible
 - The multiplier accounts for database overhead not captured by JSON serialization

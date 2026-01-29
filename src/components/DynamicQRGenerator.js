@@ -16,6 +16,7 @@ import ResponsiveText from './ResponsiveText';
 import { useNotificationPaymentReader } from '../hooks/useNotificationPaymentReader';
 import { colors } from '../styles/colors';
 import { useStoreSettings } from '../context/StoreSettingsContext';
+import { useAppSettingsContext } from '../context/AppSettingsContext';
 
 const DynamicQRGenerator = ({ 
   amount, 
@@ -37,9 +38,8 @@ const DynamicQRGenerator = ({
   // Default to FALSE for safety - auto-detection should be explicitly enabled
   const [autoPaymentDetectionEnabled, setAutoPaymentDetectionEnabled] = useState(false);
   
-  // Import cache function for reading auto payment detection setting
-  const { getAppSettingFromCache } = require('../context/AppSettingsContext');
   const { isTablet } = getDeviceInfo();
+  const { getSetting } = useAppSettingsContext();
   
   // Use StoreSettingsContext for UPI IDs (migrated from getStore())
   const { storeSettings, getPaymentSettings, getStoreProfile } = useStoreSettings();
@@ -129,26 +129,26 @@ const DynamicQRGenerator = ({
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [storeInfo, amount, visible, selectedUpiId]);
 
-  // Load auto payment detection setting from AppSettingsContext cache
+  // Load auto payment detection setting from AppSettingsContext
   useEffect(() => {
     const loadAutoDetectionSetting = () => {
       try {
-        // Read from AppSettingsContext cache first (single source of truth)
-        const cachedSetting = getAppSettingFromCache('autoPaymentDetection');
+        // Use getSetting from context (preferred method)
+        const autoDetection = getSetting('autoPaymentDetection');
         
-        if (cachedSetting !== undefined) {
-          setAutoPaymentDetectionEnabled(cachedSetting);
-          console.log('📱 [DynamicQRGenerator] autoPaymentDetection read from cache:', cachedSetting);
+        if (autoDetection !== undefined) {
+          setAutoPaymentDetectionEnabled(autoDetection);
+          console.log('📱 [DynamicQRGenerator] autoPaymentDetection from context:', autoDetection);
         } else {
-          // Fallback to AsyncStorage if cache unavailable (backward compatibility)
+          // Fallback to AsyncStorage (backward compatibility)
           AsyncStorage.getItem('autoPaymentDetection').then(setting => {
             if (setting !== null) {
               setAutoPaymentDetectionEnabled(JSON.parse(setting));
-              console.log('📱 [DynamicQRGenerator] autoPaymentDetection fallback to AsyncStorage:', JSON.parse(setting));
+              console.log('📱 [DynamicQRGenerator] autoPaymentDetection from AsyncStorage:', JSON.parse(setting));
             } else {
               // Default to FALSE if no setting exists - user must explicitly enable
               setAutoPaymentDetectionEnabled(false);
-              console.log('📱 [DynamicQRGenerator] autoPaymentDetection using default: false (must be explicitly enabled)');
+              console.log('📱 [DynamicQRGenerator] autoPaymentDetection using default: false');
             }
           });
         }
@@ -158,7 +158,7 @@ const DynamicQRGenerator = ({
       }
     };
     loadAutoDetectionSetting();
-  }, []);
+  }, [getSetting]);
 
   // Start/stop notification listening based on setting and visibility
   // Only start listening when QR is visible AND auto-detection is enabled

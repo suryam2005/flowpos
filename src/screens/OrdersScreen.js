@@ -17,14 +17,19 @@ import { useOrders } from '../hooks/useOrders';
 import * as Haptics from 'expo-haptics';
 import { fadeIn } from '../utils/animations';
 import LoadingSpinner from '../components/LoadingSpinner';
-import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
-import useInteractiveTour from '../hooks/useInteractiveTour';
-import tourProgressManager from '../services/TourProgressManager';
+// TOUR TEMPORARILY DISABLED
+// import SimpleTourOverlay from '../components/SimpleTourOverlay';
+// import useSimpleTour from '../hooks/useSimpleTour';
+// import { getSimpleTourSteps } from '../config/simpleTourContent';
+// TOUR TEMPORARILY DISABLED
+// import tourProgressManager from '../services/TourProgressManager';
 import { colors } from '../styles/colors';
 import WhatsAppService from '../services/WhatsAppService';
 import PDFReportsService from '../services/PDFReportsService';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { useAuth } from '../context/AuthContext';
+// Phase B Implementation: Add UIUpdatePropagator for receiving order updates
+import uiUpdatePropagator from '../services/UIUpdatePropagator';
 
 const OrdersScreen = ({ navigation, route }) => {
   const { 
@@ -44,32 +49,21 @@ const OrdersScreen = ({ navigation, route }) => {
 
   // API operation loading state (for manual operations like sending invoice)
   const [isLoadingData, setIsLoadingData] = useState(false);
+  //   
+  //   // App tour guide - using interactive tour hook
+  //   // Simple tour implementation
+  //   const tourSteps = getSimpleTourSteps('Orders');
+  //   const {
+  //     showTour,
+  //     currentStep,
+  //     stepIndex,
+  //     totalSteps,
+  //     nextStep,
+  //     skipTour,
+  //     completeTour,
+  //   } = useSimpleTour('Orders', tourSteps);
   
-  // App tour guide - using interactive tour hook
-  const {
-    showTour,
-    currentStep,
-    stepIndex,
-    totalSteps,
-    showHint,
-    showSkipStep,
-    startTour,
-    nextStep,
-    skipScreen,
-    skipAll,
-    skipStep,
-    completeTour,
-    checkAutoStart,
-    setOverlayRef,
-    isInitialized,
-  } = useInteractiveTour('Orders');
-  
-  // Tour overlay ref
-  const overlayRef = useRef(null);
-  
-  // Tour refs for dynamic positioning
-  const headerRef = useRef(null);
-  const ordersListRef = useRef(null);
+  // Remove complex tour refs - simple tour doesn't need them
 
   // Track if initial load is done
   const initialLoadDone = useRef(false);
@@ -85,6 +79,24 @@ const OrdersScreen = ({ navigation, route }) => {
     // The 'loading' state from useOrders() tracks the initial load
     initialLoadDone.current = true;
     
+    // Phase B Implementation: Register with UIUpdatePropagator for order updates
+    console.log('📋 [OrdersScreen] Registering with UIUpdatePropagator');
+    
+    // Register for UI updates with callback that handles different update types
+    const handleUIUpdate = (updateType, updateData) => {
+      console.log('📋 [OrdersScreen] Received UI update:', { updateType, hasData: !!updateData });
+      
+      if (updateType === 'ORDER_SUCCESS') {
+        // Order was created successfully - orders list should already be updated by useOrders
+        // But we can trigger a refresh to ensure UI is in sync
+        console.log('📋 [OrdersScreen] Order success - orders list should be updated automatically');
+        // Note: useOrders hook already adds new orders to the state, so no additional action needed
+        // The orders state will automatically re-render the component
+      }
+    };
+    
+    uiUpdatePropagator.registerScreen('OrdersScreen', handleUIUpdate);
+    
     // Simple guard: check if we fetched recently to prevent rapid remount refetches
     const now = Date.now();
     const timeSinceLastFetch = now - lastFetchRef.current;
@@ -97,71 +109,72 @@ const OrdersScreen = ({ navigation, route }) => {
     } else {
       console.log('📱 [Orders] Mount guard active - skipping API call (recently fetched)');
     }
+    
+    // Cleanup: Unregister from UIUpdatePropagator
+    return () => {
+      console.log('📋 [OrdersScreen] Unregistering from UIUpdatePropagator');
+      uiUpdatePropagator.unregisterScreen('OrdersScreen');
+    };
   }, []);
-
-  // Check if tour should auto-start when initialized
-  useEffect(() => {
-    if (isInitialized) {
-      checkAutoStart();
-    }
-  }, [isInitialized, checkAutoStart]);
-
-  // Handle tour trigger from route params
-  useEffect(() => {
-    if (route?.params?.startTour) {
-      console.log('🎯 [OrdersScreen] Tour trigger received from route params');
-      setTimeout(() => {
-        startTour();
-      }, 1500);
-      navigation.setParams({ startTour: undefined });
-    }
-  }, [route?.params?.startTour, startTour, navigation]);
+  //   // 
+  //   //   // Simple tour doesn't need auto-start functionality - removed checkAutoStart
+  //   // 
+  //   //   // Handle tour trigger from route params
+  //   //   useEffect(() => {
+  //   //     if (route?.params?.startTour) {
+  //   //       console.log('🎯 [OrdersScreen] Tour trigger received from route params');
+  //   //       setTimeout(() => {
+  //   //         startTour();
+  //   //       }, 1500);
+  //   //       navigation.setParams({ startTour: undefined });
+  //   //     }
+  //   //   }, [route?.params?.startTour, startTour, navigation]);
 
   // Handle tour continuation from Analytics screen
-  useEffect(() => {
-    if (route?.params?.continueTour && isInitialized) {
-      console.log('🎯 [OrdersScreen] Tour continuation received from Analytics');
-      // Small delay to let the screen render first
-      setTimeout(() => {
-        startTour();
-      }, 1000);
-      // Clear the param to prevent re-triggering
-      navigation.setParams({ continueTour: undefined });
-    }
-  }, [route?.params?.continueTour, isInitialized, startTour, navigation]);
+  // TOUR TEMPORARILY DISABLED
+  // // TOUR TEMPORARILY DISABLED
+  // useEffect(() => {
+  //   //     if (route?.params?.continueTour && isInitialized) {
+  //   //       console.log('🎯 [OrdersScreen] Tour continuation received from Analytics');
+  //   //       // Small delay to let the screen render first
+  //   //       setTimeout(() => {
+  //   //         startTour();
+  //   //       }, 1000);
+  //   //       // Clear the param to prevent re-triggering
+  //   //       navigation.setParams({ continueTour: undefined });
+  //   //     }
+  //   //   }, [route?.params?.continueTour, isInitialized, startTour, navigation]);
 
+  // TOUR TEMPORARILY DISABLED
   // Handle tour completion - guide to Manage screen
   // Requirements: 5.3 - After Orders tour completes, show hint to tap Manage
-  const handleTourComplete = useCallback(async () => {
-    console.log('🎯 [OrdersScreen] Tour complete, guiding to Manage');
-    
-    // Set continuation to ManageProducts (first tab of Manage screen)
-    await tourProgressManager.setContinueTourTo('ManageProducts');
-    
-    // Navigate to Manage screen with tour continuation flag
-    navigation.navigate('Main', { 
-      screen: 'Manage',
-      params: { continueTour: true }
-    });
-  }, [navigation]);
+  // const handleTourComplete = useCallback(async () => {
+  //   console.log('🎯 [OrdersScreen] Tour complete, guiding to Manage');
+  //   
+  //   // Set continuation to ManageProducts (first tab of Manage screen)
+  //   await tourProgressManager.setContinueTourTo('ManageProducts');
+  //   
+  //   // Navigate to Manage screen with tour continuation flag
+  //   navigation.navigate('Main', { 
+  //     screen: 'Manage',
+  //     params: { continueTour: true }
+  //   });
+  // }, [navigation]);
 
+  // TOUR TEMPORARILY DISABLED
   // Handle next step - check if we need to navigate to Manage
-  const handleNextStep = useCallback(async () => {
-    // Check if current step has nextScreen set to ManageProducts (last step)
-    if (currentStep?.nextScreen === 'ManageProducts') {
-      // This is the last step, navigate to Manage
-      await handleTourComplete();
-    } else {
-      nextStep();
-    }
-  }, [currentStep, nextStep, handleTourComplete]);
+  // const handleNextStep = useCallback(async () => {
+  //   // Check if current step has nextScreen set to ManageProducts (last step)
+  //   if (currentStep?.nextScreen === 'ManageProducts') {
+  //     // This is the last step, navigate to Manage
+  //     await handleTourComplete();
+  //   } else {
+  //     nextStep();
+  //   }
+  // }, [currentStep, nextStep, handleTourComplete]);
 
   // Set overlay ref for animations
-  useEffect(() => {
-    if (overlayRef.current) {
-      setOverlayRef(overlayRef.current);
-    }
-  }, [setOverlayRef]);
+  // Simple tour doesn't need overlay refs - removed setOverlayRef usage
 
   const checkWhatsAppStatus = async () => {
     try {
@@ -426,16 +439,14 @@ const OrdersScreen = ({ navigation, route }) => {
     // Don't show if send invoice feature is disabled
     if (whatsappStatus && !whatsappStatus.sendInvoiceEnabled) return false;
     
-    // FUTURE: When auto-send is enabled, hide button for FlowPOS method
-    // TODO: Uncomment this when Twilio credentials are configured and auto-send is enabled
-    /*
-    if (whatsappStatus && whatsappStatus.currentMethod === 'flowpos' && whatsappStatus.flowposReady) {
+    // Hide button for FlowPOS/Twilio method (auto-send enabled)
+    if (whatsappStatus && whatsappStatus.currentMethod === 'flowpos') {
+      console.log('📱 [OrdersScreen] FlowPOS/Twilio method selected - hiding send button (auto-send)');
       return false; // Hide button for auto-send
     }
-    */
     
-    // CURRENT: Show send button for both methods (FlowPOS and device) since auto-send is disabled
-    return whatsappStatus && whatsappStatus.sendInvoiceEnabled;
+    // Show send button only for device WhatsApp method
+    return whatsappStatus && whatsappStatus.sendInvoiceEnabled && whatsappStatus.currentMethod === 'device';
   };
 
   const renderOrder = ({ item, index }) => {
@@ -541,7 +552,7 @@ const OrdersScreen = ({ navigation, route }) => {
       {(loading || isLoadingData) && <LoadingSpinner />}
 
       <View style={styles.content}>
-        <View style={styles.header} ref={headerRef}>
+        <View style={styles.header}>
           <Text style={styles.title}>Orders</Text>
           <Text style={styles.subtitle}>
             {orders.length} {orders.length === 1 ? 'order' : 'orders'}
@@ -554,7 +565,7 @@ const OrdersScreen = ({ navigation, route }) => {
           </View>
         )}
 
-        <View style={{ flex: 1, opacity: 1 }} ref={ordersListRef}>
+        <View style={{ flex: 1, opacity: 1 }}>
           {orders.length === 0 ? (
             renderEmptyState()
           ) : (
@@ -580,21 +591,17 @@ const OrdersScreen = ({ navigation, route }) => {
         </View>
       </View>
 
-      {/* Interactive Tour Overlay */}
-      <InteractiveTourOverlay
-        ref={overlayRef}
-        visible={showTour}
-        currentStep={currentStep}
-        totalSteps={totalSteps}
-        stepIndex={stepIndex}
-        onNext={handleNextStep}
-        onSkip={skipScreen}
-        onSkipAll={skipAll}
-        onSkipStep={skipStep}
-        onActionComplete={completeTour}
-        showHint={showHint}
-        showSkipStep={showSkipStep}
-      />
+      {/* Simple Tour Overlay */}
+      {/* TOUR TEMPORARILY DISABLED */}
+      {/* <SimpleTourOverlay
+      //         visible={showTour}
+      //         currentStep={currentStep}
+      //         totalSteps={totalSteps}
+      //         stepIndex={stepIndex}
+      //         onNext={nextStep}
+      //         onSkip={skipTour}
+      //         onComplete={completeTour}
+      //       /> */}
     </SafeAreaView>
   );
 };

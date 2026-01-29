@@ -19,13 +19,23 @@ import { colors, componentColors } from '../../styles/colors';
 import { createButtonStyle, createButtonTextStyle, createCardStyle, createInputStyle } from '../../styles/theme';
 import { getCurrencySymbol, getSupportedCurrencies } from '../../utils/currencyUtils';
 import notificationPaymentReader from '../../services/NotificationPaymentReader';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const StoreSetupScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
+  const [setupCompleted, setSetupCompleted] = useState(false); // Track setup completion
   const scrollViewRef = useRef(null);
   // No animations needed
+
+  // Block back navigation during setup, but allow it after completion
+  useBackPrevention(!setupCompleted, {
+    message: 'Store setup is in progress. Going back will require you to start over. Are you sure you want to cancel?',
+    title: 'Cancel Setup?',
+    hardBlock: false,
+    showAlert: true,
+  });
 
   // Store Information
   const [storeData, setStoreData] = useState({
@@ -45,7 +55,7 @@ const StoreSetupScreen = ({ navigation }) => {
     upiId: '',
     upiId2: '',
     upiId3: '',
-    paymentMethods: ['Cash'], // Default to Cash
+    paymentMethods: [], // No default - user must explicitly select
 
     // Step 4: Overview
     timezone: 'Asia/Kolkata',
@@ -111,8 +121,14 @@ const StoreSetupScreen = ({ navigation }) => {
       if (field === 'paymentMethods' && storeData.paymentMethods.length === 0) {
         return 'Please select at least one payment method';
       }
-      if (field === 'upiId' && storeData.paymentMethods.includes('QR Pay') && !storeData.upiId.trim()) {
-        return 'UPI ID is required when QR Pay is selected';
+      if (field === 'upiId' && storeData.paymentMethods.includes('QR Pay')) {
+        const hasValidUpiId = (storeData.upiId && storeData.upiId.trim()) || 
+                             (storeData.upiId2 && storeData.upiId2.trim()) || 
+                             (storeData.upiId3 && storeData.upiId3.trim());
+        
+        if (!hasValidUpiId) {
+          return 'At least one UPI ID is required when QR Pay is selected';
+        }
       }
     }
 
@@ -185,8 +201,11 @@ const StoreSetupScreen = ({ navigation }) => {
 
   const handleComplete = async () => {
     try {
-      // Save store information
-      await AsyncStorage.setItem('storeInfo', JSON.stringify({
+      // Mark setup as completed FIRST to disable back prevention immediately
+      setSetupCompleted(true);
+      
+      // Save store information to AsyncStorage
+      const storeInfoData = {
         store_name: storeData.storeName,
         name: storeData.storeName, // Keep for backward compatibility
         ownerName: storeData.ownerName,
@@ -207,7 +226,55 @@ const StoreSetupScreen = ({ navigation }) => {
         timezone: storeData.timezone,
         setupCompleted: true,
         setupDate: new Date().toISOString(),
-      }));
+      };
+
+      await AsyncStorage.setItem('storeInfo', JSON.stringify(storeInfoData));
+
+      // Sync store data to backend immediately after onboarding
+      try {
+        const { apiCallWithFallback } = require('../../config/apiConfig');
+        const authToken = await AsyncStorage.getItem('authToken');
+        
+        if (authToken) {
+          console.log('📤 Syncing store data to backend...');
+          
+          const backendStoreData = {
+            store_name: storeData.storeName,
+            store_address: storeData.address,
+            business_type: storeData.businessType === 'Other' ? storeData.customBusinessType : storeData.businessType,
+            gst_number: storeData.gstNumber || null,
+            currency: storeData.currency,
+            upi_id: storeData.upiId || null,
+            upi_id_2: storeData.upiId2 || null,
+            upi_id_3: storeData.upiId3 || null,
+            payment_methods: storeData.paymentMethods, // Send payment methods to backend
+            tax_settings: {
+              enableGST: !!(storeData.gstNumber && storeData.gstNumber.trim()),
+              gstRate: parseFloat(storeData.gstPercentage) || 18,
+              includeTaxInPrice: false,
+            },
+          };
+          
+          const response = await apiCallWithFallback('/store', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'Authorization': `Bearer ${authToken}`,
+            },
+            body: JSON.stringify(backendStoreData),
+          });
+          
+          if (response.success) {
+            console.log('✅ Store data synced to backend successfully');
+          } else {
+            console.warn('⚠️ Failed to sync store data to backend:', response.message);
+            // Don't block onboarding if backend sync fails
+          }
+        }
+      } catch (syncError) {
+        console.error('⚠️ Error syncing store data to backend:', syncError);
+        // Don't block onboarding if backend sync fails
+      }
 
       // Mark onboarding as completed
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
@@ -228,6 +295,8 @@ const StoreSetupScreen = ({ navigation }) => {
       setShowAlert(true);
     } catch (error) {
       console.error('Error saving store setup:', error);
+      // Re-enable back prevention if there's an error
+      setSetupCompleted(false);
       setAlertConfig({
         title: 'Error',
         message: 'Failed to save store information. Please try again.',
@@ -431,11 +500,8 @@ const StoreSetupScreen = ({ navigation }) => {
                       let newMethods;
                       
                       if (currentMethods.includes(method.id)) {
-                        // Remove method (but keep at least Cash)
+                        // Remove method - allow empty selection (validation will catch it)
                         newMethods = currentMethods.filter(m => m !== method.id);
-                        if (newMethods.length === 0) {
-                          newMethods = ['Cash']; // Always keep Cash as fallback
-                        }
                       } else {
                         // Add method
                         newMethods = [...currentMethods, method.id];

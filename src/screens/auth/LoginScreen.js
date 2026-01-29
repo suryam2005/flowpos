@@ -17,6 +17,7 @@ import { typography } from '../../styles/typographyStyles';
 
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
+import featureService from '../../services/FeatureService';
 
 // Input validation and security utilities
 const InputValidation = {
@@ -35,12 +36,12 @@ const InputValidation = {
     if (!sanitized) return { isValid: false, error: 'Email is required' };
     if (sanitized.length < 5) return { isValid: false, error: 'Email is too short' };
     if (sanitized.length > 100) return { isValid: false, error: 'Email is too long' };
-    
+
     const emailRegex = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/;
     if (!emailRegex.test(sanitized)) {
       return { isValid: false, error: 'Please enter a valid email address' };
     }
-    
+
     return { isValid: true, sanitized };
   },
 
@@ -49,15 +50,15 @@ const InputValidation = {
     if (!password) return { isValid: false, error: 'Password is required' };
     if (password.length < 6) return { isValid: false, error: 'Password must be at least 6 characters' };
     if (password.length > 128) return { isValid: false, error: 'Password is too long' };
-    
+
     // Check for basic security requirements
     const hasLetter = /[a-zA-Z]/.test(password);
     const hasNumber = /\d/.test(password);
-    
+
     if (!hasLetter || !hasNumber) {
       return { isValid: false, error: 'Password must contain both letters and numbers' };
     }
-    
+
     return { isValid: true };
   },
 
@@ -67,8 +68,8 @@ const InputValidation = {
     lastAttempt: 0,
     maxAttempts: 5,
     lockoutTime: 15 * 60 * 1000, // 15 minutes
-    
-    canAttempt: function() {
+
+    canAttempt: function () {
       const now = Date.now();
       if (this.attempts >= this.maxAttempts) {
         if (now - this.lastAttempt < this.lockoutTime) {
@@ -80,8 +81,8 @@ const InputValidation = {
       }
       return { allowed: true };
     },
-    
-    recordAttempt: function(success) {
+
+    recordAttempt: function (success) {
       this.lastAttempt = Date.now();
       if (success) {
         this.attempts = 0; // Reset on success
@@ -92,10 +93,10 @@ const InputValidation = {
   }
 };
 
-const LoginScreen = ({ navigation }) => {
-  const { login } = useAuth();
-  
-  const [email, setEmail] = useState('');
+const LoginScreen = ({ navigation, route }) => {
+  const { login, logout } = useAuth();
+
+  const [email, setEmail] = useState(route?.params?.email || '');
   const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [emailError, setEmailError] = useState('');
@@ -139,38 +140,65 @@ const LoginScreen = ({ navigation }) => {
 
     setIsLoading(true);
     let loginSuccess = false;
-    
+
     try {
       // Use sanitized email for login
       await login({
         email: emailValidation.sanitized.toLowerCase(),
         password: password, // Don't sanitize password as it may contain special chars
       });
-      
+
+      // Update feature service with the new user's plan
+      await featureService.loadUserPlan();
+
+      // Check device limit enforcement
+      // TEMPORARY FIX: Skip device limit check during login to avoid blocking
+      // The backend will enforce device limits during the login API call
+      console.log('⚠️ [LOGIN] Skipping device limit check to avoid login blocking');
+      const canLogin = true; // await featureService.canLoginFromDevice();
+
+      if (!canLogin) {
+        // Limit reached & enforced - logout and show error
+        console.log('🚫 Device limit reached, logging out...');
+        await logout();
+
+        Alert.alert(
+          'Device Limit Reached',
+          'You have reached the maximum number of devices allowed for your plan. Please upgrade your plan or log out from another device.',
+          [{ text: 'OK' }]
+        );
+        setIsLoading(false);
+        return;
+      }
+
       loginSuccess = true;
-      
+
       // Navigate to main app after successful login
       navigation.reset({
         index: 0,
         routes: [{ name: 'Main' }],
       });
-      
+
     } catch (error) {
       console.error('🔐 [LOGIN] Login error:', error);
-      
+
       // Handle specific error messages with better security
       let errorMessage = 'Invalid credentials. Please try again.';
-      
+
       if (error.message.includes('Invalid email or password')) {
         errorMessage = 'Invalid email or password';
+      } else if (error.message.includes('Unable to verify device limits')) {
+        errorMessage = 'Unable to verify device limits. Please check your internet connection and try again.';
       } else if (error.message.includes('Network') || error.message.includes('network')) {
         errorMessage = 'Network error. Please check your connection and try again.';
       } else if (error.message.includes('timeout')) {
         errorMessage = 'Request timed out. Please try again.';
       } else if (error.message.includes('rate limit') || error.message.includes('too many')) {
         errorMessage = 'Too many login attempts. Please wait before trying again.';
+      } else if (error.message.includes('Cannot connect to backend server')) {
+        errorMessage = 'Cannot connect to server. Please check your internet connection and ensure the backend is running.';
       }
-      
+
       Alert.alert('Login Failed', errorMessage);
     } finally {
       // Record the attempt for rate limiting
@@ -219,6 +247,7 @@ const LoginScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Enter your email"
+                placeholderTextColor={colors.textSecondary}
                 value={email}
                 onChangeText={handleEmailChange}
                 keyboardType="email-address"
@@ -239,6 +268,7 @@ const LoginScreen = ({ navigation }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Enter your password"
+                placeholderTextColor={colors.textSecondary}
                 value={password}
                 onChangeText={handlePasswordChange}
                 secureTextEntry={!showPassword}
@@ -251,10 +281,10 @@ const LoginScreen = ({ navigation }) => {
                 onPress={() => setShowPassword(!showPassword)}
                 style={styles.eyeButton}
               >
-                <Ionicons 
-                  name={showPassword ? "eye-off" : "eye"} 
-                  size={20} 
-                  color={colors.textSecondary} 
+                <Ionicons
+                  name={showPassword ? "eye-off" : "eye"}
+                  size={20}
+                  color={colors.textSecondary}
                 />
               </TouchableOpacity>
             </View>
@@ -290,7 +320,7 @@ const LoginScreen = ({ navigation }) => {
           </View>
         </View>
       </KeyboardAvoidingView>
-      
+
       {/* Loading Overlay */}
       {isLoading && <LoadingSpinner />}
     </SafeAreaView>

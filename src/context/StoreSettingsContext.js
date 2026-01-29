@@ -442,7 +442,7 @@ export const StoreSettingsProvider = ({ children }) => {
           upi_id: storeData?.upi_id || '',
           upi_id_2: storeData?.upi_id_2 || '',
           upi_id_3: storeData?.upi_id_3 || '',
-          payment_methods: storeData?.payment_methods || ['Cash', 'QR Pay'],
+          payment_methods: storeData?.payment_methods || [],
           
           // JSONB Settings (preserve as objects)
           tax_settings: storeData?.tax_settings || null,
@@ -754,7 +754,7 @@ export const StoreSettingsProvider = ({ children }) => {
       upi_id: ss?.upi_id || '',
       upi_id_2: ss?.upi_id_2 || '',
       upi_id_3: ss?.upi_id_3 || '',
-      payment_methods: ss?.payment_methods || ['Cash', 'QR Pay']
+      payment_methods: ss?.payment_methods || []
     };
   }, [storeSettings]);
 
@@ -914,7 +914,7 @@ export const StoreSettingsProvider = ({ children }) => {
         upi_id: parsedStoreInfo.upi_id || parsedStoreInfo.upiId || '',
         upi_id_2: parsedStoreInfo.upi_id_2 || parsedStoreInfo.upiId2 || '',
         upi_id_3: parsedStoreInfo.upi_id_3 || parsedStoreInfo.upiId3 || '',
-        payment_methods: parsedStoreInfo.payment_methods || parsedStoreInfo.paymentMethods || ['Cash', 'QR Pay'],
+        payment_methods: parsedStoreInfo.payment_methods || parsedStoreInfo.paymentMethods || [],
         tax_settings: parsedTaxSettings,
         receipt_settings: parsedReceiptSettings,
         business_settings: parsedBusinessSettings
@@ -1103,7 +1103,7 @@ export const distributeStoreDataToStoreSettings = (storeData, token) => {
     upi_id: storeData?.upi_id || '',
     upi_id_2: storeData?.upi_id_2 || '',
     upi_id_3: storeData?.upi_id_3 || '',
-    payment_methods: storeData?.payment_methods || ['Cash', 'QR Pay'],
+    payment_methods: storeData?.payment_methods || [],
     
     // JSONB Settings (preserve as objects)
     tax_settings: storeData?.tax_settings || null,

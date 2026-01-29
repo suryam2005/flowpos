@@ -32,10 +32,14 @@ import TagInput from '../components/TagInput';
 import ProductImagePicker from '../components/ProductImagePicker';
 import { generateProductTags } from '../utils/tagGenerator';
 import productImageService from '../services/ProductImageService';
-import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
-import useInteractiveTour from '../hooks/useInteractiveTour';
-import actionDetectorService, { ACTION_TYPES } from '../services/ActionDetectorService';
-import tourProgressManager from '../services/TourProgressManager';
+// TOUR TEMPORARILY DISABLED
+// import SimpleTourOverlay from '../components/SimpleTourOverlay';
+// import useSimpleTour from '../hooks/useSimpleTour';
+// import { getSimpleTourSteps } from '../config/simpleTourContent';
+// TOUR TEMPORARILY DISABLED
+// import actionDetectorService, { ACTION_TYPES } from '../services/ActionDetectorService';
+// TOUR TEMPORARILY DISABLED
+// import tourProgressManager from '../services/TourProgressManager';
 import { colors } from '../styles/colors';
 import { buttonStyles } from '../styles/buttonStyles';
 import { typography } from '../styles/typographyStyles';
@@ -43,16 +47,21 @@ import { useTheme } from '../context/ThemeContext';
 import { useAuth } from '../context/AuthContext';
 import { useStoreSettings } from '../context/StoreSettingsContext';
 import { getProductImageUrl } from '../utils/imageUtils';
-import { useDataSync } from '../context/DataSyncContext';
+// Phase A Implementation: Replace useDataSync with ProductFetchCoordinator
+import productFetchCoordinator from '../services/ProductFetchCoordinator';
+// Phase B Implementation: Add UIUpdatePropagator for post-success UI propagation
+import uiUpdatePropagator from '../services/UIUpdatePropagator';
 
 
 const ManageScreen = ({ navigation, route }) => {
+  // TOUR TEMPORARILY DISABLED
   const { theme } = useTheme();
   const { user, isAuthenticated } = useAuth();
   const { storeSettings, getStoreProfile } = useStoreSettings();
-  const { fetchFreshData, subscribe, products: syncedProducts } = useDataSync();
+  // Phase A Implementation: Remove useDataSync, use ProductFetchCoordinator instead
   const [products, setProducts] = useState([]);
   const [modalVisible, setModalVisible] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
 
   const [editingProduct, setEditingProduct] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -60,51 +69,32 @@ const ManageScreen = ({ navigation, route }) => {
   const [storeInfo, setStoreInfo] = useState(null);
   const [userInfo, setUserInfo] = useState(null);
   const [saving, setSaving] = useState(false);
-  
-  // Page loading state
-  const [isLoading, setIsLoading] = useState(true);
+
   const [activeTab, setActiveTab] = useState('Products');
-  
-  // Interactive App Tour - using useInteractiveTour hook
-  // Determine which tour to use based on active tab
-  const currentTourScreen = activeTab === 'Inventory' ? 'ManageInventory' : 'ManageProducts';
-  const {
-    showTour,
-    currentStep,
-    stepIndex,
-    totalSteps,
-    showHint,
-    showSkipStep,
-    startTour,
-    nextStep,
-    skipScreen,
-    skipAll,
-    skipStep,
-    completeTour,
-    notifyAction,
-    setOverlayRef,
-    checkAutoStart,
-    getDemoValues,
-    isCurrentStepInteractive,
-  } = useInteractiveTour(currentTourScreen);
-  
-  // Ref for InteractiveTourOverlay
-  const overlayRef = useRef(null);
-  
-  // Tour refs for dynamic positioning
-  const headerRef = useRef(null);
-  const tabBarRef = useRef(null);
-  const contentAreaRef = useRef(null);
+
+  // Simple tour implementation
+  // const tourSteps = getSimpleTourSteps('Manage');
+  // const {
+  //   showTour,
+  //   currentStep,
+  //   stepIndex,
+  //   totalSteps,
+  //   nextStep,
+  //   skipTour,
+  //   completeTour,
+  // } = useSimpleTour('Manage', tourSteps);
+
+  // Remove complex tour refs - simple tour doesn't need them
 
   // Note: Back prevention not needed for ManageScreen as modal handles its own navigation
   // The LoadingOverlay already prevents interaction during save operations
-  
+
   // Track last fetch timestamp for staleness check (API optimization)
   const lastFetchRef = useRef(0);
-  
+
   // Track if initial load is done
   const initialLoadDone = useRef(false);
-  
+
   // Refs for maintaining focus
   const lastFocusedInputRef = useRef(null);
   const [formData, setFormData] = useState({
@@ -120,222 +110,330 @@ const ManageScreen = ({ navigation, route }) => {
 
   const tabs = ['Products', 'Inventory', 'Store Settings'];
 
-  // Set overlay ref when component mounts
+  // Handle initialTab parameter from navigation (e.g., from notifications)
   useEffect(() => {
-    if (overlayRef.current) {
-      setOverlayRef(overlayRef.current);
-    }
-  }, [setOverlayRef]);
-
-  // Check for auto-start tour when screen loads
-  useEffect(() => {
-    const checkTour = async () => {
-      if (!isLoading) {
-        await checkAutoStart();
+    if (route?.params?.initialTab) {
+      const requestedTab = route.params.initialTab;
+      if (tabs.includes(requestedTab)) {
+        console.log(`📍 [ManageScreen] Setting initial tab to: ${requestedTab}`);
+        setActiveTab(requestedTab);
+        // Clear the param to avoid re-triggering
+        navigation.setParams({ initialTab: undefined });
       }
-    };
-    checkTour();
-  }, [isLoading, checkAutoStart]);
+    }
+  }, [route?.params?.initialTab]);
+
+  // Set overlay ref when component mounts
+  // Simple tour doesn't need overlay refs - removed setOverlayRef usage
+
+  // Simple tour doesn't need auto-start functionality - removed checkAutoStart
 
   // Handle tour continuation from ManageProducts to ManageInventory
   // When ManageProducts tour completes, it sets continueToScreen: 'ManageInventory'
   // We need to switch to Inventory tab and let InventoryScreen's tour auto-start
-  useEffect(() => {
-    const checkTourContinuation = async () => {
-      if (!showTour && activeTab === 'Products') {
-        // Peek at the continuation target without clearing it
-        // We use AsyncStorage directly to avoid clearing the value
-        const continueTo = await AsyncStorage.getItem('continueTourTo');
-        if (continueTo === 'ManageInventory') {
-          console.log('🎯 [ManageScreen] Continuing tour from ManageProducts to ManageInventory');
-          // Switch to Inventory tab - the InventoryScreen will auto-start its tour
-          // and clear the continuation target
-          setActiveTab('Inventory');
-        }
-      }
-    };
-    
-    // Small delay to allow tour completion to process
-    const timer = setTimeout(checkTourContinuation, 500);
-    return () => clearTimeout(timer);
-  }, [showTour, activeTab]);
+  // TOUR TEMPORARILY DISABLED
+  // // TOUR TEMPORARILY DISABLED
+  // useEffect(() => {
+  //   //     const checkTourContinuation = async () => {
+  //   //       if (!showTour && activeTab === 'Products') {
+  //   //         // Peek at the continuation target without clearing it
+  //   //         // We use AsyncStorage directly to avoid clearing the value
+  //   //         const continueTo = await AsyncStorage.getItem('continueTourTo');
+  //   //         if (continueTo === 'ManageInventory') {
+  //   //           console.log('🎯 [ManageScreen] Continuing tour from ManageProducts to ManageInventory');
+  //   //           // Switch to Inventory tab - the InventoryScreen will auto-start its tour
+  //   //           // and clear the continuation target
+  //   //           setActiveTab('Inventory');
+  //   //         }
+  //   //       }
+  //   //     };
+  //   //     
+  //   //     // Small delay to allow tour completion to process
+  //   //     const timer = setTimeout(checkTourContinuation, 500);
+  //   //     return () => clearTimeout(timer);
+  //   //   }, [showTour, activeTab]);
+  // 
+  //   // Handle tab change for tour continuation
+  //   const handleTabChange = useCallback((tab) => {
+  //     const previousTab = activeTab;
+  //     setActiveTab(tab);
+  //     
+  //     // Notify action detector of tab change for tour
+  //     if (showTour && currentStep?.actionType === ACTION_TYPES.TAB_CHANGE) {
+  //       if (tab === 'Inventory' && currentStep?.actionTarget === 'inventory-tab') {
+  //         console.log('🎯 [ManageScreen] Tab change detected: Inventory');
+  //         notifyAction(ACTION_TYPES.TAB_CHANGE, 'inventory-tab');
+  //       }
+  //     }
+  //   }, [activeTab, showTour, currentStep, notifyAction]);
+  // 
+  //   // Handle modal close for tour
+  //   const handleModalClose = useCallback(() => {
+  //     setModalVisible(false);
+  //     
+  //     // Notify tour of modal close
+  //     if (showTour && currentStep?.actionTarget === 'add-product-modal') {
+  //       console.log('🎯 [ManageScreen] Modal closed during tour');
+  //       notifyAction(ACTION_TYPES.MODAL_CLOSE, 'add-product-modal');
+  //     }
+  //   }, [showTour, currentStep, notifyAction]);
+  // 
+  //   // Handle Edit Product button tap for tour
+  //   const handleEditProductWithTour = useCallback((product) => {
+  //     // Notify tour of edit button tap
+  //     if (showTour && currentStep?.actionTarget === 'edit-product-btn') {
+  //       console.log('🎯 [ManageScreen] Edit Product button tapped during tour');
+  //       notifyAction(ACTION_TYPES.TAP, 'edit-product-btn');
+  //     }
+  //     
+  //     // Call original edit handler
+  //     handleEditProduct(product);
+  //   }, [showTour, currentStep, notifyAction]);
+  // 
+  //   // Handle Delete Product button tap for tour
+  //   const handleDeleteProductWithTour = useCallback((productId) => {
+  //     // Notify tour of delete button tap
+  //     if (showTour && currentStep?.actionTarget === 'delete-product-btn') {
+  //       console.log('🎯 [ManageScreen] Delete Product button tapped during tour');
+  //       notifyAction(ACTION_TYPES.TAP, 'delete-product-btn');
+  //     }
+  //     
+  //     // Call original delete handler
+  //     handleDeleteProduct(productId);
+  //   }, [showTour, currentStep, notifyAction]);
+  // 
+  //   // Handle Add Product button tap for tour
+  //   const handleAddProductWithTour = useCallback(async () => {
+  //     // Notify tour of button tap
+  //     if (showTour && currentStep?.actionTarget === 'add-product-btn') {
+  //       console.log('🎯 [ManageScreen] Add Product button tapped during tour');
+  //       notifyAction(ACTION_TYPES.TAP, 'add-product-btn');
+  //     }
+  //     
+  //     // Call original add product handler
+  //     await handleAddProduct();
+  //   }, [showTour, currentStep, notifyAction]);
+  // 
+  //   // Handle text input changes for tour
+  //   // NOTE: Not using useCallback to ensure formData is always current
+  //   const handleNameChange = (text) => {
+  //     setFormData(prev => ({ ...prev, name: text }));
+  //     
+  //     // Notify tour of text input
+  //     if (showTour && currentStep?.actionTarget === 'product-name-input' && text.length > 0) {
+  //       console.log('🎯 [ManageScreen] Product name entered during tour');
+  //       notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-name-input');
+  //     }
+  //   };
+  // 
+  //   const handlePriceChange = (text) => {
+  //     setFormData(prev => ({ ...prev, price: text }));
+  //     
+  //     // Notify tour of text input
+  //     if (showTour && currentStep?.actionTarget === 'product-price-input' && text.length > 0) {
+  //       console.log('🎯 [ManageScreen] Product price entered during tour');
+  //       notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-price-input');
+  //     }
+  //   };
+  // 
+  //   // Handle save button tap for tour
+  //   // NOTE: Not using useCallback here to ensure we always have the latest handleSaveProduct
+  //   const handleSaveWithTour = async () => {
+  //     // Notify tour of save button tap
+  //     if (showTour && currentStep?.actionTarget === 'save-product-btn') {
+  //       console.log('🎯 [ManageScreen] Save button tapped during tour');
+  //       notifyAction(ACTION_TYPES.TAP, 'save-product-btn');
+  //     }
+  //     
+  //     // Call original save handler
+  //     await handleSaveProduct();
+  //   };
+  // 
+  //   // Pre-fill demo values when tour step requires it
+  //   // TOUR TEMPORARILY DISABLED
+  // useEffect(() => {
+  //   //     if (showTour && currentStep?.demoValues) {
+  //   //       const demoValues = getDemoValues();
+  //   //       if (demoValues.productName && !formData.name) {
+  //   //         setFormData(prev => ({ ...prev, name: demoValues.productName }));
+  //   //       }
+  //   //       if (demoValues.price && !formData.price) {
+  //   //         setFormData(prev => ({ ...prev, price: demoValues.price }));
+  //   //       }
+  //   //     }
+  //   //   }, [showTour, currentStep, getDemoValues, formData.name, formData.price]);
 
-  // Handle tab change for tour continuation
-  const handleTabChange = useCallback((tab) => {
-    const previousTab = activeTab;
-    setActiveTab(tab);
-    
-    // Notify action detector of tab change for tour
-    if (showTour && currentStep?.actionType === ACTION_TYPES.TAB_CHANGE) {
-      if (tab === 'Inventory' && currentStep?.actionTarget === 'inventory-tab') {
-        console.log('🎯 [ManageScreen] Tab change detected: Inventory');
-        notifyAction(ACTION_TYPES.TAB_CHANGE, 'inventory-tab');
-      }
-    }
-  }, [activeTab, showTour, currentStep, notifyAction]);
-
-  // Handle modal close for tour
-  const handleModalClose = useCallback(() => {
-    setModalVisible(false);
-    
-    // Notify tour of modal close
-    if (showTour && currentStep?.actionTarget === 'add-product-modal') {
-      console.log('🎯 [ManageScreen] Modal closed during tour');
-      notifyAction(ACTION_TYPES.MODAL_CLOSE, 'add-product-modal');
-    }
-  }, [showTour, currentStep, notifyAction]);
-
-  // Handle Edit Product button tap for tour
-  const handleEditProductWithTour = useCallback((product) => {
-    // Notify tour of edit button tap
-    if (showTour && currentStep?.actionTarget === 'edit-product-btn') {
-      console.log('🎯 [ManageScreen] Edit Product button tapped during tour');
-      notifyAction(ACTION_TYPES.TAP, 'edit-product-btn');
-    }
-    
-    // Call original edit handler
-    handleEditProduct(product);
-  }, [showTour, currentStep, notifyAction]);
-
-  // Handle Delete Product button tap for tour
-  const handleDeleteProductWithTour = useCallback((productId) => {
-    // Notify tour of delete button tap
-    if (showTour && currentStep?.actionTarget === 'delete-product-btn') {
-      console.log('🎯 [ManageScreen] Delete Product button tapped during tour');
-      notifyAction(ACTION_TYPES.TAP, 'delete-product-btn');
-    }
-    
-    // Call original delete handler
-    handleDeleteProduct(productId);
-  }, [showTour, currentStep, notifyAction]);
-
-  // Handle Add Product button tap for tour
-  const handleAddProductWithTour = useCallback(async () => {
-    // Notify tour of button tap
-    if (showTour && currentStep?.actionTarget === 'add-product-btn') {
-      console.log('🎯 [ManageScreen] Add Product button tapped during tour');
-      notifyAction(ACTION_TYPES.TAP, 'add-product-btn');
-    }
-    
-    // Call original add product handler
-    await handleAddProduct();
-  }, [showTour, currentStep, notifyAction]);
-
-  // Handle text input changes for tour
-  // NOTE: Not using useCallback to ensure formData is always current
+  // Handle text input changes
   const handleNameChange = (text) => {
     setFormData(prev => ({ ...prev, name: text }));
-    
-    // Notify tour of text input
-    if (showTour && currentStep?.actionTarget === 'product-name-input' && text.length > 0) {
-      console.log('🎯 [ManageScreen] Product name entered during tour');
-      notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-name-input');
-    }
   };
 
   const handlePriceChange = (text) => {
     setFormData(prev => ({ ...prev, price: text }));
-    
-    // Notify tour of text input
-    if (showTour && currentStep?.actionTarget === 'product-price-input' && text.length > 0) {
-      console.log('🎯 [ManageScreen] Product price entered during tour');
-      notifyAction(ACTION_TYPES.TEXT_INPUT, 'product-price-input');
-    }
   };
 
-  // Handle save button tap for tour
-  // NOTE: Not using useCallback here to ensure we always have the latest handleSaveProduct
-  const handleSaveWithTour = async () => {
-    // Notify tour of save button tap
-    if (showTour && currentStep?.actionTarget === 'save-product-btn') {
-      console.log('🎯 [ManageScreen] Save button tapped during tour');
-      notifyAction(ACTION_TYPES.TAP, 'save-product-btn');
-    }
-    
-    // Call original save handler
-    await handleSaveProduct();
-  };
+  // Handle tab change
+  const handleTabChange = useCallback((tab) => {
+    setActiveTab(tab);
+  }, []);
 
-  // Pre-fill demo values when tour step requires it
-  useEffect(() => {
-    if (showTour && currentStep?.demoValues) {
-      const demoValues = getDemoValues();
-      if (demoValues.productName && !formData.name) {
-        setFormData(prev => ({ ...prev, name: demoValues.productName }));
+  // Phase A Implementation: Replace DataSync subscription with ProductFetchCoordinator
+  const refreshProducts = useCallback(async (forceRefresh = false) => {
+    try {
+      setIsLoading(true);
+      console.log('📦 [ManageScreen] Fetching products via ProductFetchCoordinator:', { forceRefresh });
+
+      const fetchedProducts = await productFetchCoordinator.fetchProducts({
+        forceRefresh,
+        screenName: 'ManageScreen',
+        apiOptions: {} // Pass any needed API options
+      });
+
+      const normalizedProducts = normalizeProducts(fetchedProducts);
+      setProducts(normalizedProducts);
+      console.log('📦 [ManageScreen] Products updated:', normalizedProducts.length);
+
+      // Also check store setup status whenever products are refreshed
+      const storeProfile = getStoreProfile();
+      const hasStoreSetup = storeProfile && storeProfile.store_name && storeProfile.store_name.trim() !== '';
+
+      if (hasStoreSetup) {
+        setStoreSetupCompleted(true);
+        setStoreInfo(storeProfile);
+        console.log('✅ Store setup completed, store data loaded from context:', storeProfile.store_name);
+      } else {
+        setStoreSetupCompleted(false);
+        setStoreInfo(null);
+        console.log('⚠️ Store setup not completed');
       }
-      if (demoValues.price && !formData.price) {
-        setFormData(prev => ({ ...prev, price: demoValues.price }));
-      }
+
+    } catch (error) {
+      console.error('📦 [ManageScreen] Error fetching products:', error);
+      // Keep existing products on error
+    } finally {
+      setIsLoading(false);
     }
-  }, [showTour, currentStep, getDemoValues, formData.name, formData.price]);
+  }, [getStoreProfile]);
+  // 
+  //   // TOUR TEMPORARILY DISABLED
+  // useEffect(() => {
+  //   //     // Phase A Implementation: Initialize ProductFetchCoordinator and load products
+  //   //     console.log('📦 [ManageScreen] Initializing ProductFetchCoordinator');
+  //   //     productFetchCoordinator.initialize();
+  //   //     
+  //   //     // Phase B Implementation: Register with UIUpdatePropagator for product updates
+  //   //     console.log('📦 [ManageScreen] Registering with UIUpdatePropagator');
+  //   //     
+  //   //     // Register for UI updates with callback that handles different update types
+  //   //     const handleUIUpdate = (updateType, updateData) => {
+  //   //       console.log('📦 [ManageScreen] Received UI update:', { updateType, hasData: !!updateData });
+  //   //       
+  //   //       if (updateType === 'ORDER_SUCCESS') {
+  //   //         // Order was created successfully - refresh products to show updated stock
+  //   //         console.log('📦 [ManageScreen] Order success - refreshing products display');
+  //   //         refreshProducts(false); // Use cache if available, don't force API call
+  //   //       } else {
+  //   //         // Other updates (product changes, etc.)
+  //   //         refreshProducts(false);
+  //   //       }
+  //   //     };
+  //   //     
+  //   //     uiUpdatePropagator.registerScreen('ManageScreen', handleUIUpdate);
+  //   //     
+  //   //     // Load products using ProductFetchCoordinator
+  //   //     refreshProducts(false); // Use cache if available
+  //   //     lastFetchRef.current = Date.now(); // Track initial fetch timestamp
+  //   //     initialLoadDone.current = true;
+  //   // 
+  //   //     // Initialize active tab
+  //   //     if (!activeTab) {
+  //   //       setActiveTab('Products'); // Set initial tab to Products
+  //   //     }
+  //   //     
+  //   //     // Phase B Implementation: Cleanup - unregister from UIUpdatePropagator
+  //   //     return () => {
+  //   //       console.log('📦 [ManageScreen] Unregistering from UIUpdatePropagator');
+  //   //       uiUpdatePropagator.unregisterScreen('ManageScreen');
+  //   //     };
+  //   //   }, [refreshProducts]);
+  //   // 
+  //   //   // Handle route params for navigation from POS screen
+  //   //   useEffect(() => {
+  //   //     if (route?.params?.initialTab) {
+  //   //       console.log('📦 [ManageScreen] Setting initial tab:', route.params.initialTab);
+  //   //       handleTabChange(route.params.initialTab);
+  //   //     }
+  //   //     if (route?.params?.openAddModal) {
+  //   //       console.log('📦 [ManageScreen] Opening add product modal');
+  //   //       // Small delay to ensure tab is set and screen is ready
+  //   //       setTimeout(() => {
+  //   //         handleAddProductWithTour();
+  //   //       }, 200);
+  //   //       // Clear the param to prevent re-triggering
+  //   //       navigation.setParams({ openAddModal: undefined });
+  //   //     }
+  //   //     // Handle tour trigger from route params (when navigating from POS empty state)
+  //   //     if (route?.params?.startTour) {
+  //   //       console.log('🎯 [ManageScreen] Tour trigger received from route params');
+  //   //       setTimeout(() => {
+  //   //         startTour();
+  //   //       }, 1500);
+  //   //       navigation.setParams({ startTour: undefined });
+  //   //     }
+  //   //   }, [route?.params, navigation, handleAddProductWithTour, startTour, handleTabChange]);
 
-  // No animations needed
-
+  // Phase A Implementation: Initialize ProductFetchCoordinator and load products
   useEffect(() => {
-    // Phase 1 API Optimization: Single initial load only
-    // Removed focus-based refresh - use DataSyncContext for updates
-    loadProducts(false, true);
+    console.log('📦 [ManageScreen] Initializing ProductFetchCoordinator');
+    productFetchCoordinator.initialize();
+
+    // Phase B Implementation: Register with UIUpdatePropagator for product updates
+    console.log('📦 [ManageScreen] Registering with UIUpdatePropagator');
+
+    // Register for UI updates with callback that handles different update types
+    const handleUIUpdate = (updateType, updateData) => {
+      console.log('📦 [ManageScreen] Received UI update:', { updateType, hasData: !!updateData });
+
+      if (updateType === 'ORDER_SUCCESS') {
+        // Order was created successfully - refresh products to show updated stock
+        console.log('📦 [ManageScreen] Order success - refreshing products display');
+        refreshProducts(false); // Use cache if available, don't force API call
+      } else {
+        // Other updates (product changes, etc.)
+        refreshProducts(false);
+      }
+    };
+
+    uiUpdatePropagator.registerScreen('ManageScreen', handleUIUpdate);
+
+    // Load products using ProductFetchCoordinator (this will also check store setup)
+    refreshProducts(false); // Use cache if available
+
     lastFetchRef.current = Date.now(); // Track initial fetch timestamp
     initialLoadDone.current = true;
-    
-    // Phase 1 API Optimization: Removed focus listener to eliminate duplicate API calls
-    // Focus-based refresh is now handled by DataSyncContext subscription below
-
-    // Phase 1 API Optimization: Subscribe to DataSyncContext for real-time updates
-    // This replaces focus-based API calls with context-driven updates
-    const unsubscribeSync = subscribe((event) => {
-      if (event.type === 'products') {
-        console.log('📦 [ManageScreen] Received products update from DataSyncContext');
-        const normalizedProducts = normalizeProducts(event.data);
-        setProducts(normalizedProducts);
-      }
-    });
 
     // Initialize active tab
     if (!activeTab) {
       setActiveTab('Products'); // Set initial tab to Products
     }
 
+    // Phase B Implementation: Cleanup - unregister from UIUpdatePropagator
     return () => {
-      unsubscribeSync();
+      console.log('📦 [ManageScreen] Unregistering from UIUpdatePropagator');
+      uiUpdatePropagator.unregisterScreen('ManageScreen');
     };
-  }, [navigation]);
+  }, [refreshProducts]);
 
-  // Handle route params for navigation from POS screen
-  useEffect(() => {
-    if (route?.params?.initialTab) {
-      console.log('📦 [ManageScreen] Setting initial tab:', route.params.initialTab);
-      handleTabChange(route.params.initialTab);
-    }
-    if (route?.params?.openAddModal) {
-      console.log('📦 [ManageScreen] Opening add product modal');
-      // Small delay to ensure tab is set and screen is ready
-      setTimeout(() => {
-        handleAddProductWithTour();
-      }, 200);
-      // Clear the param to prevent re-triggering
-      navigation.setParams({ openAddModal: undefined });
-    }
-    // Handle tour trigger from route params (when navigating from POS empty state)
-    if (route?.params?.startTour) {
-      console.log('🎯 [ManageScreen] Tour trigger received from route params');
-      setTimeout(() => {
-        startTour();
-      }, 1500);
-      navigation.setParams({ startTour: undefined });
-    }
-  }, [route?.params, navigation, handleAddProductWithTour, startTour, handleTabChange]);
-
-  // Trigger DataSync refresh when modal closes (product updated)
+  // Phase A Implementation: Trigger ProductFetchCoordinator refresh when modal closes
   useEffect(() => {
     if (!modalVisible) {
       // Delay slightly to ensure state is updated
       setTimeout(() => {
-        // console.log('🔄 Modal closed - triggering DataSync refresh');
-        fetchFreshData(true); // Force refresh
+        console.log('🔄 Modal closed - triggering ProductFetchCoordinator refresh');
+        refreshProducts(true); // Force refresh
       }, 200);
     }
-  }, [modalVisible, fetchFreshData]);
+  }, [modalVisible, refreshProducts]);
 
   const normalizeProducts = (products) => {
     return products.map(product => {
@@ -343,7 +441,7 @@ const ManageScreen = ({ navigation, route }) => {
       // Preserve the actual value from backend, don't convert it
       const trackStockValue = product.track_stock;
       const isTrackingEnabled = trackStockValue !== false;
-      
+
       console.log('\n� A[MANAGE] Normalizing product:');
       console.log('  name:', product.name);
       console.log('  raw_track_stock:', trackStockValue);
@@ -351,7 +449,7 @@ const ManageScreen = ({ navigation, route }) => {
       console.log('  raw_track_stock === false:', trackStockValue === false);
       console.log('  raw_track_stock === true:', trackStockValue === true);
       console.log('  isTrackingEnabled:', isTrackingEnabled);
-      
+
       const normalized = {
         ...product,
         // Keep the actual track_stock value from backend
@@ -361,33 +459,38 @@ const ManageScreen = ({ navigation, route }) => {
         // Ensure stock field is set
         stock: product.stock || product.stock_quantity || 0,
       };
-      
+
       console.log('  After normalization:');
       console.log('    track_stock:', normalized.track_stock);
       console.log('    trackStock:', normalized.trackStock);
-      
+
       return normalized;
     });
   };
 
-  // Phase 1 API Optimization: Centralized product refresh function
-  // This eliminates duplicate getProducts() calls by providing a single refresh method
+  // Phase A Implementation: Centralized product refresh using ProductFetchCoordinator
   const refreshProductsFromAPI = useCallback(async (showLoader = false) => {
     try {
       if (showLoader) {
         setRefreshing(true);
       }
-      
-      const supabaseProducts = await productsService.getProducts();
-      const normalizedProducts = normalizeProducts(supabaseProducts);
+
+      console.log('📦 [ManageScreen] Refreshing products via ProductFetchCoordinator');
+      const fetchedProducts = await productFetchCoordinator.fetchProducts({
+        forceRefresh: true, // Always force refresh for manual refresh
+        screenName: 'ManageScreen',
+        apiOptions: {}
+      });
+
+      const normalizedProducts = normalizeProducts(fetchedProducts);
       setProducts(normalizedProducts);
-      
+
       // Also save to AsyncStorage for compatibility
       await AsyncStorage.setItem('products', JSON.stringify(normalizedProducts));
-      
+
       // Update last fetch timestamp
       lastFetchRef.current = Date.now();
-      
+
       return normalizedProducts;
     } catch (error) {
       console.error('❌ Error refreshing products:', error);
@@ -408,7 +511,7 @@ const ManageScreen = ({ navigation, route }) => {
     try {
       // Phase 1 API Optimization: Use centralized refresh function
       const normalizedProducts = await refreshProductsFromAPI(isRefresh);
-      
+
       console.log('✅ MANAGESCREEN: Normalized products:', normalizedProducts.length);
       if (normalizedProducts.length > 0) {
         console.log('📦 First normalized product:', {
@@ -417,11 +520,11 @@ const ManageScreen = ({ navigation, route }) => {
           trackStock: normalizedProducts[0].trackStock
         });
       }
-      
+
       // Check store setup via StoreSettingsContext (migrated from getStore())
       const storeProfile = getStoreProfile();
       const hasStoreSetup = storeProfile && storeProfile.store_name && storeProfile.store_name.trim() !== '';
-      
+
       if (hasStoreSetup) {
         setStoreSetupCompleted(true);
         setStoreInfo(storeProfile);
@@ -431,7 +534,7 @@ const ManageScreen = ({ navigation, route }) => {
         setStoreInfo(null);
         console.log('⚠️ Store setup not completed');
       }
-      
+
       // Use real user data from AuthContext (which fetches from database)
       if (user && isAuthenticated) {
         setUserInfo(user);
@@ -442,12 +545,12 @@ const ManageScreen = ({ navigation, route }) => {
           setUserInfo(JSON.parse(userData));
         }
       }
-      
+
       // Only finish loading on initial load (not on focus refresh)
       if (isInitialLoad) {
         setIsLoading(false);
       }
-      
+
     } catch (error) {
       console.error('Error loading products:', error);
       if (isInitialLoad) {
@@ -456,16 +559,23 @@ const ManageScreen = ({ navigation, route }) => {
     }
   };
 
-  const onRefresh = () => {
-    // Phase 1 API Optimization: Use loadProducts which calls centralized refresh
-    loadProducts(true);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      // Phase A Implementation: Use ProductFetchCoordinator for manual refresh
+      await refreshProducts(true); // forceRefresh = true for manual refresh
+    } catch (error) {
+      console.error('📦 [ManageScreen] Manual refresh failed:', error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const saveProducts = async (updatedProducts) => {
     try {
       await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
       setProducts(updatedProducts);
-      
+
       // Mark onboarding as complete when first product is added
       if (updatedProducts.length > 0) {
         await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
@@ -487,15 +597,15 @@ const ManageScreen = ({ navigation, route }) => {
     try {
       const storeProfile = getStoreProfile();
       const hasStoreSetup = storeProfile && storeProfile.store_name && storeProfile.store_name.trim() !== '';
-      
+
       if (!hasStoreSetup) {
         Alert.alert(
           'Store Setup Required',
           'Please complete your store setup with business details before adding products. This helps create professional receipts and manage your business properly.',
           [
             { text: 'Cancel', style: 'cancel' },
-            { 
-              text: 'Complete Setup', 
+            {
+              text: 'Complete Setup',
               onPress: () => navigation.navigate('StoreSetup')
             }
           ]
@@ -531,7 +641,7 @@ const ManageScreen = ({ navigation, route }) => {
     // If track_stock is explicitly false, then tracking is OFF
     // Otherwise (true, null, undefined), tracking is ON
     const isTrackingEnabled = product.track_stock !== false;
-    
+
     console.log('📝 [MANAGE] Editing product:', {
       name: product.name,
       track_stock: product.track_stock,
@@ -543,7 +653,7 @@ const ManageScreen = ({ navigation, route }) => {
       stock_quantity: product.stock_quantity,
       all_product_keys: Object.keys(product)
     });
-    
+
     setEditingProduct(product);
     setFormData({
       name: product.name,
@@ -569,10 +679,19 @@ const ManageScreen = ({ navigation, route }) => {
             try {
               console.log('🚨 MANAGESCREEN: Deleting product from Supabase:', productId);
               await productsService.deleteProduct(productId);
-              
+
+              // Phase B Implementation: Post-success cache updates for product delete
+              console.log('✅ [ManageScreen] Product deleted successfully - updating cache and propagating UI updates');
+
+              // 1. Update ProductFetchCoordinator cache (post-success only)
+              productFetchCoordinator.onProductDeleted(productId);
+
+              // 2. Propagate UI updates to all registered screens
+              uiUpdatePropagator.propagateProductUpdate();
+
               // Phase 1 API Optimization: Use centralized refresh function
               await refreshProductsFromAPI();
-              
+
               console.log('✅ MANAGESCREEN: Product deleted successfully');
             } catch (error) {
               console.error('❌ MANAGESCREEN: Error deleting product:', error);
@@ -588,9 +707,9 @@ const ManageScreen = ({ navigation, route }) => {
     console.log('=== handleSaveProduct CALLED ===');
     console.log('editingProduct:', editingProduct?.id);
     console.log('formData:', formData);
-    
+
     setSaving(true);
-    
+
     // Enhanced validation
     if (!formData.name.trim()) {
       Alert.alert('Validation Error', 'Product name is required.');
@@ -607,17 +726,17 @@ const ManageScreen = ({ navigation, route }) => {
     // Phase 1 API Optimization: Use existing products for duplicate check
     // Avoid additional API call - use current state which is kept fresh by DataSyncContext
     const currentProducts = products;
-    
+
     const productNameLower = formData.name.trim().toLowerCase();
     const duplicateProduct = currentProducts.find(p => {
       const isSameName = p.name && p.name.toLowerCase() === productNameLower;
       const isDifferentProduct = !editingProduct || p.id !== editingProduct.id;
       return isSameName && isDifferentProduct;
     });
-    
+
     if (duplicateProduct) {
       Alert.alert(
-        'Duplicate Product', 
+        'Duplicate Product',
         `A product with the name "${formData.name.trim()}" already exists. Please use a different name.`
       );
       setSaving(false);
@@ -660,7 +779,7 @@ const ManageScreen = ({ navigation, route }) => {
     console.log('🏷️ [MANAGE] Tags before save:');
     console.log('  formData.tags:', JSON.stringify(formData.tags));
     console.log('  isEditing:', !!editingProduct);
-    
+
     if (!editingProduct && finalTags.length === 0) {
       // Only auto-generate for NEW products with no tags
       finalTags = generateProductTags(formData.name.trim(), businessType);
@@ -671,7 +790,7 @@ const ManageScreen = ({ navigation, route }) => {
 
     try {
       console.log('INSIDE TRY BLOCK - editingProduct:', editingProduct?.id);
-      
+
       // Handle image upload to Supabase if a new image was selected
       let imageUrl = null;
       if (formData.image && formData.image.startsWith('file://')) {
@@ -681,7 +800,7 @@ const ManageScreen = ({ navigation, route }) => {
           const userInfo = await AsyncStorage.getItem('userInfo');
           const userId = userInfo ? JSON.parse(userInfo)?.id || 'unknown' : 'unknown';
           const productId = editingProduct?.id || `temp_${Date.now()}`;
-          
+
           const uploadResult = await productImageService.uploadProductImage(formData.image, productId, userId);
           if (uploadResult.success) {
             imageUrl = uploadResult.url;
@@ -698,11 +817,11 @@ const ManageScreen = ({ navigation, route }) => {
         // This is already a Supabase URL or existing image
         imageUrl = formData.image;
       }
-      
+
       if (editingProduct) {
         // Update existing product using ProductsService
         console.log('🚨 MANAGESCREEN: Updating product in Supabase:', editingProduct.id);
-        
+
         // Determine stock_quantity based on track_stock setting
         let stockQuantity;
         if (formData.trackStock) {
@@ -712,7 +831,7 @@ const ManageScreen = ({ navigation, route }) => {
           // If tracking is OFF, keep the existing stock_quantity (don't set to 0)
           stockQuantity = editingProduct.stock_quantity || editingProduct.stock || 0;
         }
-        
+
         const updateData = {
           name: formData.name.trim(),
           price,
@@ -723,7 +842,7 @@ const ManageScreen = ({ navigation, route }) => {
           // FIXED: Always include image_url - set to empty string if null (to clear the image)
           image_url: imageUrl || '',
         };
-        
+
         console.log('\n🟡🟡🟡 === MANAGESCREEN SENDING UPDATE === 🟡🟡🟡');
         console.log('Product ID:', editingProduct.id);
         console.log('formData.trackStock:', formData.trackStock, 'Type:', typeof formData.trackStock);
@@ -732,10 +851,24 @@ const ManageScreen = ({ navigation, route }) => {
         console.log('🏷️ updateData.tags:', JSON.stringify(updateData.tags));
         console.log('🏷️ updateData.tags.length:', updateData.tags?.length);
         console.log('Full updateData:', JSON.stringify(updateData, null, 2));
-        
+
         console.log('🟡 CALLING productsService.updateProduct...');
-        await productsService.updateProduct(editingProduct.id, updateData);
+        const updatedProduct = await productsService.updateProduct(editingProduct.id, updateData);
         console.log('🟡 RETURNED FROM productsService.updateProduct');
+
+        // Phase B Implementation: Post-success cache updates for product update
+        console.log('✅ [ManageScreen] Product updated successfully - updating cache and propagating UI updates');
+
+        // 1. Update ProductFetchCoordinator cache (post-success only)
+        if (updatedProduct) {
+          productFetchCoordinator.onProductUpdated(editingProduct.id, updatedProduct);
+        } else {
+          // If updateProduct doesn't return the updated product, use the updateData
+          productFetchCoordinator.onProductUpdated(editingProduct.id, updateData);
+        }
+
+        // 2. Propagate UI updates to all registered screens
+        uiUpdatePropagator.propagateProductUpdate();
       } else {
         // Create new product using ProductsService
         console.log('🚨 MANAGESCREEN: Creating new product in Supabase');
@@ -749,29 +882,40 @@ const ManageScreen = ({ navigation, route }) => {
           description: `New product created from ManageScreen`,
           image_url: imageUrl || '',
         };
-        
+
         console.log('📦 Product data:', {
           trackStock: formData.trackStock,
           stock_quantity: productData.stock_quantity,
           track_stock: productData.track_stock
         });
-        
-        await productsService.createProduct(productData);
+
+        const createdProduct = await productsService.createProduct(productData);
+
+        // Phase B Implementation: Post-success cache updates for product create
+        console.log('✅ [ManageScreen] Product created successfully - updating cache and propagating UI updates');
+
+        // 1. Update ProductFetchCoordinator cache (post-success only)
+        if (createdProduct) {
+          productFetchCoordinator.onProductCreated(createdProduct);
+        }
+
+        // 2. Propagate UI updates to all registered screens
+        uiUpdatePropagator.propagateProductUpdate();
       }
 
       // Close modal first to give immediate feedback
       setModalVisible(false);
-      
+
       // Phase 1 API Optimization: Use centralized refresh function after save
       console.log('🔄 Forcing product refresh after update...');
-      
+
       try {
         // Small delay to ensure database commit completes
         await new Promise(resolve => setTimeout(resolve, 100));
         const normalizedProducts = await refreshProductsFromAPI();
-        
+
         console.log('✅ Products refreshed:', normalizedProducts.length);
-        
+
         // Find the product we just updated/created (only if editing)
         if (editingProduct) {
           const updatedProduct = normalizedProducts.find(p => p.id === editingProduct.id);
@@ -786,38 +930,38 @@ const ManageScreen = ({ navigation, route }) => {
         } else {
           console.log('📦 New product created successfully');
         }
-        
+
         // Mark onboarding as complete when first product is added
         if (normalizedProducts.length > 0) {
           await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
         }
-        
+
         // Show success message
         const isFirstProduct = products.length === 0;
-        const message = editingProduct 
-          ? 'Product updated successfully!' 
-          : isFirstProduct 
-            ? 'Welcome! Your first product has been added.' 
+        const message = editingProduct
+          ? 'Product updated successfully!'
+          : isFirstProduct
+            ? 'Welcome! Your first product has been added.'
             : 'Product added successfully!';
-        
+
         Alert.alert('Success', message);
-        
+
       } catch (refreshError) {
         console.error('⚠️ Error refreshing products after save:', refreshError);
         // Product was saved successfully, just refresh failed
         // Show success anyway and let user manually refresh
         Alert.alert(
-          'Product Saved', 
+          'Product Saved',
           'Product was saved successfully. Pull down to refresh the list.',
           [{ text: 'OK' }]
         );
       }
-      
+
     } catch (error) {
       console.error('❌ MANAGESCREEN: Error saving product:', error);
       console.error('❌ Error details:', error.message);
       console.error('❌ Error stack:', error.stack);
-      
+
       // More specific error message
       const errorMessage = error.message || 'Failed to save product. Please try again.';
       Alert.alert('Error', errorMessage);
@@ -834,8 +978,8 @@ const ManageScreen = ({ navigation, route }) => {
       <View style={styles.productCard}>
         <View style={styles.productImage}>
           {displayImageUrl ? (
-            <Image 
-              source={{ uri: displayImageUrl }} 
+            <Image
+              source={{ uri: displayImageUrl }}
               style={styles.productImageStyle}
               onError={(error) => {
                 console.log('❌ [ManageScreen] Image load error:', error.nativeEvent.error);
@@ -847,43 +991,43 @@ const ManageScreen = ({ navigation, route }) => {
             </View>
           )}
         </View>
-      <View style={styles.productInfo}>
-        <Text style={styles.productName}>{item.name}</Text>
-        <Text style={styles.productDetails}>
-          ₹{item.price}{(item.track_stock !== false) ? ` • Stock: ${item.stock || item.stock_quantity}` : ' • No stock tracking'}
-        </Text>
-        {item.tags && item.tags.length > 0 && (
-          <View style={styles.productTags}>
-            {item.tags.slice(0, 3).map((tag, index) => (
-              <View key={index} style={styles.productTag}>
-                <Text style={styles.productTagText}>{tag}</Text>
-              </View>
-            ))}
-            {item.tags.length > 3 && (
-              <Text style={styles.moreTags}>+{item.tags.length - 3}</Text>
-            )}
-          </View>
-        )}
+        <View style={styles.productInfo}>
+          <Text style={styles.productName}>{item.name}</Text>
+          <Text style={styles.productDetails}>
+            ₹{item.price}{(item.track_stock !== false) ? ` • Stock: ${item.stock || item.stock_quantity}` : ' • No stock tracking'}
+          </Text>
+          {item.tags && item.tags.length > 0 && (
+            <View style={styles.productTags}>
+              {item.tags.slice(0, 3).map((tag, index) => (
+                <View key={index} style={styles.productTag}>
+                  <Text style={styles.productTagText}>{tag}</Text>
+                </View>
+              ))}
+              {item.tags.length > 3 && (
+                <Text style={styles.moreTags}>+{item.tags.length - 3}</Text>
+              )}
+            </View>
+          )}
+        </View>
+        <View style={styles.productActions}>
+          <TouchableOpacity
+            style={buttonStyles.iconSmall}
+            onPress={() => handleEditProduct(item)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="pencil-outline" size={20} color={colors.primary.main} />
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[buttonStyles.iconSmall, { backgroundColor: colors.error.background }]}
+            onPress={() => handleDeleteProduct(item.id)}
+            activeOpacity={0.7}
+          >
+            <Ionicons name="trash-outline" size={20} color={colors.error.main} />
+          </TouchableOpacity>
+        </View>
       </View>
-      <View style={styles.productActions}>
-        <TouchableOpacity
-          style={buttonStyles.iconSmall}
-          onPress={() => handleEditProductWithTour(item)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="pencil-outline" size={20} color={colors.primary.main} />
-        </TouchableOpacity>
-        <TouchableOpacity
-          style={[buttonStyles.iconSmall, { backgroundColor: colors.error.background }]}
-          onPress={() => handleDeleteProductWithTour(item.id)}
-          activeOpacity={0.7}
-        >
-          <Ionicons name="trash-outline" size={20} color={colors.error.main} />
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-};
+    );
+  };
 
   // Load business type from store settings context
   useEffect(() => {
@@ -898,7 +1042,7 @@ const ManageScreen = ({ navigation, route }) => {
         console.error('Error loading business type:', error);
       }
     };
-    
+
     loadBusinessType();
   }, [getStoreProfile]);
 
@@ -962,9 +1106,9 @@ const ManageScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={styles.container}>
       {(saving || isLoading) && <LoadingSpinner />}
-      
+
       <View style={styles.content}>
-        <View style={styles.header} ref={headerRef}>
+        <View style={styles.header}>
           <TouchableOpacity
             style={styles.titleContainer}
             onLongPress={handleDevClearData}
@@ -975,274 +1119,270 @@ const ManageScreen = ({ navigation, route }) => {
               <Text style={styles.storeSubtitle}>{storeInfo.store_name}</Text>
             )}
           </TouchableOpacity>
-        <View style={styles.headerButtons}>
-          <TouchableOpacity
-            style={styles.subscriptionButton}
-            onPress={() => navigation.navigate('Subscription')}
-          >
-            <Ionicons name="diamond-outline" size={20} color="#f59e0b" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.profileButton}
-            onPress={() => navigation.navigate('Profile')}
-          >
-            <Ionicons name="person-outline" size={20} color="#4b5563" />
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.settingsButton}
-            onPress={() => navigation.navigate('Settings')}
-          >
-            <Ionicons name="settings-outline" size={20} color="#4b5563" />
-          </TouchableOpacity>
-        </View>
-      </View>
-
-      <View style={styles.tabBar} ref={tabBarRef}>
-        {tabs.map((tab) => (
-          <TouchableOpacity
-            key={tab}
-            style={[styles.tab, activeTab === tab && styles.tabActive]}
-            onPress={() => handleTabChange(tab)}
-          >
-            {false ? (
-              null
-            ) : (
-              <Text 
-                style={[
-                  styles.tabText,
-                  activeTab === tab && styles.tabTextActive
-                ]}
-                numberOfLines={2}
-                adjustsFontSizeToFit={true}
-                minimumFontScale={0.8}
-              >
-                {tab}
-              </Text>
-            )}
-          </TouchableOpacity>
-        ))}
-      </View>
-
-      {activeTab === 'Products' && (
-        <>
-          <View style={styles.productsHeader} ref={contentAreaRef}>
-            <View style={styles.productsHeaderLeft}>
-              <Text style={styles.productsTitle}>Products</Text>
-              {!storeSetupCompleted && (
-                <View style={styles.setupWarning}>
-                  <Ionicons name="warning-outline" size={16} color="#f59e0b" />
-                  <Text style={styles.setupWarningText}>Setup Required</Text>
-                </View>
-              )}
-            </View>
+          <View style={styles.headerButtons}>
             <TouchableOpacity
-              style={[
-                buttonStyles.compact,
-                !storeSetupCompleted && buttonStyles.disabled
-              ]}
-              onPress={handleAddProductWithTour}
-              activeOpacity={0.8}
+              style={styles.subscriptionButton}
+              onPress={() => navigation.navigate('Subscription')}
             >
-              <Text style={buttonStyles.compactText}>
-                {!storeSetupCompleted ? 'Setup First' : 'Add Product'}
-              </Text>
+              <Ionicons name="diamond-outline" size={20} color="#f59e0b" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.profileButton}
+              onPress={() => navigation.navigate('Profile')}
+            >
+              <Ionicons name="person-outline" size={20} color="#4b5563" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.settingsButton}
+              onPress={() => navigation.navigate('Settings')}
+            >
+              <Ionicons name="settings-outline" size={20} color="#4b5563" />
             </TouchableOpacity>
           </View>
+        </View>
 
-          {products.length === 0 ? (
-            <View style={styles.emptyProductsState}>
-              {!storeSetupCompleted ? (
-                <>
-                  <Ionicons name="storefront-outline" size={64} color="#6b7280" style={{ marginBottom: 16 }} />
-                  <Text style={styles.emptyProductsTitle}>Complete Store Setup</Text>
-                  <Text style={styles.emptyProductsText}>
-                    Before adding products, please complete your store setup with business details. This helps create professional receipts and manage your business properly.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.setupButton}
-                    onPress={() => navigation.navigate('StoreSetup')}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.setupButtonText}>Complete Store Setup</Text>
-                  </TouchableOpacity>
-                </>
-              ) : (
-                <>
-                  <Ionicons name="cube-outline" size={64} color="#6b7280" style={{ marginBottom: 16 }} />
-                  <Text style={styles.emptyProductsTitle}>
-                    Welcome, {storeInfo?.store_name || 'Store Owner'}!
-                  </Text>
-                  <Text style={styles.emptyProductsText}>
-                    Your store setup is complete. Now add your first product to start managing your inventory and making sales.
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.firstProductButton}
-                    onPress={handleAddProduct}
-                    activeOpacity={0.8}
-                  >
-                    <Text style={styles.firstProductButtonText}>Add First Product</Text>
-                  </TouchableOpacity>
-                </>
-              )}
-            </View>
-          ) : (
-            <FlatList
-              data={products}
-              renderItem={renderProduct}
-              keyExtractor={(item) => item.id}
-              contentContainerStyle={styles.productsList}
-              showsVerticalScrollIndicator={false}
-              refreshControl={
-                <RefreshControl
-                  refreshing={refreshing}
-                  onRefresh={onRefresh}
-                  tintColor={colors.primary.main}
-                  colors={[colors.primary.main]}
-                  progressBackgroundColor={colors.background.surface}
-                  title="Pull to refresh products..."
-                  titleColor={colors.text.secondary}
-                />
-              }
-            />
-          )}
-        </>
-      )}
-
-      {activeTab === 'Inventory' && <InventoryScreen isActive={activeTab === 'Inventory'} onTourAction={notifyAction} />}
-
-      {activeTab === 'Store Settings' && <StoreSettingsScreen navigation={navigation} />}
-
-      <Modal
-        animationType="none"
-        transparent={true}
-        visible={modalVisible}
-        onRequestClose={() => handleModalClose()}
-      >
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalContainer}>
-            <ScrollView 
-              contentContainerStyle={styles.modalScrollContent}
-              keyboardShouldPersistTaps="handled"
-              showsVerticalScrollIndicator={false}
+        <View style={styles.tabBar}>
+          {tabs.map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[styles.tab, activeTab === tab && styles.tabActive]}
+              onPress={() => handleTabChange(tab)}
             >
-              <View style={styles.modalContent}>
-                <View style={styles.modalHeader}>
-                  <Text style={styles.modalTitle}>
-                    {editingProduct ? 'Edit Product' : 'Add Product'}
-                  </Text>
-                  <TouchableOpacity
-                    style={styles.closeButton}
-                    onPress={() => handleModalClose()}
-                  >
-                    <Text style={styles.closeButtonText}>✕</Text>
-                  </TouchableOpacity>
-                </View>
+              {false ? (
+                null
+              ) : (
+                <Text
+                  style={[
+                    styles.tabText,
+                    activeTab === tab && styles.tabTextActive
+                  ]}
+                  numberOfLines={2}
+                  adjustsFontSizeToFit={true}
+                  minimumFontScale={0.8}
+                >
+                  {tab}
+                </Text>
+              )}
+            </TouchableOpacity>
+          ))}
+        </View>
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Product Name"
-                  value={formData.name}
-                  onChangeText={handleNameChange}
-                />
+        {activeTab === 'Products' && (
+          <>
+            <View style={styles.productsHeader}>
+              <View style={styles.productsHeaderLeft}>
+                <Text style={styles.productsTitle}>Products</Text>
+                {!storeSetupCompleted && (
+                  <View style={styles.setupWarning}>
+                    <Ionicons name="warning-outline" size={16} color="#f59e0b" />
+                    <Text style={styles.setupWarningText}>Setup Required</Text>
+                  </View>
+                )}
+              </View>
+              <TouchableOpacity
+                style={[
+                  buttonStyles.compact,
+                  !storeSetupCompleted && buttonStyles.disabled
+                ]}
+                onPress={handleAddProduct}
+                activeOpacity={0.8}
+              >
+                <Text style={buttonStyles.compactText}>
+                  {!storeSetupCompleted ? 'Setup First' : 'Add Product'}
+                </Text>
+              </TouchableOpacity>
+            </View>
 
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Price (₹)"
-                  value={formData.price}
-                  onChangeText={handlePriceChange}
-                  keyboardType="numeric"
-                />
+            {products.length === 0 ? (
+              <View style={styles.emptyProductsState}>
+                {!storeSetupCompleted ? (
+                  <>
+                    <Ionicons name="storefront-outline" size={64} color="#6b7280" style={{ marginBottom: 16 }} />
+                    <Text style={styles.emptyProductsTitle}>Complete Store Setup</Text>
+                    <Text style={styles.emptyProductsText}>
+                      Before adding products, please complete your store setup with business details. This helps create professional receipts and manage your business properly.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.setupButton}
+                      onPress={() => navigation.navigate('StoreSetup')}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.setupButtonText}>Complete Store Setup</Text>
+                    </TouchableOpacity>
+                  </>
+                ) : (
+                  <>
+                    <Ionicons name="cube-outline" size={64} color="#6b7280" style={{ marginBottom: 16 }} />
+                    <Text style={styles.emptyProductsTitle}>
+                      Welcome, {storeInfo?.store_name || 'Store Owner'}!
+                    </Text>
+                    <Text style={styles.emptyProductsText}>
+                      Your store setup is complete. Now add your first product to start managing your inventory and making sales.
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.firstProductButton}
+                      onPress={handleAddProduct}
+                      activeOpacity={0.8}
+                    >
+                      <Text style={styles.firstProductButtonText}>Add First Product</Text>
+                    </TouchableOpacity>
+                  </>
+                )}
+              </View>
+            ) : (
+              <FlatList
+                data={products}
+                renderItem={renderProduct}
+                keyExtractor={(item) => item.id}
+                contentContainerStyle={styles.productsList}
+                showsVerticalScrollIndicator={false}
+                refreshControl={
+                  <RefreshControl
+                    refreshing={refreshing}
+                    onRefresh={onRefresh}
+                    tintColor={colors.primary.main}
+                    colors={[colors.primary.main]}
+                    progressBackgroundColor={colors.background.surface}
+                    title="Pull to refresh products..."
+                    titleColor={colors.text.secondary}
+                  />
+                }
+              />
+            )}
+          </>
+        )}
 
-                {/* Stock Tracking Toggle */}
-                <View style={styles.stockTrackingContainer}>
-                  <View style={styles.stockTrackingHeader}>
-                    <Text style={styles.inputLabel}>Track Stock Quantity</Text>
-                    <Switch
-                      value={formData.trackStock}
-                      onValueChange={(value) => {
-                        console.log('🔄 [MANAGE] Track Stock toggle changed:', {
-                          newValue: value,
-                          newValue_type: typeof value,
-                          oldValue: formData.trackStock
-                        });
-                        
-                        // When enabling track_stock, populate stock field with existing value
-                        if (value && !formData.stock && editingProduct) {
-                          const existingStock = editingProduct.stock_quantity || editingProduct.stock || 0;
-                          setFormData({ ...formData, trackStock: value, stock: existingStock.toString() });
-                        } else {
-                          setFormData({ ...formData, trackStock: value });
-                        }
-                      }}
-                      trackColor={{ false: colors.border.medium, true: '#93c5fd' }}
-                      thumbColor={formData.trackStock ? colors.primary.main : colors.text.tertiary}
+        {activeTab === 'Inventory' && <InventoryScreen isActive={activeTab === 'Inventory'} />}
+
+        {activeTab === 'Store Settings' && <StoreSettingsScreen navigation={navigation} />}
+
+        <Modal
+          animationType="none"
+          transparent={true}
+          visible={modalVisible}
+          onRequestClose={() => setModalVisible(false)}
+        >
+          <View style={styles.modalOverlay}>
+            <View style={styles.modalContainer}>
+              <ScrollView
+                contentContainerStyle={styles.modalScrollContent}
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+              >
+                <View style={styles.modalContent}>
+                  <View style={styles.modalHeader}>
+                    <Text style={styles.modalTitle}>
+                      {editingProduct ? 'Edit Product' : 'Add Product'}
+                    </Text>
+                    <TouchableOpacity
+                      style={styles.closeButton}
+                      onPress={() => setModalVisible(false)}
+                    >
+                      <Text style={styles.closeButtonText}>✕</Text>
+                    </TouchableOpacity>
+                  </View>
+
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Product Name"
+                    value={formData.name}
+                    onChangeText={handleNameChange}
+                  />
+
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Price (₹)"
+                    value={formData.price}
+                    onChangeText={handlePriceChange}
+                    keyboardType="numeric"
+                  />
+
+                  {/* Stock Tracking Toggle */}
+                  <View style={styles.stockTrackingContainer}>
+                    <View style={styles.stockTrackingHeader}>
+                      <Text style={styles.inputLabel}>Track Stock Quantity</Text>
+                      <Switch
+                        value={formData.trackStock}
+                        onValueChange={(value) => {
+                          console.log('🔄 [MANAGE] Track Stock toggle changed:', {
+                            newValue: value,
+                            newValue_type: typeof value,
+                            oldValue: formData.trackStock
+                          });
+
+                          // When enabling track_stock, populate stock field with existing value
+                          if (value && !formData.stock && editingProduct) {
+                            const existingStock = editingProduct.stock_quantity || editingProduct.stock || 0;
+                            setFormData({ ...formData, trackStock: value, stock: existingStock.toString() });
+                          } else {
+                            setFormData({ ...formData, trackStock: value });
+                          }
+                        }}
+                        trackColor={{ false: colors.border.medium, true: '#93c5fd' }}
+                        thumbColor={formData.trackStock ? colors.primary.main : colors.text.tertiary}
+                      />
+                    </View>
+                    <TextInput
+                      style={[styles.textInput, !formData.trackStock && styles.textInputDisabled]}
+                      placeholder="Stock Quantity"
+                      value={formData.stock}
+                      onChangeText={(text) => formData.trackStock && setFormData({ ...formData, stock: text })}
+                      keyboardType="numeric"
+                      editable={formData.trackStock}
                     />
                   </View>
-                  <TextInput
-                    style={[styles.textInput, !formData.trackStock && styles.textInputDisabled]}
-                    placeholder="Stock Quantity"
-                    value={formData.stock}
-                    onChangeText={(text) => formData.trackStock && setFormData({ ...formData, stock: text })}
-                    keyboardType="numeric"
-                    editable={formData.trackStock}
+
+                  {/* Product Image */}
+                  <ProductImagePicker
+                    image={formData.image}
+                    onImageChange={(image) => setFormData(prev => ({ ...prev, image }))}
+                    productName={formData.name}
+                    productId={editingProduct?.id || 'new'}
+                    userId={user?.id || userInfo?.id}
+                    mode="supabase"
                   />
+
+                  {/* Product Tags */}
+                  <TagInput
+                    tags={formData.tags}
+                    onTagsChange={(newTags) => {
+                      console.log('🏷️ [MANAGE] TagInput onTagsChange called:');
+                      console.log('  newTags:', JSON.stringify(newTags));
+                      console.log('  newTags.length:', newTags.length);
+                      setFormData(prev => ({ ...prev, tags: newTags }));
+                    }}
+                    productName={formData.name}
+                    businessType={businessType}
+                  />
+
+                  <TouchableOpacity
+                    style={buttonStyles.success}
+                    onPress={handleSaveProduct}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={buttonStyles.successText}>
+                      {editingProduct ? 'Update Product' : 'Add Product'}
+                    </Text>
+                  </TouchableOpacity>
                 </View>
-
-                {/* Product Image */}
-                <ProductImagePicker
-                  image={formData.image}
-                  onImageChange={(image) => setFormData(prev => ({ ...prev, image }))}
-                  productName={formData.name}
-                  productId={editingProduct?.id || 'new'}
-                  userId={user?.id || userInfo?.id}
-                  mode="supabase"
-                />
-
-                {/* Product Tags */}
-                <TagInput
-                  tags={formData.tags}
-                  onTagsChange={(newTags) => {
-                    console.log('🏷️ [MANAGE] TagInput onTagsChange called:');
-                    console.log('  newTags:', JSON.stringify(newTags));
-                    console.log('  newTags.length:', newTags.length);
-                    setFormData(prev => ({ ...prev, tags: newTags }));
-                  }}
-                  productName={formData.name}
-                  businessType={businessType}
-                />
-
-                <TouchableOpacity
-                  style={buttonStyles.success}
-                  onPress={handleSaveWithTour}
-                  activeOpacity={0.8}
-                >
-                  <Text style={buttonStyles.successText}>
-                    {editingProduct ? 'Update Product' : 'Add Product'}
-                  </Text>
-                </TouchableOpacity>
-              </View>
-            </ScrollView>
+              </ScrollView>
+            </View>
           </View>
-        </View>
-      </Modal>
+        </Modal>
 
 
 
-      {/* Interactive App Tour Overlay */}
-      <InteractiveTourOverlay
-        ref={overlayRef}
-        visible={showTour}
-        currentStep={currentStep}
-        totalSteps={totalSteps}
-        stepIndex={stepIndex}
-        onNext={nextStep}
-        onSkip={skipScreen}
-        onSkipAll={skipAll}
-        onSkipStep={skipStep}
-        onActionComplete={nextStep}
-        showHint={showHint}
-        showSkipStep={showSkipStep}
-      />
+        {/* Simple Tour Overlay */}
+        {/* TOUR TEMPORARILY DISABLED */}
+        {/* <SimpleTourOverlay
+      //         visible={showTour}
+      //         currentStep={currentStep}
+      //         totalSteps={totalSteps}
+      //         stepIndex={stepIndex}
+      //         onNext={nextStep}
+      //         onSkip={skipTour}
+      //         onComplete={completeTour}
+      //       /> */}
 
       </View>
     </SafeAreaView>

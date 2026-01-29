@@ -29,7 +29,9 @@ export const useQRPayment = () => {
       console.log('📊 Store info retrieved from cache:', storeInfo);
 
       // Check for any available UPI ID from cached store data
-      const hasUpiId = storeInfo.upi_id || storeInfo.upi_id_2 || storeInfo.upi_id_3;
+      const hasUpiId = (storeInfo.upi_id && storeInfo.upi_id.trim()) || 
+                      (storeInfo.upi_id_2 && storeInfo.upi_id_2.trim()) || 
+                      (storeInfo.upi_id_3 && storeInfo.upi_id_3.trim());
       
       if (!hasUpiId) {
         throw new Error('UPI ID not configured. Please add your UPI ID in Store Settings.');

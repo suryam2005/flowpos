@@ -10,12 +10,13 @@ import {
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import productImageService from '../services/ProductImageService';
+import featureService from '../services/FeatureService';
 import LoadingOverlay from './LoadingOverlay';
 import { colors } from '../styles/colors';
 
-const ProductImagePicker = ({ 
-  image, 
-  onImageChange, 
+const ProductImagePicker = ({
+  image,
+  onImageChange,
   productName = 'Product',
   productId = null,
   userId = null,
@@ -41,7 +42,7 @@ const ProductImagePicker = ({
     if (!hasPermission) return;
 
     setIsLoading(true);
-    
+
     try {
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
@@ -52,8 +53,19 @@ const ProductImagePicker = ({
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        const selectedImageUri = result.assets[0].uri;
-        
+        const asset = result.assets[0];
+
+        // Check storage limit (convert bytes to MB)
+        const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
+        const canUpload = await featureService.canUploadFile(fileSizeMB);
+
+        if (!canUpload) {
+          featureService.showUpgradePrompt('storage_mb');
+          return;
+        }
+
+        const selectedImageUri = asset.uri;
+
         // Always return the local URI first - upload will happen when product is saved
         onImageChange(selectedImageUri);
       }
@@ -77,7 +89,7 @@ const ProductImagePicker = ({
     }
 
     setIsLoading(true);
-    
+
     try {
       const result = await ImagePicker.launchCameraAsync({
         allowsEditing: true,
@@ -87,7 +99,18 @@ const ProductImagePicker = ({
       });
 
       if (!result.canceled && result.assets && result.assets[0]) {
-        onImageChange(result.assets[0].uri);
+        const asset = result.assets[0];
+
+        // Check storage limit (convert bytes to MB)
+        const fileSizeMB = (asset.fileSize || 0) / (1024 * 1024);
+        const canUpload = await featureService.canUploadFile(fileSizeMB);
+
+        if (!canUpload) {
+          featureService.showUpgradePrompt('storage_mb');
+          return;
+        }
+
+        onImageChange(asset.uri);
       }
     } catch (error) {
       console.error('Error taking photo:', error);
@@ -122,11 +145,11 @@ const ProductImagePicker = ({
           // Continue anyway - the image URL will be cleared from the product
         }
       }
-      
+
       // Clear the image in the form (this will be saved when product is updated)
       onImageChange(null);
       console.log('✅ Image cleared from form');
-      
+
     } catch (error) {
       console.error('Error deleting image:', error);
       Alert.alert('Error', 'Failed to delete image. Please try again.');
@@ -170,8 +193,8 @@ const ProductImagePicker = ({
             'Are you sure you want to remove this product image?',
             [
               { text: 'Cancel', style: 'cancel' },
-              { 
-                text: 'Remove', 
+              {
+                text: 'Remove',
                 style: 'destructive',
                 onPress: handleDeleteImage
               }
@@ -188,7 +211,7 @@ const ProductImagePicker = ({
   return (
     <View style={styles.container}>
       <Text style={styles.label}>Product Image</Text>
-      
+
       <TouchableOpacity
         style={[styles.imageButton, isLoading && styles.imageButtonDisabled]}
         onPress={showImageOptions}
@@ -199,16 +222,16 @@ const ProductImagePicker = ({
       </TouchableOpacity>
 
       <Text style={styles.helperText}>
-        {image 
+        {image
           ? 'Tap image to change, or tap 🗑️ to remove'
           : 'Add a photo to help customers identify your product'
         }
       </Text>
 
       {/* Loading Overlay */}
-      <LoadingOverlay 
-        visible={isLoading} 
-        message="Processing image..." 
+      <LoadingOverlay
+        visible={isLoading}
+        message="Processing image..."
       />
     </View>
   );

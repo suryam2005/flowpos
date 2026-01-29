@@ -3,9 +3,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getItemAsync, setItemAsync, deleteItemAsync } from '../utils/secureStorage';
 import { AppState } from 'react-native';
 import tokenManager from '../services/TokenManager';
-import { 
-  triggerSubscriptionFetchAfterLogin, 
-  clearSubscriptionCacheOnLogout 
+import {
+  triggerSubscriptionFetchAfterLogin,
+  clearSubscriptionCacheOnLogout
 } from './SubscriptionContext';
 import {
   triggerAppSettingsFetchAfterLogin,
@@ -18,6 +18,9 @@ import {
   distributeStoreDataToStoreSettings
 } from './StoreSettingsContext';
 import { apiDeduplicator, ENDPOINT_KEYS } from '../utils/APIDeduplicator';
+import serviceStatusCoordinator from '../services/ServiceStatusCoordinator';
+import productFetchCoordinator from '../services/ProductFetchCoordinator';
+import sessionStateManager from '../services/SessionStateManager';
 
 const AuthContext = createContext();
 
@@ -48,9 +51,9 @@ export const AuthProvider = ({ children }) => {
     } catch (error) {
       console.log('Could not clear network cache:', error);
     }
-    
+
     checkAuthStatus();
-    
+
     const handleAppStateChange = (nextAppState) => {
       if (nextAppState === 'background' || nextAppState === 'inactive') {
         // Lock the app when it goes to background (only for cloud users)
@@ -76,15 +79,30 @@ export const AuthProvider = ({ children }) => {
 
       // Cloud authentication
       if (token && userData) {
+        const parsedUserData = JSON.parse(userData);
         setAccessToken(token);
-        setUser(JSON.parse(userData));
+        setUser(parsedUserData);
         setIsAuthenticated(true);
         setPinSetupCompleted(true);
+
+        // Initialize ProductFetchCoordinator for session-level caching (UI Performance Optimization)
+        console.log('🎯 Initializing ProductFetchCoordinator on app restart...');
+        productFetchCoordinator.initialize();
+
+
       } else {
         // Legacy local authentication
         setPinSetupCompleted(!!pinCompleted);
+
+        // Clear coordinator session if not authenticated
+        console.log('🎯 Clearing ProductFetchCoordinator session - not authenticated...');
+        productFetchCoordinator.clearSession();
+
+        // Clear ServiceStatusCoordinator session (Phase D optimization)
+        console.log('🔧 Clearing ServiceStatusCoordinator session - not authenticated...');
+        serviceStatusCoordinator.clearCache();
       }
-      
+
       if (lockoutTime) {
         const endTime = parseInt(lockoutTime);
         if (Date.now() < endTime) {
@@ -120,7 +138,7 @@ export const AuthProvider = ({ children }) => {
       // Use APIDeduplicator to ensure only one call happens
       const storeData = await apiDeduplicator.deduplicate(ENDPOINT_KEYS.STORE, async () => {
         console.log('🔄 [AuthContext] Making consolidated GET /api/store call');
-        
+
         const response = await apiCallWithFallback('/store', {
           method: 'GET',
           headers: {
@@ -145,7 +163,7 @@ export const AuthProvider = ({ children }) => {
         if (distributeStoreDataToStoreSettings) {
           distributeStoreDataToStoreSettings(storeData, token);
         }
-        
+
         // Distribute to AppSettingsContext (app_settings field)
         if (distributeStoreDataToAppSettings) {
           distributeStoreDataToAppSettings(storeData);
@@ -184,14 +202,14 @@ export const AuthProvider = ({ children }) => {
       return data;
     } catch (error) {
       console.error('❌ API Call Error:', error.message);
-      
+
       // Provide user-friendly error messages
       if (error.message.includes('timeout') || error.message.includes('All connection attempts failed')) {
         throw new Error('Cannot connect to server. Please check your network connection and ensure the backend is running.');
       } else if (error.message.includes('Network request failed')) {
         throw new Error('Network error. Please check your internet connection.');
       }
-      
+
       throw error;
     }
   };
@@ -226,7 +244,7 @@ export const AuthProvider = ({ children }) => {
       name: userData.name,
       phone: userData.phone
     };
-    
+
     const response = await apiCall('/auth/setup-password', {
       method: 'POST',
       body: JSON.stringify(apiData),
@@ -238,7 +256,7 @@ export const AuthProvider = ({ children }) => {
       await AsyncStorage.setItem('accessToken', response.access_token);
       await AsyncStorage.setItem('refreshToken', response.refresh_token);
       await AsyncStorage.setItem('userData', JSON.stringify(response.user));
-      
+
       // Store user_id and store_id for orders system
       await AsyncStorage.setItem('userId', response.user.id);
       if (response.store) {
@@ -253,12 +271,16 @@ export const AuthProvider = ({ children }) => {
       setUser(response.user);
       setIsAuthenticated(true);
       setPinSetupCompleted(true);
-      
+
+      // Initialize ProductFetchCoordinator for session-level caching (UI Performance Optimization)
+      console.log('🎯 Initializing ProductFetchCoordinator after password setup...');
+      productFetchCoordinator.initialize();
+
       // Trigger subscription fetch after successful password setup (non-blocking)
       // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
       console.log('📦 Triggering subscription fetch after password setup (non-blocking)...');
       triggerSubscriptionFetchAfterLogin();
-      
+
       // CONSOLIDATED: Single API call for store data, distributed to both contexts
       // This replaces separate triggerAppSettingsFetchAfterLogin and triggerStoreSettingsFetchAfterLogin
       // Requirement 1.4: Prevent duplicate GET /api/store calls
@@ -276,17 +298,16 @@ export const AuthProvider = ({ children }) => {
 
   const login = async (loginData) => {
     console.log('🔐 Starting login process...');
-    
-    // Add build information for APK tracking
-    const enhancedLoginData = {
-      ...loginData,
-      appVersion: '1.0.0', // Should come from app.json or Constants
-      buildType: __DEV__ ? 'development' : 'production'
+
+    // Only send email and password to match backend validation
+    const cleanLoginData = {
+      email: loginData.email,
+      password: loginData.password
     };
-    
+
     const response = await apiCall('/auth/login', {
       method: 'POST',
-      body: JSON.stringify(enhancedLoginData),
+      body: JSON.stringify(cleanLoginData),
     });
 
     console.log('✅ Login API successful, storing data...');
@@ -296,20 +317,22 @@ export const AuthProvider = ({ children }) => {
     await AsyncStorage.setItem('refreshToken', response.refresh_token);
     await AsyncStorage.setItem('authToken', response.access_token); // For backward compatibility
     await AsyncStorage.setItem('userData', JSON.stringify(response.user));
-    
-    // Store session information for APK builds
-    if (response.session) {
-      await AsyncStorage.setItem('sessionId', response.session.sessionId);
-      await AsyncStorage.setItem('deviceName', response.session.deviceName);
+
+    // Store session information for APK builds and session management
+    if (response.deviceSession) {
+      await AsyncStorage.setItem('sessionId', response.deviceSession.sessionId);
+      await AsyncStorage.setItem('sessionToken', response.deviceSession.sessionToken);
+      await AsyncStorage.setItem('deviceName', response.deviceSession.deviceName);
+      console.log('📱 Session info stored:', response.deviceSession.deviceName);
     }
-    
+
     // Store user_id and store_id for orders system
     await AsyncStorage.setItem('userId', response.user.id);
     if (response.store) {
       await AsyncStorage.setItem('storeId', response.store.id);
       await AsyncStorage.setItem('storeData', JSON.stringify(response.store));
       console.log('🏪 Store data stored:', response.store.name || response.store.store_name);
-      
+
       // CRITICAL: Set onboarding flags for returning users who have store data
       // This ensures they don't get redirected to store setup on login
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
@@ -321,7 +344,7 @@ export const AuthProvider = ({ children }) => {
     } else {
       console.log('ℹ️ No store found for user - will use user_id only');
     }
-    
+
     // Store token in TokenManager for caching and auto-refresh
     await tokenManager.storeToken(response.access_token);
 
@@ -332,11 +355,23 @@ export const AuthProvider = ({ children }) => {
     setIsAuthenticated(true);
     setPinSetupCompleted(true);
 
+    // Initialize ProductFetchCoordinator for session-level caching (UI Performance Optimization)
+    console.log('🎯 Initializing ProductFetchCoordinator after login...');
+    productFetchCoordinator.initialize();
+
+    // Handle login completion with SessionStateManager (Requirements 4.5)
+    console.log('🔄 Handling login completion with SessionStateManager...');
+    try {
+      await sessionStateManager.handleLoginCompleted(response);
+    } catch (sessionError) {
+      console.error('⚠️ SessionStateManager login handling failed (non-blocking):', sessionError);
+    }
+
     // Trigger subscription fetch after successful login (non-blocking)
     // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
     console.log('📦 Triggering subscription fetch (non-blocking)...');
     triggerSubscriptionFetchAfterLogin();
-    
+
     // CONSOLIDATED: Single API call for store data, distributed to both contexts
     // This replaces separate triggerAppSettingsFetchAfterLogin and triggerStoreSettingsFetchAfterLogin
     // Requirement 1.4: Prevent duplicate GET /api/store calls
@@ -382,14 +417,14 @@ export const AuthProvider = ({ children }) => {
       await AsyncStorage.setItem('accessToken', response.access_token);
       await AsyncStorage.setItem('refreshToken', response.refresh_token);
       await AsyncStorage.setItem('userData', JSON.stringify(response.user));
-      
+
       // Store user_id and store_id for orders system
       await AsyncStorage.setItem('userId', response.user.id);
       if (response.store) {
         await AsyncStorage.setItem('storeId', response.store.id);
         await AsyncStorage.setItem('storeData', JSON.stringify(response.store));
         console.log('🏪 Store data stored after password reset:', response.store.name || response.store.store_name);
-        
+
         // CRITICAL: Set onboarding flags for returning users who have store data
         await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
         await AsyncStorage.setItem('storeSetupCompleted', 'true');
@@ -405,12 +440,12 @@ export const AuthProvider = ({ children }) => {
       setUser(response.user);
       setIsAuthenticated(true);
       setPinSetupCompleted(true);
-      
+
       // Trigger subscription fetch after password reset (non-blocking)
       // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
       console.log('📦 Triggering subscription fetch after password reset (non-blocking)...');
       triggerSubscriptionFetchAfterLogin();
-      
+
       // CONSOLIDATED: Single API call for store data, distributed to both contexts
       // This replaces separate triggerAppSettingsFetchAfterLogin and triggerStoreSettingsFetchAfterLogin
       // Requirement 1.4: Prevent duplicate GET /api/store calls
@@ -421,6 +456,13 @@ export const AuthProvider = ({ children }) => {
         triggerAppSettingsFetchAfterLogin();
         triggerStoreSettingsFetchAfterLogin();
       });
+    } else {
+      // Manual login required - Clear any existing session to enforce security
+      // This is critical for "Change Password" flow where user is already logged in
+      console.log('🔒 Password reset/changed - forcing logout to enforce manual login and device limits');
+      if (isAuthenticated) {
+        await logout();
+      }
     }
 
     return response;
@@ -445,30 +487,38 @@ export const AuthProvider = ({ children }) => {
       // If deletion successful, clear all local data
       if (response.success) {
         console.log('🗑️ Account deleted successfully, clearing all local data...');
-        
+
         // Clear subscription cache first (Requirements 7.1, 7.2)
         console.log('🧹 Clearing subscription cache after account deletion...');
         await clearSubscriptionCacheOnLogout();
-        
+
         // Clear app settings cache (Requirements 7.1, 7.2 - App Settings Persistence)
         console.log('🧹 Clearing app settings cache after account deletion...');
         await clearAppSettingsCacheOnLogout();
-        
+
         // Clear store settings cache (Store Settings Caching spec - Task 1)
         console.log('🧹 Clearing store settings cache after account deletion...');
         await clearStoreSettingsCacheOnLogout();
-        
+
+        // Clear ProductFetchCoordinator session (UI Performance Optimization)
+        console.log('🧹 Clearing ProductFetchCoordinator session after account deletion...');
+        productFetchCoordinator.clearSession();
+
+        // Clear ServiceStatusCoordinator session (Phase D optimization)
+        console.log('🧹 Clearing ServiceStatusCoordinator session after account deletion...');
+        serviceStatusCoordinator.clearCache();
+
         // Clear all AsyncStorage data
         await AsyncStorage.clear();
-        
+
         // Clear all state
         setAccessToken(null);
         setUser(null);
         setIsAuthenticated(false);
         setPinSetupCompleted(false);
-        
+
         console.log('✅ All local data cleared after account deletion');
-        
+
         // Force navigation to initial screen after a short delay
         setTimeout(() => {
           try {
@@ -487,22 +537,22 @@ export const AuthProvider = ({ children }) => {
     }
   };
 
-    // Create store during onboarding
+  // Create store during onboarding
   const createStore = async (storeData) => {
     try {
       console.log('🏪 Creating store with backend API');
       console.log('📊 Store data:', JSON.stringify(storeData, null, 2));
-      
+
       const result = await apiCall('/store', {
         method: 'POST',
         body: JSON.stringify(storeData),
       });
-      
+
       console.log('✅ Store creation successful:', result);
       return result;
     } catch (error) {
       console.error('❌ Store creation failed:', error.message);
-      
+
       // Provide specific error messages
       if (error.message.includes('Cannot connect to server')) {
         throw new Error('Cannot connect to server. Please check your network connection and ensure the backend is running.');
@@ -511,7 +561,7 @@ export const AuthProvider = ({ children }) => {
       } else if (error.message.includes('Access token required')) {
         throw new Error('Authentication required. Please login first.');
       }
-      
+
       throw error;
     }
   };
@@ -520,16 +570,16 @@ export const AuthProvider = ({ children }) => {
   const getStore = async () => {
     try {
       console.log('📊 Getting store information from backend');
-      
+
       const response = await apiCall('/store', {
         method: 'GET',
       });
-      
+
       if (response.success && response.store) {
         console.log('✅ Store retrieved successfully:', response.store);
         return response.store;
       }
-      
+
       console.log('ℹ️ No store found for user');
       return null;
     } catch (error) {
@@ -543,17 +593,17 @@ export const AuthProvider = ({ children }) => {
     try {
       console.log('🔄 Updating store information via backend');
       console.log('📊 Store data:', JSON.stringify(storeData, null, 2));
-      
+
       const response = await apiCall('/store', {
         method: 'PUT',
         body: JSON.stringify(storeData),
       });
-      
+
       if (response.success && response.store) {
         console.log('✅ Store updated successfully:', response.store);
         return response.store;
       }
-      
+
       return response;
     } catch (error) {
       console.error('❌ Error updating store:', error);
@@ -567,27 +617,36 @@ export const AuthProvider = ({ children }) => {
       const response = await apiCall('/users/profile', {
         method: 'GET',
       });
-      
+
       if (response.success && response.data) {
         // Update stored user data
         await AsyncStorage.setItem('userData', JSON.stringify(response.data));
         setUser(response.data);
         return response.data;
       }
-      
+
       return null;
     } catch (error) {
       console.error('Error fetching user profile:', error);
-      
+
       // Handle token expiration
-      if (error.message.includes('Invalid or expired token') || 
-          error.message.includes('Unauthorized') ||
-          error.message.includes('401')) {
+      if (error.message.includes('Invalid or expired token') ||
+        error.message.includes('Unauthorized') ||
+        error.message.includes('401')) {
         console.log('🔄 Token expired, clearing auth data');
-        await logout();
+        
+        // Guard against multiple simultaneous logout calls from token expiration
+        if (!logout._tokenExpirationInProgress) {
+          logout._tokenExpirationInProgress = true;
+          await logout();
+          // The guard will be cleared in the logout function
+        } else {
+          console.log('⚠️ Token expiration logout already in progress, skipping duplicate call');
+        }
+        
         throw new Error('Session expired. Please login again.');
       }
-      
+
       return null;
     }
   };
@@ -599,14 +658,14 @@ export const AuthProvider = ({ children }) => {
         method: 'PUT',
         body: JSON.stringify(profileData),
       });
-      
+
       if (response.success && response.data) {
         // Update stored user data
         await AsyncStorage.setItem('userData', JSON.stringify(response.data));
         setUser(response.data);
         return response.data;
       }
-      
+
       return response;
     } catch (error) {
       console.error('Error updating user profile:', error);
@@ -630,13 +689,13 @@ export const AuthProvider = ({ children }) => {
       if (!forceRefresh && user && user.subscription_plan) {
         return user.subscription_plan;
       }
-      
+
       // Only fetch fresh data if forced or no cached data available
       if (forceRefresh || !user?.subscription_plan) {
         const freshUser = await fetchUserProfile();
         return freshUser?.subscription_plan || 'trial';
       }
-      
+
       return user.subscription_plan || 'trial';
     } catch (error) {
       console.error('Error getting subscription plan:', error);
@@ -650,11 +709,34 @@ export const AuthProvider = ({ children }) => {
   };
 
   const logout = async () => {
+    // Guard against multiple simultaneous logout calls
+    if (logout._inProgress) {
+      console.log('⚠️ Logout already in progress, skipping duplicate call');
+      return;
+    }
+    
+    logout._inProgress = true;
+    
     try {
       // Call logout API only if authenticated with cloud and have valid token
       if (accessToken && isAuthenticated) {
         try {
-          await apiCall('/auth/logout', { method: 'POST' });
+          const logoutResponse = await apiCall('/auth/logout', { method: 'POST' });
+          console.log('✅ Logout API response:', logoutResponse);
+          
+          if (logoutResponse.sessionCleared) {
+            console.log('🔒 Session cleared in database:', logoutResponse.sessionId);
+          } else {
+            console.log('⚠️ Session may not have been cleared in database');
+          }
+
+          // Handle logout completion with SessionStateManager (Requirements 4.5)
+          console.log('🔄 Handling logout completion with SessionStateManager...');
+          try {
+            await sessionStateManager.handleLogoutCompleted(logoutResponse);
+          } catch (sessionError) {
+            console.error('⚠️ SessionStateManager logout handling failed (non-blocking):', sessionError);
+          }
         } catch (apiError) {
           // Ignore API errors during logout - we still want to clear local data
           console.log('Logout API call failed (ignoring):', apiError.message);
@@ -667,21 +749,33 @@ export const AuthProvider = ({ children }) => {
       // This clears both in-memory state and AsyncStorage
       console.log('🧹 Clearing subscription cache on logout...');
       await clearSubscriptionCacheOnLogout();
-      
+
       // Clear app settings cache (Requirements 7.1, 7.2 - App Settings Persistence)
       // This clears both in-memory state and AsyncStorage, but NOT database values
       console.log('🧹 Clearing app settings cache on logout...');
       await clearAppSettingsCacheOnLogout();
-      
+
       // Clear store settings cache (Store Settings Caching spec - Task 1)
       // This clears both in-memory state and AsyncStorage, but NOT database values
       console.log('🧹 Clearing store settings cache on logout...');
       await clearStoreSettingsCacheOnLogout();
-      
+
+      // Clear ProductFetchCoordinator session (UI Performance Optimization)
+      console.log('🧹 Clearing ProductFetchCoordinator session on logout...');
+      productFetchCoordinator.clearSession();
+
+      // Clear ServiceStatusCoordinator session (Phase D optimization)
+      console.log('🧹 Clearing ServiceStatusCoordinator session on logout...');
+      serviceStatusCoordinator.clearCache();
+
+      // Clear SessionStateManager data (Requirements 4.3, 4.5)
+      console.log('🧹 Clearing SessionStateManager data on logout...');
+      sessionStateManager.clearAllData();
+
       // Clear all stored data comprehensively (but preserve onboarding status)
       await AsyncStorage.multiRemove([
-        'accessToken', 
-        'refreshToken', 
+        'accessToken',
+        'refreshToken',
         'authToken', // Clear backward compatibility token
         'userData',
         'userId',     // Clear user ID
@@ -691,12 +785,15 @@ export const AuthProvider = ({ children }) => {
         'taxSettings',
         'receiptSettings',
         'businessSettings',
-        'workingApiURL'
+        'workingApiURL',
+        'sessionId',  // Clear session ID
+        'sessionToken', // Clear session token
+        'deviceName'  // Clear device name
       ]);
-      
+
       // Clear TokenManager cache
       await tokenManager.clearToken();
-      
+
       // Note: We intentionally preserve:
       // - hasCompletedOnboarding
       // - storeSetupCompleted  
@@ -704,17 +801,21 @@ export const AuthProvider = ({ children }) => {
       // - hasSeenAppTour
       // - completedTours
       // These should persist across logout/login cycles
-      
+
       // Clear all state
       setAccessToken(null);
       setUser(null);
       setIsAuthenticated(false);
       setPinSetupCompleted(false);
-      
+
       // Note: Old subscription cache clearing via useSubscription hook is now replaced
       // by clearSubscriptionCacheOnLogout() above which uses SubscriptionContext
+
+      console.log('✅ Complete logout - all data and sessions cleared');
       
-      console.log('✅ Complete logout - all data cleared');
+      // Clear the logout guard flags
+      logout._inProgress = false;
+      logout._tokenExpirationInProgress = false;
     }
   };
 
@@ -731,7 +832,7 @@ export const AuthProvider = ({ children }) => {
         deleteItemAsync('pinSetupCompleted'),
         deleteItemAsync('lockoutEndTime')
       ]);
-      
+
       setAccessToken(null);
       setUser(null);
       setIsAuthenticated(false);
@@ -761,33 +862,33 @@ export const AuthProvider = ({ children }) => {
     isLoading,
     lockoutEndTime,
     accessToken,
-    
+
     // OTP Authentication
     sendOTP,
     verifyOTP,
     resendOTP,
     setupPassword,
     login,
-    
+
     // Password Reset
     forgotPassword,
     verifyResetOTP,
     resetPassword,
     changePassword,
     deleteAccount,
-    
+
     // Store Management
     createStore,
     getStore,
     updateStore,
-    
+
     // Profile Management
     fetchUserProfile,
     updateProfile,
     refreshUserData,
     getUserSubscriptionPlan,
     updateUserData: setUser, // Direct setter for user data updates
-    
+
     // Legacy Methods
     authenticate,
     logout,
@@ -795,7 +896,7 @@ export const AuthProvider = ({ children }) => {
     resetAuth,
     setLockout,
     clearLockout,
-    
+
     // Utilities
     apiCall,
   };

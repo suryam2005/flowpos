@@ -44,19 +44,26 @@ export const useBackPrevention = (isActive, options = {}) => {
   useEffect(() => {
     if (!navigation) return;
 
-    if (isActive) {
-      // Disable gesture navigation when active
-      navigation.setOptions({
-        gestureEnabled: false,
-      });
-      console.log('🛡️ Gesture navigation disabled');
-    } else {
-      // Re-enable gesture navigation when not active
-      navigation.setOptions({
-        gestureEnabled: true,
-      });
-      console.log('✅ Gesture navigation enabled');
-    }
+    // Add a small delay to handle rapid state changes
+    const timeoutId = setTimeout(() => {
+      if (isActive) {
+        // Disable gesture navigation when active
+        navigation.setOptions({
+          gestureEnabled: false,
+        });
+        console.log('🛡️ Gesture navigation disabled');
+      } else {
+        // Re-enable gesture navigation when not active
+        navigation.setOptions({
+          gestureEnabled: true,
+        });
+        console.log('✅ Gesture navigation enabled');
+      }
+    }, 50); // Small delay to handle rapid state changes
+
+    return () => {
+      clearTimeout(timeoutId);
+    };
   }, [isActive, navigation]);
 
   // Create stable back press handler that reads from refs
@@ -85,42 +92,46 @@ export const useBackPrevention = (isActive, options = {}) => {
 
   // Handle Android hardware back button
   useEffect(() => {
-    // Only add listener when isActive is true and on Android
-    if (isActive && Platform.OS === 'android') {
-      // Remove existing listener if any (with error handling)
-      if (listenerRef.current) {
-        try {
-          BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);
-        } catch (error) {
-          console.warn('🛡️ [useBackPrevention] Error removing existing listener:', error.message);
+    // Add a small delay to handle rapid state changes
+    const timeoutId = setTimeout(() => {
+      // Only add listener when isActive is true and on Android
+      if (isActive && Platform.OS === 'android') {
+        // Remove existing listener if any (with error handling)
+        if (listenerRef.current) {
+          try {
+            BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);
+          } catch (error) {
+            console.warn('🛡️ [useBackPrevention] Error removing existing listener:', error.message);
+          }
         }
-      }
 
-      // Add new listener (with error handling)
-      try {
-        BackHandler.addEventListener('hardwareBackPress', handleBackPress);
-        listenerRef.current = handleBackPress;
-        console.log('🛡️ Back prevention activated for:', optionsRef.current.title);
-      } catch (error) {
-        console.error('🛡️ [useBackPrevention] Error adding back handler:', error.message);
-        listenerRef.current = null;
-      }
-    } else {
-      // Remove listener when not active (with error handling)
-      if (listenerRef.current) {
+        // Add new listener (with error handling)
         try {
-          BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);
+          BackHandler.addEventListener('hardwareBackPress', handleBackPress);
+          listenerRef.current = handleBackPress;
+          console.log('🛡️ Back prevention activated for:', optionsRef.current.title);
+        } catch (error) {
+          console.error('🛡️ [useBackPrevention] Error adding back handler:', error.message);
           listenerRef.current = null;
-          console.log('✅ Back prevention deactivated');
-        } catch (error) {
-          console.warn('🛡️ [useBackPrevention] Error removing listener:', error.message);
-          listenerRef.current = null; // Clear reference anyway
+        }
+      } else {
+        // Remove listener when not active (with error handling)
+        if (listenerRef.current) {
+          try {
+            BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);
+            listenerRef.current = null;
+            console.log('✅ Back prevention deactivated');
+          } catch (error) {
+            console.warn('🛡️ [useBackPrevention] Error removing listener:', error.message);
+            listenerRef.current = null; // Clear reference anyway
+          }
         }
       }
-    }
+    }, 50); // Small delay to handle rapid state changes
 
-    // Cleanup on unmount (with error handling)
+    // Cleanup timeout and listener on unmount or dependency change
     return () => {
+      clearTimeout(timeoutId);
       if (listenerRef.current) {
         try {
           BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);

@@ -210,7 +210,14 @@ class NetworkService {
         console.log('🔄 [NetworkService] Network error detected, trying to reconnect...');
         this.isConnected = false;
         
-        // Try to find working server and retry once
+        // CRITICAL FIX: Don't retry write operations (POST, PUT, DELETE, PATCH) to prevent duplicates
+        // This is especially important for logout, login, and other state-changing operations
+        if (!isRetryableMethod(method)) {
+          console.log(`⚡ [NetworkService] Skipping network retry for ${method} operation to prevent duplicates`);
+          throw new Error('Cannot connect to backend server. Please check your internet connection and ensure the backend is running.');
+        }
+        
+        // Try to find working server and retry once (only for GET requests)
         const workingURL = await this.findWorkingServer();
         if (workingURL) {
           console.log('🔄 [NetworkService] Retrying with working server:', workingURL);

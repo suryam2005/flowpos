@@ -1,14 +1,15 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useDataSync } from '../context/DataSyncContext';
+import { getStoreSettingsFromCache } from '../context/StoreSettingsContext';
 
 export const useRealtimeData = (dataType = 'all') => {
-  const { products, orders, storeInfo, subscribe, lastSync } = useDataSync();
+  const { products, orders, storeInfo, subscribe, lastSync, saveStoreInfo, fetchFreshData } = useDataSync();
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState(null);
 
   // Handle data updates
   const handleDataUpdate = useCallback((update) => {
-    console.log(`Real-time update received: ${update.type}`, update.data);
+    // console.log(`Real-time update received: ${update.type}`, update.data);
     setError(null);
   }, []);
 
@@ -32,9 +33,6 @@ export const useRealtimeData = (dataType = 'all') => {
     }
   };
 
-  // Get fetchFreshData from context
-  const { fetchFreshData } = useDataSync();
-
   return {
     data: getData(),
     isLoading,
@@ -43,9 +41,19 @@ export const useRealtimeData = (dataType = 'all') => {
     refresh: async () => {
       setIsLoading(true);
       try {
-        // Trigger actual backend fetch
+        // Trigger actual backend fetch for products and orders
         if (fetchFreshData) {
           await fetchFreshData();
+        }
+        
+        // For storeInfo, use StoreSettingsContext cache (migrated from getStore())
+        // The StoreSettingsContext is the single source of truth for store settings
+        if (dataType === 'storeInfo' || dataType === 'all') {
+          const cachedStoreInfo = getStoreSettingsFromCache();
+          if (cachedStoreInfo) {
+            await saveStoreInfo(cachedStoreInfo);
+            console.log('📦 [useRealtimeData] Store info synced from StoreSettingsContext cache');
+          }
         }
       } catch (err) {
         setError(err.message);

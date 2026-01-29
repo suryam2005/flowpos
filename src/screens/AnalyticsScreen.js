@@ -14,11 +14,19 @@ import * as Haptics from 'expo-haptics';
 import ordersService from '../services/OrdersService';
 import productsService from '../services/ProductsService';
 import featureService from '../services/FeatureService';
-import tourProgressManager from '../services/TourProgressManager';
+import useFeatureFlags from '../hooks/useFeatureFlags';
+// TOUR TEMPORARILY DISABLED
+// import tourProgressManager from '../services/TourProgressManager';
+// Phase B Implementation: Add UIUpdatePropagator for receiving order updates
+import uiUpdatePropagator from '../services/UIUpdatePropagator';
+// Phase C Implementation: Add ComputationCache for analytics caching
+import computationCache from '../services/ComputationCache';
 
 import LoadingSpinner from '../components/LoadingSpinner';
-import InteractiveTourOverlay from '../components/InteractiveTourOverlay';
-import useInteractiveTour from '../hooks/useInteractiveTour';
+// TOUR TEMPORARILY DISABLED
+// import SimpleTourOverlay from '../components/SimpleTourOverlay';
+// import useSimpleTour from '../hooks/useSimpleTour';
+// import { getSimpleTourSteps } from '../config/simpleTourContent';
 import { colors } from '../styles/colors';
 import { getProductImageUrl } from '../utils/imageUtils';
 import { analyticsStyles, spacing } from '../styles/analyticsStyles';
@@ -30,7 +38,7 @@ import { BarChart, LineChart, DonutChart, PieChart, ChartCard, NoDataChart } fro
 const generateDailyRevenueData = (orders) => {
   const last7Days = [];
   const today = new Date();
-  
+
   // FIXED: Add safety checks for orders array
   if (!orders || !Array.isArray(orders)) {
     console.warn('📊 [Analytics] generateDailyRevenueData: Invalid orders data');
@@ -47,20 +55,20 @@ const generateDailyRevenueData = (orders) => {
     }
     return last7Days;
   }
-  
+
   for (let i = 6; i >= 0; i--) {
     const date = new Date(today);
     date.setDate(date.getDate() - i);
     const dateStr = date.toISOString().split('T')[0];
-    
+
     const dayOrders = orders.filter(order => {
       if (!order) return false;
       const timestamp = order.timestamp || order.createdAt;
       if (!timestamp) return false;
-      
+
       try {
-        const orderDateStr = typeof timestamp === 'string' 
-          ? timestamp.split('T')[0] 
+        const orderDateStr = typeof timestamp === 'string'
+          ? timestamp.split('T')[0]
           : new Date(timestamp).toISOString().split('T')[0];
         return orderDateStr === dateStr;
       } catch (error) {
@@ -68,9 +76,9 @@ const generateDailyRevenueData = (orders) => {
         return false;
       }
     });
-    
+
     const dayRevenue = dayOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    
+
     last7Days.push({
       day: date.toLocaleDateString('en', { weekday: 'short' }),
       date: dateStr,
@@ -78,14 +86,14 @@ const generateDailyRevenueData = (orders) => {
       orders: dayOrders.length,
     });
   }
-  
+
   return last7Days;
 };
 
 const generateWeeklyRevenueData = (orders) => {
   const last4Weeks = [];
   const today = new Date();
-  
+
   // FIXED: Add safety checks for orders array
   if (!orders || !Array.isArray(orders)) {
     console.warn('📊 [Analytics] generateWeeklyRevenueData: Invalid orders data');
@@ -100,16 +108,16 @@ const generateWeeklyRevenueData = (orders) => {
     }
     return last4Weeks;
   }
-  
+
   for (let i = 3; i >= 0; i--) {
     const weekStart = new Date(today);
     weekStart.setDate(weekStart.getDate() - (i * 7) - weekStart.getDay());
     const weekEnd = new Date(weekStart);
     weekEnd.setDate(weekEnd.getDate() + 6);
-    
+
     const weekOrders = orders.filter(order => {
       if (!order || !order.timestamp) return false;
-      
+
       try {
         const orderDate = new Date(order.timestamp);
         return orderDate >= weekStart && orderDate <= weekEnd;
@@ -118,9 +126,9 @@ const generateWeeklyRevenueData = (orders) => {
         return false;
       }
     });
-    
+
     const weekRevenue = weekOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-    
+
     last4Weeks.push({
       week: `Week ${4 - i}`,
       startDate: weekStart.toLocaleDateString(),
@@ -128,13 +136,13 @@ const generateWeeklyRevenueData = (orders) => {
       orders: weekOrders.length,
     });
   }
-  
+
   return last4Weeks;
 };
 
 const generateOrderTrendsData = (orders) => {
   const hourlyData = Array(24).fill(0);
-  
+
   // FIXED: Add safety checks for orders array
   if (!orders || !Array.isArray(orders)) {
     console.warn('📊 [Analytics] generateOrderTrendsData: Invalid orders data');
@@ -143,7 +151,7 @@ const generateOrderTrendsData = (orders) => {
       orders: 0,
     }));
   }
-  
+
   orders.forEach(order => {
     if (order && order.timestamp) {
       try {
@@ -156,7 +164,7 @@ const generateOrderTrendsData = (orders) => {
       }
     }
   });
-  
+
   return hourlyData.map((count, hour) => ({
     hour: hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`,
     orders: count,
@@ -166,7 +174,7 @@ const generateOrderTrendsData = (orders) => {
 // Calculate analytics for different time periods
 const calculatePeriodAnalytics = (orders, period) => {
   let startDate, endDate;
-  
+
   switch (period) {
     case 'today':
       startDate = new Date();
@@ -190,9 +198,9 @@ const calculatePeriodAnalytics = (orders, period) => {
       endDate = new Date();
       endDate.setHours(23, 59, 59, 999);
   }
-  
+
   console.log('📊 [Analytics] Period filter:', period, 'from', startDate.toISOString(), 'to', endDate.toISOString());
-  
+
   const periodOrders = orders.filter(order => {
     // Handle multiple date field formats from backend
     let orderDate;
@@ -206,23 +214,23 @@ const calculatePeriodAnalytics = (orders, period) => {
     } else {
       return false; // Skip orders without date
     }
-    
+
     // Validate date
     if (isNaN(orderDate.getTime())) {
       console.warn('📊 Invalid date in order:', order.id, order.timestamp, order.createdAt);
       return false;
     }
-    
+
     const isInRange = orderDate >= startDate && orderDate <= endDate;
     return isInRange;
   });
-  
+
   console.log('📊 [Analytics] Filtered', periodOrders.length, 'orders out of', orders.length, 'for period:', period);
-  
+
   const revenue = periodOrders.reduce((sum, order) => sum + (order.total || 0), 0);
   const orderCount = periodOrders.length;
   const avgOrderValue = orderCount > 0 ? Math.round(revenue / orderCount) : 0;
-  
+
   return {
     revenue,
     orderCount,
@@ -232,9 +240,12 @@ const calculatePeriodAnalytics = (orders, period) => {
 };
 
 const AnalyticsScreen = ({ navigation, route }) => {
+  // Phase C Implementation: Use feature flag caching
+  const featureFlags = useFeatureFlags();
+
   // Tab state for 3-tab structure
   const [activeTab, setActiveTab] = useState('revenue'); // revenue, orders, products
-  
+
   // Data states
   const [orders, setOrders] = useState([]);
   const [products, setProducts] = useState([]);
@@ -244,58 +255,49 @@ const AnalyticsScreen = ({ navigation, route }) => {
     weekRevenue: 0,
     monthRevenue: 0,
     totalRevenue: 0,
-    
+
     // Order metrics
     todayOrders: 0,
     weekOrders: 0,
     monthOrders: 0,
     totalOrders: 0,
     avgOrderValue: 0,
-    
+
     // Product metrics
     totalProducts: 0,
     popularProducts: [],
     topCategories: [],
   });
-  
+
   // Chart data states
   const [chartData, setChartData] = useState({
     revenueChart: [],
     orderTrends: [],
     topProducts: [],
   });
-  
+
   // UI states
   const [refreshing, setRefreshing] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
-  
-  // App tour guide - using interactive tour hook
-  const {
-    showTour,
-    currentStep,
-    stepIndex,
-    totalSteps,
-    showHint,
-    showSkipStep,
-    startTour,
-    nextStep,
-    skipScreen,
-    skipAll,
-    skipStep,
-    completeTour,
-    checkAutoStart,
-    setOverlayRef,
-    isInitialized,
-  } = useInteractiveTour('Analytics');
-  
-  // Tour overlay ref
-  const tourOverlayRef = useRef(null);
-  
-  // Tour refs for dynamic positioning
-  const headerRef = useRef(null);
-  const tabBarRef = useRef(null);
-  const metricsSectionRef = useRef(null);
-  
+
+  // Phase C Implementation: Cache feature flag evaluation results
+  const [canUseAdvancedAnalytics, setCanUseAdvancedAnalytics] = useState(false);
+
+  // TOUR TEMPORARILY DISABLED
+  // Simple tour implementation
+  // const tourSteps = getSimpleTourSteps('Analytics');
+  // const {
+  //   showTour,
+  //   currentStep,
+  //   stepIndex,
+  //   totalSteps,
+  //   nextStep,
+  //   skipTour,
+  //   completeTour,
+  // } = useSimpleTour('Analytics', tourSteps);
+
+  // Remove complex tour refs - simple tour doesn't need them
+
   // No animations needed
 
   useEffect(() => {
@@ -305,70 +307,110 @@ const AnalyticsScreen = ({ navigation, route }) => {
       loadAnalytics();
     };
     init();
+
+    // Phase B Implementation: Register with UIUpdatePropagator for order updates
+    console.log('📊 [AnalyticsScreen] Registering with UIUpdatePropagator');
+
+    // Register for UI updates with callback that handles different update types
+    const handleUIUpdate = (updateType, updateData) => {
+      console.log('📊 [AnalyticsScreen] Received UI update:', { updateType, hasData: !!updateData });
+
+      if (updateType === 'ORDER_SUCCESS') {
+        // Order was created successfully - refresh analytics to show updated data
+        // This will generate a new orders hash and trigger cache miss, ensuring fresh computation
+        console.log('📊 [AnalyticsScreen] Order success - refreshing analytics');
+        loadAnalytics(); // Refresh analytics data (cache will miss due to changed orders)
+      }
+    };
+
+    uiUpdatePropagator.registerScreen('AnalyticsScreen', handleUIUpdate);
+
+    // Cleanup: Unregister from UIUpdatePropagator
+    return () => {
+      console.log('📊 [AnalyticsScreen] Unregistering from UIUpdatePropagator');
+      uiUpdatePropagator.unregisterScreen('AnalyticsScreen');
+
+      // Phase C Implementation: Clear analytics cache on component unmount
+      // This ensures cache is cleared when user navigates away or logs out
+      console.log('📊 [AnalyticsScreen] Clearing analytics cache on unmount');
+      computationCache.clearAnalytics();
+    };
   }, []);
 
-  // Check if tour should auto-start when initialized
-  useEffect(() => {
-    if (isInitialized) {
-      checkAutoStart();
-    }
-  }, [isInitialized, checkAutoStart]);
+  // Use FocusEffect to ensure feature flags are re-evaluated when screen is focused
+  useFocusEffect(
+    useCallback(() => {
+      // Phase C Implementation: Evaluate feature flags once per render cycle
+      const evaluateFeatureFlags = async () => {
+        try {
+          // Force check against service to ensure we get latest plan update
+          const canUseAdvanced = featureService.canUseFeature('advanced_analytics');
+          setCanUseAdvancedAnalytics(canUseAdvanced);
+        } catch (error) {
+          console.error('📊 [AnalyticsScreen] Error evaluating feature flags:', error);
+          setCanUseAdvancedAnalytics(false);
+        }
+      };
+      evaluateFeatureFlags();
+    }, [])
+  );
 
+  // Simple tour doesn't need auto-start functionality - removed checkAutoStart
+
+  // TOUR TEMPORARILY DISABLED
   // Handle tour trigger from route params (startTour or continueTour)
-  useEffect(() => {
-    if (route?.params?.startTour) {
-      console.log('🎯 [AnalyticsScreen] Tour trigger received from route params (startTour)');
-      setTimeout(() => {
-        startTour();
-      }, 1500);
-      navigation.setParams({ startTour: undefined });
-    }
-  }, [route?.params?.startTour, startTour, navigation]);
+  // useEffect(() => {
+  //   if (route?.params?.startTour) {
+  //     console.log('🎯 [AnalyticsScreen] Tour trigger received from route params (startTour)');
+  //     setTimeout(() => {
+  //       startTour();
+  //     }, 1500);
+  //     navigation.setParams({ startTour: undefined });
+  //   }
+  // }, [route?.params?.startTour, startTour, navigation]);
 
   // Handle tour continuation from Invoice Preview screen
-  useEffect(() => {
-    if (route?.params?.continueTour && isInitialized) {
-      console.log('🎯 [AnalyticsScreen] Tour continuation received from Invoice Preview');
-      // Small delay to let the screen render first
-      setTimeout(() => {
-        startTour();
-      }, 1000);
-      // Clear the param to prevent re-triggering
-      navigation.setParams({ continueTour: undefined });
-    }
-  }, [route?.params?.continueTour, isInitialized, startTour, navigation]);
+  // useEffect(() => {
+  //   if (route?.params?.continueTour && isInitialized) {
+  //     console.log('🎯 [AnalyticsScreen] Tour continuation received from Invoice Preview');
+  //     // Small delay to let the screen render first
+  //     setTimeout(() => {
+  //       startTour();
+  //     }, 1000);
+  //     // Clear the param to prevent re-triggering
+  //     navigation.setParams({ continueTour: undefined });
+  //   }
+  // }, [route?.params?.continueTour, isInitialized, startTour, navigation]);
 
+  // TOUR TEMPORARILY DISABLED
   // Handle tour completion - guide to Orders screen
-  const handleTourComplete = useCallback(async () => {
-    console.log('🎯 [AnalyticsScreen] Tour complete, guiding to Orders');
-    
-    // Set continuation to Orders
-    await tourProgressManager.setContinueTourTo('Orders');
-    
-    // Navigate to Orders screen with tour continuation flag
-    navigation.navigate('Main', { 
-      screen: 'Orders',
-      params: { continueTour: true }
-    });
-  }, [navigation]);
+  // const handleTourComplete = useCallback(async () => {
+  //   console.log('🎯 [AnalyticsScreen] Tour complete, guiding to Orders');
+  //   
+  //   // Set continuation to Orders
+  //   await tourProgressManager.setContinueTourTo('Orders');
+  //   
+  //   // Navigate to Orders screen with tour continuation flag
+  //   navigation.navigate('Main', { 
+  //     screen: 'Orders',
+  //     params: { continueTour: true }
+  //   });
+  // }, [navigation]);
 
+  // TOUR TEMPORARILY DISABLED
   // Handle next step - check if we need to navigate to Orders
-  const handleNextStep = useCallback(async () => {
-    // Check if current step has nextScreen set to Orders (last step)
-    if (currentStep?.nextScreen === 'Orders') {
-      // This is the last step, navigate to Orders
-      await handleTourComplete();
-    } else {
-      nextStep();
-    }
-  }, [currentStep, nextStep, handleTourComplete]);
+  // const handleNextStep = useCallback(async () => {
+  //   // Check if current step has nextScreen set to Orders (last step)
+  //   if (currentStep?.nextScreen === 'Orders') {
+  //     // This is the last step, navigate to Orders
+  //     await handleTourComplete();
+  //   } else {
+  //     nextStep();
+  //   }
+  // }, [currentStep, nextStep, handleTourComplete]);
 
   // Set overlay ref for animations
-  useEffect(() => {
-    if (tourOverlayRef.current) {
-      setOverlayRef(tourOverlayRef.current);
-    }
-  }, [setOverlayRef]);
+  // Simple tour doesn't need overlay refs - removed setOverlayRef usage
 
   // Optimized focus effect - no automatic refresh
   useFocusEffect(
@@ -382,10 +424,10 @@ const AnalyticsScreen = ({ navigation, route }) => {
       setRefreshing(true);
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
     }
-    
+
     try {
       console.log('📊 [Analytics] Loading data...');
-      
+
       // Fetch data from backend
       const [ordersData, productsData] = await Promise.all([
         ordersService.getOrders(),
@@ -393,49 +435,78 @@ const AnalyticsScreen = ({ navigation, route }) => {
       ]);
 
       console.log('📊 [Analytics] Loaded:', ordersData.length, 'orders,', productsData.length, 'products');
-      
+
       // Store data in state
       setOrders(ordersData);
       setProducts(productsData);
-      
-      // Calculate analytics for different periods
-      const todayAnalytics = calculatePeriodAnalytics(ordersData, 'today');
-      const weekAnalytics = calculatePeriodAnalytics(ordersData, 'week');
-      const monthAnalytics = calculatePeriodAnalytics(ordersData, 'month');
-      const totalRevenue = ordersData.reduce((sum, o) => sum + (o.total || 0), 0);
-      
-      // Calculate popular products
-      const popularProducts = calculatePopularProducts(ordersData);
-      
-      // Generate chart data
-      const revenueChart = generateRevenueChartData(ordersData);
-      const orderTrends = generateOrderTrendsData(ordersData);
-      const topProducts = popularProducts.slice(0, 5);
-      
-      // Update analytics state
-      setAnalytics({
-        todayRevenue: Number(todayAnalytics.revenue || 0),
-        weekRevenue: Number(weekAnalytics.revenue || 0),
-        monthRevenue: Number(monthAnalytics.revenue || 0),
-        totalRevenue: Number(totalRevenue || 0),
-        
-        todayOrders: Number(todayAnalytics.orderCount || 0),
-        weekOrders: Number(weekAnalytics.orderCount || 0),
-        monthOrders: Number(monthAnalytics.orderCount || 0),
-        totalOrders: Number(ordersData.length || 0),
-        avgOrderValue: ordersData.length > 0 ? Math.round(totalRevenue / ordersData.length) : 0,
-        
-        totalProducts: Number(productsData.length || 0),
-        popularProducts: popularProducts || [],
-        topCategories: calculateTopCategories(popularProducts),
-      });
-      
-      // Update chart data
-      setChartData({
-        revenueChart: revenueChart || [],
-        orderTrends: orderTrends || [],
-        topProducts: topProducts || [],
-      });
+
+      // Phase C Implementation: Use ComputationCache for analytics
+      const ordersHash = computationCache.generateOrdersHash(ordersData);
+      console.log('📊 [Analytics] Orders hash:', ordersHash);
+
+      let analyticsResult;
+      let chartDataResult;
+
+      // Check if we have cached analytics and this is not a manual refresh
+      if (!isRefresh && computationCache.hasAnalytics(ordersHash)) {
+        console.log('📊 [Analytics] Using cached analytics computation');
+        const cachedData = computationCache.getAnalytics(ordersHash);
+        analyticsResult = cachedData.analytics;
+        chartDataResult = cachedData.chartData;
+      } else {
+        console.log('📊 [Analytics] Computing analytics (cache miss or manual refresh)');
+
+        // Calculate analytics for different periods
+        const todayAnalytics = calculatePeriodAnalytics(ordersData, 'today');
+        const weekAnalytics = calculatePeriodAnalytics(ordersData, 'week');
+        const monthAnalytics = calculatePeriodAnalytics(ordersData, 'month');
+        const totalRevenue = ordersData.reduce((sum, o) => sum + (o.total || 0), 0);
+
+        // Calculate popular products
+        const popularProducts = calculatePopularProducts(ordersData);
+
+        // Generate chart data
+        const revenueChart = generateRevenueChartData(ordersData);
+        const orderTrends = generateOrderTrendsData(ordersData);
+        const topProducts = popularProducts.slice(0, 5);
+
+        // Prepare analytics result
+        analyticsResult = {
+          todayRevenue: Number(todayAnalytics.revenue || 0),
+          weekRevenue: Number(weekAnalytics.revenue || 0),
+          monthRevenue: Number(monthAnalytics.revenue || 0),
+          totalRevenue: Number(totalRevenue || 0),
+
+          todayOrders: Number(todayAnalytics.orderCount || 0),
+          weekOrders: Number(weekAnalytics.orderCount || 0),
+          monthOrders: Number(monthAnalytics.orderCount || 0),
+          totalOrders: Number(ordersData.length || 0),
+          avgOrderValue: ordersData.length > 0 ? Math.round(totalRevenue / ordersData.length) : 0,
+
+          totalProducts: Number(productsData.length || 0),
+          popularProducts: popularProducts || [],
+          topCategories: calculateTopCategories(popularProducts),
+        };
+
+        // Prepare chart data result
+        chartDataResult = {
+          revenueChart: revenueChart || [],
+          orderTrends: orderTrends || [],
+          topProducts: topProducts || [],
+        };
+
+        // Cache the computed results
+        computationCache.setAnalytics(ordersHash, {
+          analytics: analyticsResult,
+          chartData: chartDataResult
+        });
+
+        console.log('📊 [Analytics] Analytics computed and cached');
+      }
+
+      // Update state with results (either cached or computed)
+      setAnalytics(analyticsResult);
+      setChartData(chartDataResult);
 
       if (!isRefresh) {
         setIsLoading(false);
@@ -459,7 +530,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
   // Helper function to calculate analytics for different periods
   const calculatePeriodAnalytics = (orders, period) => {
     let startDate, endDate;
-    
+
     switch (period) {
       case 'today':
         startDate = new Date();
@@ -480,7 +551,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
       default:
         return { revenue: 0, orderCount: 0, avgOrderValue: 0, orders: [] };
     }
-    
+
     const periodOrders = orders.filter(order => {
       let orderDate;
       if (order.timestamp) {
@@ -492,25 +563,25 @@ const AnalyticsScreen = ({ navigation, route }) => {
       } else {
         return false;
       }
-      
+
       if (isNaN(orderDate.getTime())) {
         return false;
       }
-      
+
       return orderDate >= startDate && orderDate <= endDate;
     });
-    
+
     const revenue = periodOrders.reduce((sum, order) => sum + (order.total || 0), 0);
     const orderCount = periodOrders.length;
     const avgOrderValue = orderCount > 0 ? Math.round(revenue / orderCount) : 0;
-    
+
     return { revenue, orderCount, avgOrderValue, orders: periodOrders };
   };
 
   // Helper function to calculate popular products
   const calculatePopularProducts = (orders) => {
     const productSales = {};
-    
+
     orders.forEach(order => {
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach(item => {
@@ -534,12 +605,12 @@ const AnalyticsScreen = ({ navigation, route }) => {
   // Helper function to calculate top categories
   const calculateTopCategories = (popularProducts) => {
     const categoryCount = {};
-    
+
     popularProducts.forEach(product => {
       const category = product.category || 'General';
       categoryCount[category] = (categoryCount[category] || 0) + (product.quantity || 0);
     });
-    
+
     return Object.entries(categoryCount)
       .map(([category, count]) => ({ category, count }))
       .sort((a, b) => b.count - a.count)
@@ -550,29 +621,29 @@ const AnalyticsScreen = ({ navigation, route }) => {
   const generateRevenueChartData = (orders) => {
     const last7Days = [];
     const today = new Date();
-    
+
     for (let i = 6; i >= 0; i--) {
       const date = new Date(today);
       date.setDate(date.getDate() - i);
       const dateStr = date.toISOString().split('T')[0];
-      
+
       const dayOrders = orders.filter(order => {
         if (!order) return false;
         const timestamp = order.timestamp || order.createdAt;
         if (!timestamp) return false;
-        
+
         try {
-          const orderDateStr = typeof timestamp === 'string' 
-            ? timestamp.split('T')[0] 
+          const orderDateStr = typeof timestamp === 'string'
+            ? timestamp.split('T')[0]
             : new Date(timestamp).toISOString().split('T')[0];
           return orderDateStr === dateStr;
         } catch (error) {
           return false;
         }
       });
-      
+
       const dayRevenue = dayOrders.reduce((sum, order) => sum + (order.total || 0), 0);
-      
+
       last7Days.push({
         day: date.toLocaleDateString('en', { weekday: 'short' }),
         date: dateStr,
@@ -581,14 +652,14 @@ const AnalyticsScreen = ({ navigation, route }) => {
         value: dayRevenue, // For chart compatibility - revenue chart shows revenue
       });
     }
-    
+
     return last7Days;
   };
 
   // Helper function to generate order trends data (24 hours)
   const generateOrderTrendsData = (orders) => {
     const hourlyData = Array(24).fill(0);
-    
+
     orders.forEach(order => {
       if (order && order.timestamp) {
         try {
@@ -601,7 +672,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
         }
       }
     });
-    
+
     return hourlyData.map((count, hour) => ({
       hour: hour === 0 ? '12 AM' : hour < 12 ? `${hour} AM` : hour === 12 ? '12 PM' : `${hour - 12} PM`,
       orders: count,
@@ -627,23 +698,23 @@ const AnalyticsScreen = ({ navigation, route }) => {
       <View style={analyticsStyles.productImage}>
         {(() => {
           const displayImageUrl = getProductImageUrl(product);
-          
+
           return displayImageUrl ? (
-            <Image 
-              source={{ uri: displayImageUrl }} 
+            <Image
+              source={{ uri: displayImageUrl }}
               style={{ width: '100%', height: '100%', resizeMode: 'contain' }}
               onError={(error) => {
                 console.log('❌ [AnalyticsScreen] Image load error:', error.nativeEvent.error);
               }}
             />
           ) : (
-            <View style={{ 
-              width: '100%', 
-              height: '100%', 
-              backgroundColor: colors.gray[100], 
-              justifyContent: 'center', 
-              alignItems: 'center', 
-              borderRadius: 8 
+            <View style={{
+              width: '100%',
+              height: '100%',
+              backgroundColor: colors.gray[100],
+              justifyContent: 'center',
+              alignItems: 'center',
+              borderRadius: 8
             }}>
               <Ionicons name="cube-outline" size={24} color="#6b7280" />
             </View>
@@ -711,8 +782,8 @@ const AnalyticsScreen = ({ navigation, route }) => {
       <View style={analyticsStyles.section}>
         <ChartCard title="Revenue Trend (Last 7 Days)">
           {chartData.revenueChart.length > 0 ? (
-            <BarChart 
-              data={chartData.revenueChart} 
+            <BarChart
+              data={chartData.revenueChart}
               color={colors.primary.main}
               height={220}
             />
@@ -769,8 +840,8 @@ const AnalyticsScreen = ({ navigation, route }) => {
       <View style={analyticsStyles.section}>
         <ChartCard title="Order Trends by Hour (Today)">
           {chartData.orderTrends.some(item => item.orders > 0) ? (
-            <BarChart 
-              data={chartData.orderTrends.filter(item => item.orders > 0)} 
+            <BarChart
+              data={chartData.orderTrends.filter(item => item.orders > 0)}
               color={colors.warning.main}
               height={220}
             />
@@ -815,9 +886,9 @@ const AnalyticsScreen = ({ navigation, route }) => {
       {analytics.popularProducts.length > 0 && (
         <View style={analyticsStyles.section}>
           <ChartCard title="Top Products Distribution">
-            <PieChart 
-              data={chartData.topProducts} 
-              size={120} 
+            <PieChart
+              data={chartData.topProducts}
+              size={120}
               showLegend={true}
               centerText="Top Products"
             />
@@ -855,23 +926,23 @@ const AnalyticsScreen = ({ navigation, route }) => {
   return (
     <SafeAreaView style={analyticsStyles.container}>
       {isLoading && <LoadingSpinner />}
-      
+
       <View style={analyticsStyles.content}>
         {/* Header */}
-        <View style={analyticsStyles.header} ref={headerRef}>
+        <View style={analyticsStyles.header}>
           <Text style={analyticsStyles.title}>Analytics</Text>
           <TouchableOpacity
             style={[
               analyticsStyles.button,
-              !featureService.canUseFeature('advanced_analytics') && { 
+              !canUseAdvancedAnalytics && {
                 backgroundColor: colors.gray[100],
                 borderColor: colors.border.medium,
               }
             ]}
             onPress={() => {
               Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-              if (!featureService.canUseFeature('advanced_analytics')) {
-                featureService.showUpgradePrompt('advanced_analytics');
+              if (!canUseAdvancedAnalytics) {
+                featureFlags.showUpgradePrompt('advanced_analytics');
               } else {
                 // Pass already-fetched data to avoid duplicate API calls
                 navigation.navigate('AdvancedAnalytics', {
@@ -883,18 +954,18 @@ const AnalyticsScreen = ({ navigation, route }) => {
               }
             }}
           >
-            {!featureService.canUseFeature('advanced_analytics') && (
+            {!canUseAdvancedAnalytics && (
               <Ionicons name="lock-closed" size={14} color={colors.warning.main} style={{ marginRight: 4 }} />
             )}
             <Text style={[
               analyticsStyles.buttonText,
-              !featureService.canUseFeature('advanced_analytics') && { color: colors.text.tertiary }
+              !canUseAdvancedAnalytics && { color: colors.text.tertiary }
             ]}>Advanced</Text>
           </TouchableOpacity>
         </View>
 
         {/* Tab Navigation */}
-        <View style={analyticsStyles.tabContainer} ref={tabBarRef}>
+        <View style={analyticsStyles.tabContainer}>
           <TouchableOpacity
             style={[
               analyticsStyles.tab,
@@ -912,7 +983,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
               Revenue
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
               analyticsStyles.tab,
@@ -930,7 +1001,7 @@ const AnalyticsScreen = ({ navigation, route }) => {
               Orders
             </Text>
           </TouchableOpacity>
-          
+
           <TouchableOpacity
             style={[
               analyticsStyles.tab,
@@ -951,28 +1022,24 @@ const AnalyticsScreen = ({ navigation, route }) => {
         </View>
 
         {/* Tab Content */}
-        <View style={{ flex: 1 }} ref={metricsSectionRef}>
+        <View style={{ flex: 1 }}>
           {activeTab === 'revenue' && renderRevenueTab()}
           {activeTab === 'orders' && renderOrdersTab()}
           {activeTab === 'products' && renderProductsTab()}
         </View>
       </View>
 
-      {/* Interactive Tour Overlay */}
-      <InteractiveTourOverlay
-        ref={tourOverlayRef}
+      {/* TOUR TEMPORARILY DISABLED */}
+      {/* Simple Tour Overlay */}
+      {/* <SimpleTourOverlay
         visible={showTour}
         currentStep={currentStep}
         totalSteps={totalSteps}
         stepIndex={stepIndex}
-        onNext={handleNextStep}
-        onSkip={skipScreen}
-        onSkipAll={skipAll}
-        onSkipStep={skipStep}
-        onActionComplete={completeTour}
-        showHint={showHint}
-        showSkipStep={showSkipStep}
-      />
+        onNext={nextStep}
+        onSkip={skipTour}
+        onComplete={completeTour}
+      /> */}
     </SafeAreaView>
   );
 };

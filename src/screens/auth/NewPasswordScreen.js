@@ -19,7 +19,7 @@ import { useBackPrevention } from '../../hooks/useBackPrevention';
 const NewPasswordScreen = ({ navigation, route }) => {
   const { email } = route.params;
   const { resetPassword } = useAuth();
-  
+
   const [formData, setFormData] = useState({
     password: '',
     confirmPassword: '',
@@ -77,24 +77,24 @@ const NewPasswordScreen = ({ navigation, route }) => {
     setIsLoading(true);
     try {
       await resetPassword(email, formData.password);
-      
+
       Alert.alert(
         'Password Reset Successful',
-        'Your password has been reset successfully. You are now logged in.',
+        'Your password has been reset successfully. Please login with your new password to continue.',
         [
           {
-            text: 'Continue',
+            text: 'Login',
             onPress: () => {
-              // Navigate to main app
+              // Navigate to Login screen to enforce device limits
               navigation.reset({
                 index: 0,
-                routes: [{ name: 'Main' }],
+                routes: [{ name: 'Login', params: { email: email } }], // Pre-fill email
               });
             }
           }
         ]
       );
-      
+
     } catch (error) {
       console.error('Reset password error:', error);
       Alert.alert('Error', error.message || 'Failed to reset password. Please try again.');
@@ -114,7 +114,7 @@ const NewPasswordScreen = ({ navigation, route }) => {
     if (/[a-z]/.test(password)) strength++;
     if (/\d/.test(password)) strength++;
     if (/[!@#$%^&*(),.?":{}|<>]/.test(password)) strength++;
-    
+
     return strength;
   };
 
@@ -171,6 +171,7 @@ const NewPasswordScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Enter new password"
+                placeholderTextColor={colors.textSecondary}
                 value={formData.password}
                 onChangeText={(value) => updateField('password', value)}
                 secureTextEntry={!showPassword}
@@ -188,7 +189,7 @@ const NewPasswordScreen = ({ navigation, route }) => {
                 />
               </TouchableOpacity>
             </View>
-            
+
             {/* Password Strength Indicator */}
             {formData.password.length > 0 && (
               <View style={styles.strengthContainer}>
@@ -218,6 +219,7 @@ const NewPasswordScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.input}
                 placeholder="Confirm new password"
+                placeholderTextColor={colors.textSecondary}
                 value={formData.confirmPassword}
                 onChangeText={(value) => updateField('confirmPassword', value)}
                 secureTextEntry={!showConfirmPassword}

@@ -73,6 +73,17 @@ const SimpleInvoicePreview = ({
   useEffect(() => {
     const enrichInvoiceData = async () => {
       try {
+        // Force refresh store settings to ensure latest data
+        const { refreshSettings } = require('../context/StoreSettingsContext');
+        if (refreshSettings) {
+          try {
+            await refreshSettings();
+            console.log('📄 [SimpleInvoicePreview] Store settings refreshed');
+          } catch (refreshError) {
+            console.warn('📄 [SimpleInvoicePreview] Store settings refresh failed:', refreshError.message);
+          }
+        }
+        
         // Get store profile from context using ref (replaces AsyncStorage.getItem('storeInfo'))
         const storeProfile = getStoreProfileRef.current();
         
@@ -271,19 +282,34 @@ const SimpleInvoicePreview = ({
           hasPhoneNumber: !!invoiceData?.phoneNumber
         });
         
-        // Check if send invoice feature is enabled
-        if (!status.sendInvoiceEnabled) {
-          console.log('📱 [SimpleInvoicePreview] Send invoice disabled - hiding send button');
-          setShowSendButton(false);
-          return;
-        }
-        
-        // Show send button only for device WhatsApp when send invoice is enabled
+        // Show send button for device WhatsApp when customer has phone number
+        // Hide for FlowPOS/Twilio method (auto-send)
         if (status.currentMethod === 'device') {
-          console.log('📱 [SimpleInvoicePreview] Device WhatsApp selected - showing send button');
-          setShowSendButton(true);
+          // FIXED: For device WhatsApp, show button when customer phone exists
+          // regardless of sendInvoiceEnabled setting (manual action required)
+          const hasCustomerPhone = invoiceData?.phoneNumber && invoiceData.phoneNumber.trim() !== '';
+          if (hasCustomerPhone) {
+            console.log('📱 [SimpleInvoicePreview] Device WhatsApp selected with customer phone - showing send button');
+            setShowSendButton(true);
+          } else {
+            console.log('📱 [SimpleInvoicePreview] Device WhatsApp selected but no customer phone - hiding send button');
+            setShowSendButton(false);
+          }
+        } else if (status.currentMethod === 'flowpos') {
+          // ALWAYS hide send button for FlowPOS method to prevent errors and confusion
+          // Auto-send is disabled, and manual send would cause credential errors
+          console.log('📱 [SimpleInvoicePreview] FlowPOS WhatsApp selected - hiding send button (auto-send disabled, prevents credential errors)');
+          setShowSendButton(false);
+          
+          // COMMENTED OUT: Auto-send WhatsApp to prevent duplication and errors
+          // when FlowPOS WhatsApp is selected but Twilio credentials not configured
+          // if (invoiceData?.phoneNumber && invoiceData.phoneNumber.trim()) {
+          //   console.log('📱 [SimpleInvoicePreview] Auto-sending via FlowPOS WhatsApp...');
+          //   handleAutoSendWhatsApp();
+          // }
+          console.log('📱 [SimpleInvoicePreview] Auto-send disabled for FlowPOS WhatsApp - preventing duplication and credential errors');
         } else {
-          console.log('📱 [SimpleInvoicePreview] No valid method or FlowPOS not ready - hiding send button');
+          console.log('📱 [SimpleInvoicePreview] No valid method selected - hiding send button');
           setShowSendButton(false);
         }
       } catch (error) {
@@ -297,45 +323,48 @@ const SimpleInvoicePreview = ({
     }
   }, [visible, invoiceData, refreshTrigger]); // Phase 1: Removed duplicate dependency
 
-  const handleAutoSendWhatsApp = async () => {
-    try {
-      // Use enriched data which has proper store information from context
-      const data = enrichedInvoiceData || invoiceData;
-      
-      console.log('📱 Auto-sending via FlowPOS WhatsApp with enriched data:', {
-        storeName: data.storeName,
-        customerName: data.customerName,
-        phoneNumber: data.phoneNumber
-      });
-      
-      const result = await WhatsAppService.sendInvoiceMessage(
-        data.phoneNumber,
-        {
-          ...data,
-          orderNumber: data.invoiceNumber || data.orderNumber,
-          items: data.items || [],
-          // Ensure all store info is passed
-          storeName: data.storeName,
-          storeAddress: data.storeAddress,
-          storePhone: data.storePhone,
-          storeEmail: data.storeEmail,
-          gstNumber: data.gstNumber
-        }
-      );
-
-      if (result.success) {
-        Alert.alert(
-          'Invoice Sent Automatically! ✅',
-          `Invoice has been sent to ${data.customerName} via FlowPOS WhatsApp successfully.`,
-          [{ text: 'Great!', style: 'default' }]
-        );
-      }
-    } catch (error) {
-      console.error('❌ Error auto-sending WhatsApp invoice:', error);
-      // If auto-send fails, show the send button
-      setShowSendButton(true);
-    }
-  };
+  // COMMENTED OUT: handleAutoSendWhatsApp function to prevent duplication and errors
+  // when FlowPOS WhatsApp is selected but Twilio credentials not configured
+  // 
+  // const handleAutoSendWhatsApp = async () => {
+  //   try {
+  //     // Use enriched data which has proper store information from context
+  //     const data = enrichedInvoiceData || invoiceData;
+  //     
+  //     console.log('📱 Auto-sending via FlowPOS WhatsApp with enriched data:', {
+  //       storeName: data.storeName,
+  //       customerName: data.customerName,
+  //       phoneNumber: data.phoneNumber
+  //     });
+  //     
+  //     const result = await WhatsAppService.sendInvoiceMessage(
+  //       data.phoneNumber,
+  //       {
+  //         ...data,
+  //         orderNumber: data.invoiceNumber || data.orderNumber,
+  //         items: data.items || [],
+  //         // Ensure all store info is passed
+  //         storeName: data.storeName,
+  //         storeAddress: data.storeAddress,
+  //         storePhone: data.storePhone,
+  //         storeEmail: data.storeEmail,
+  //         gstNumber: data.gstNumber
+  //       }
+  //     );
+  //
+  //     if (result.success) {
+  //       Alert.alert(
+  //         'Invoice Sent Automatically! ✅',
+  //         `Invoice has been sent to ${data.customerName} via FlowPOS WhatsApp successfully.`,
+  //         [{ text: 'Great!', style: 'default' }]
+  //       );
+  //     }
+  //   } catch (error) {
+  //     console.error('❌ Error auto-sending WhatsApp invoice:', error);
+  //     // If auto-send fails, show the send button
+  //     setShowSendButton(true);
+  //   }
+  // };
 
   const handleSendWhatsApp = async () => {
     // Use enriched data which has proper store information from context
@@ -348,6 +377,31 @@ const SimpleInvoicePreview = ({
         [{ text: 'OK', style: 'default' }]
       );
       return;
+    }
+
+    // ADDITIONAL CHECK: Prevent manual send for FlowPOS method to avoid credential errors
+    try {
+      const status = await WhatsAppService.getStatus();
+      if (status.currentMethod === 'flowpos') {
+        Alert.alert(
+          'Feature Not Available',
+          'Manual WhatsApp sending is not available for FlowPOS method. Please use device WhatsApp method for manual sending, or configure Twilio credentials for FlowPOS method.',
+          [
+            { text: 'OK', style: 'default' },
+            { 
+              text: 'Switch to Device WhatsApp', 
+              onPress: () => {
+                // Navigate to WhatsApp settings
+                // This would need to be implemented based on your navigation structure
+                console.log('📱 User wants to switch to device WhatsApp method');
+              }
+            }
+          ]
+        );
+        return;
+      }
+    } catch (error) {
+      console.error('❌ Error checking WhatsApp method:', error);
     }
 
     setIsGenerating(true);

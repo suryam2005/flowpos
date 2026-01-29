@@ -5,6 +5,9 @@ import actionDetectorService from '../services/ActionDetectorService';
 import { getTourFlow, getTourSteps, isInteractiveTour } from '../config/tourContent';
 import productsService from '../services/ProductsService';
 import NetworkService from '../services/NetworkService';
+// Phase B Implementation: Add post-success cache updates for product creation
+import productFetchCoordinator from '../services/ProductFetchCoordinator';
+import uiUpdatePropagator from '../services/UIUpdatePropagator';
 
 /**
  * useInteractiveTour - Enhanced hook for managing interactive tour state
@@ -253,8 +256,16 @@ const useInteractiveTour = (screenName) => {
         ];
         
         for (const product of sampleProducts) {
-          await productsService.createProduct(product);
+          const createdProduct = await productsService.createProduct(product);
+          
+          // Phase B Implementation: Post-success cache updates for tour product creation
+          if (createdProduct) {
+            productFetchCoordinator.onProductCreated(createdProduct);
+          }
         }
+        
+        // Phase B Implementation: Propagate UI updates after all tour products are created
+        uiUpdatePropagator.propagateProductUpdate();
         
         console.log(`🎯 [useInteractiveTour:${screenName}] Local sample products added`);
         return true;
@@ -491,8 +502,14 @@ const useInteractiveTour = (screenName) => {
    * @param {React.RefObject} ref - Reference to InteractiveTourOverlay
    */
   const setOverlayRef = useCallback((ref) => {
-    overlayRef.current = ref;
-  }, []);
+    try {
+      if (ref && typeof ref === 'object') {
+        overlayRef.current = ref;
+      }
+    } catch (error) {
+      console.warn(`[useInteractiveTour:${screenName}] Error setting overlay ref:`, error.message);
+    }
+  }, [screenName]);
 
   /**
    * Check if tour should auto-start

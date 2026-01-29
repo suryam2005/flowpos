@@ -183,10 +183,11 @@ const StoreSetupScreen = ({ navigation, route }) => {
   });
   
   const [isLoading, setIsLoading] = useState(false);
+  const [setupCompleted, setSetupCompleted] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
 
-  // Prevent back navigation during store setup completion
-  useBackPrevention(isLoading, {
+  // Prevent back navigation during store setup completion, but allow after completion
+  useBackPrevention(isLoading && !setupCompleted, {
     message: 'Store setup is in progress. Please wait for completion to avoid losing your setup data.',
     title: 'Setting Up Store',
     hardBlock: true // No cancellation allowed during store setup
@@ -475,6 +476,9 @@ const StoreSetupScreen = ({ navigation, route }) => {
             onPress: async () => {
               if (isOnboarding) {
                 try {
+                  // FIXED: Set setupCompleted flag FIRST to disable back prevention immediately
+                  setSetupCompleted(true);
+                  
                   // Mark store setup as completed but not full onboarding yet
                   await AsyncStorage.setItem('storeSetupCompleted', 'true');
                   
@@ -486,12 +490,15 @@ const StoreSetupScreen = ({ navigation, route }) => {
                     console.warn('⚠️ Failed to refresh store settings cache:', cacheError);
                   }
                   
-                  console.log('✅ Store setup marked as completed - navigating to product onboarding');
+                  console.log('✅ Store setup marked as completed - navigating directly to product onboarding');
                   
-                  // Navigate to ProductOnboardingScreen to let user choose sample products
+                  // FIXED: Navigate directly to ProductOnboarding, skip BusinessPreferences
+                  // BusinessPreferences can be configured later from Settings if needed
                   navigation.navigate('ProductOnboarding');
                 } catch (navError) {
                   console.error('Navigation error:', navError);
+                  // Re-enable back prevention if there's an error
+                  setSetupCompleted(false);
                   navigation.navigate('ProductOnboarding');
                 }
               } else {

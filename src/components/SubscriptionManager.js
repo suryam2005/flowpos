@@ -109,20 +109,20 @@ const SubscriptionManager = ({ visible, onClose }) => {
             <View style={styles.limitItemRow}>
               <Ionicons name="cube-outline" size={16} color={colors.text.secondary} />
               <Text style={styles.limitItem}>
-                {planConfig.limits.products === -1 ? 'Unlimited' : planConfig.limits.products} Products
+                {planConfig.limits?.products === -1 ? 'Unlimited' : planConfig.limits?.products || 0} Products
               </Text>
             </View>
             <View style={styles.limitItemRow}>
               <Ionicons name="receipt-outline" size={16} color={colors.text.secondary} />
               <Text style={styles.limitItem}>
-                {planConfig.limits.orders_per_month === -1 ? 'Unlimited' : planConfig.limits.orders_per_month} Orders/month
+                {planConfig.limits?.orders_per_month === -1 ? 'Unlimited' : planConfig.limits?.orders_per_month || 0} Orders/month
               </Text>
             </View>
-            {planConfig.limits.storage_gb > 0 && (
+            {(planConfig.limits?.storage_gb || 0) > 0 && (
               <View style={styles.limitItemRow}>
                 <Ionicons name="cloud-outline" size={16} color={colors.text.secondary} />
                 <Text style={styles.limitItem}>
-                  {planConfig.limits.storage_gb}GB Cloud Storage
+                  {planConfig.limits?.storage_gb || 0}GB Cloud Storage
                 </Text>
               </View>
             )}

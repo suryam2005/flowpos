@@ -160,9 +160,9 @@ const ProfileScreen = ({ navigation }) => {
               {userInfo?.email || 'user@example.com'}
             </Text>
             
-            {storeInfo && (
+            {storeInfo && storeInfo.store_name && (
               <View style={styles.storeInfo}>
-                <Text style={styles.storeName}>{storeInfo.name}</Text>
+                <Text style={styles.storeName}>{storeInfo.store_name}</Text>
               </View>
             )}
             

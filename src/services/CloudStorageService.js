@@ -213,7 +213,7 @@ class CloudStorageService {
   getOptimizationSuggestions(usage) {
     const suggestions = [];
     
-    if (usage.breakdown.orders && usage.breakdown.orders.size > 1024 * 1024) { // > 1MB
+    if (usage.breakdown?.orders && usage.breakdown.orders.size > 1024 * 1024) { // > 1MB
       suggestions.push({
         type: 'orders',
         message: 'Consider archiving old orders to free up space',
@@ -222,7 +222,7 @@ class CloudStorageService {
       });
     }
 
-    if (usage.breakdown.reports && usage.breakdown.reports.size > 512 * 1024) { // > 512KB
+    if (usage.breakdown?.reports && usage.breakdown.reports.size > 512 * 1024) { // > 512KB
       suggestions.push({
         type: 'reports',
         message: 'Delete old generated reports to save space',
@@ -231,7 +231,7 @@ class CloudStorageService {
       });
     }
 
-    if (usage.breakdown.exports && usage.breakdown.exports.size > 512 * 1024) { // > 512KB
+    if (usage.breakdown?.exports && usage.breakdown.exports.size > 512 * 1024) { // > 512KB
       suggestions.push({
         type: 'exports',
         message: 'Clear old exported data files',

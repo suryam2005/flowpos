@@ -1,6 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
 import ordersService from '../services/OrdersService';
 import * as Haptics from 'expo-haptics';
+// Phase B Implementation: Import UI propagation services for order success updates
+import uiUpdatePropagator from '../services/UIUpdatePropagator';
+import productFetchCoordinator from '../services/ProductFetchCoordinator';
 
 export const useOrders = () => {
   const [orders, setOrders] = useState([]);
@@ -60,6 +63,16 @@ export const useOrders = () => {
       const pending = await ordersService.getPendingCount();
       setPendingCount(pending);
 
+      // Phase B Implementation: Post-success UI propagation
+      // CRITICAL: Only called AFTER successful API operation
+      console.log('🔄 [useOrders] Order created successfully - triggering UI propagation');
+      
+      // Update product stock in session store (UI only)
+      productFetchCoordinator.onOrderCreated(newOrder);
+      
+      // Propagate order success to all registered screens
+      uiUpdatePropagator.propagateOrderSuccess(newOrder);
+
       // Haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
 
@@ -69,6 +82,9 @@ export const useOrders = () => {
     } catch (err) {
       console.error('Error creating order:', err);
       setError(err.message);
+      
+      // CRITICAL: No UI updates on API failure
+      console.log('❌ [useOrders] Order creation failed - no UI updates triggered');
       
       // Error haptic feedback
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);

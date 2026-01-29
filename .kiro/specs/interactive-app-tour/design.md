@@ -4,7 +4,7 @@
 
 This design document describes the architecture for an enhanced interactive app tour system for FlowPOS. The system transforms the existing passive tour overlay into an interactive learning experience where users can perform actual actions during the tour, with automatic progression based on action completion.
 
-The tour covers five main screens: POS (interactive), Manage with Products and Inventory tabs (interactive), Orders (informational), Analytics (informational), and Advanced Analytics (informational).
+The tour covers screens in this order: POS (interactive) → Cart (interactive) → Invoice Preview (wait for 10-sec display) → Analytics/Stats (informational) → Orders (informational) → Manage with Products and Inventory tabs (interactive).
 
 ## Architecture
 
@@ -37,6 +37,17 @@ The interactive tour system follows a layered architecture:
 └─────────────────────────────────────────────────────────────┘
 ```
 
+## Tour Flow Order
+
+The unified tour follows this exact screen order:
+
+1. **POS Screen** (Interactive) - Learn to add products, manage cart, complete order
+2. **Cart Screen** (Interactive) - Complete the order with Complete Order button
+3. **Invoice Preview** (Wait) - View invoice for 10 seconds (existing feature)
+4. **Analytics/Stats Screen** (Informational) - View business metrics
+5. **Orders Screen** (Informational) - View order history
+6. **Manage Screen** (Interactive) - Products tab then Inventory tab
+
 ## Components and Interfaces
 
 ### 1. InteractiveTourOverlay Component
@@ -53,8 +64,9 @@ interface TourStep {
   cardPosition: 'top' | 'bottom';
   interactive: boolean;
   actionType?: 'tap' | 'long-press' | 'swipe' | 'text-input' | 'navigation';
-  actionTarget?: string;  // Component identifier for action detection
-  hintText?: string;      // Shown after timeout
+  actionTarget?: string;
+  hintText?: string;
+  nextScreen?: string;
 }
 
 interface InteractiveTourOverlayProps {
@@ -63,12 +75,12 @@ interface InteractiveTourOverlayProps {
   totalSteps: number;
   stepIndex: number;
   onNext: () => void;
-  onSkip: () => void;        // Skip current screen tour
-  onSkipAll: () => void;     // Skip all tours
-  onSkipStep: () => void;    // Skip just this step
+  onSkip: () => void;
+  onSkipAll: () => void;
+  onSkipStep: () => void;
   onActionComplete: () => void;
   showHint: boolean;
-  showSkipStep: boolean;     // Show after 10s on interactive steps
+  showSkipStep: boolean;
 }
 ```
 
@@ -78,30 +90,22 @@ Service that listens for user actions and determines when tour step requirements
 
 ```javascript
 // ActionDetectorService.js
-interface ActionConfig {
-  type: 'tap' | 'long-press' | 'swipe' | 'text-input' | 'navigation';
-  target: string;
-  validator?: (event: any) => boolean;
-}
-
 class ActionDetectorService {
   registerAction(stepId: string, config: ActionConfig): void;
   unregisterAction(stepId: string): void;
   onActionDetected(callback: (stepId: string) => void): void;
   
-  // Specific detectors
   detectCartItemAdded(callback: () => void): void;
   detectQuantityChanged(callback: () => void): void;
   detectItemRemoved(callback: () => void): void;
-  detectModalOpened(callback: () => void): void;
-  detectTextEntered(fieldId: string, callback: () => void): void;
+  detectOrderCompleted(callback: () => void): void;
   detectNavigation(screenName: string, callback: () => void): void;
 }
 ```
 
 ### 3. TourProgressManager
 
-Handles persistence and resume functionality.
+Handles persistence and resume functionality for the unified tour flow.
 
 ```javascript
 // TourProgressManager.js
@@ -111,6 +115,7 @@ interface TourProgress {
   completedScreens: string[];
   skippedAll: boolean;
   lastUpdated: number;
+  tourFlowPosition: number;
 }
 
 class TourProgressManager {
@@ -119,7 +124,8 @@ class TourProgressManager {
   async markScreenComplete(screenName: string): Promise<void>;
   async markAllComplete(): Promise<void>;
   async resetAllProgress(): Promise<void>;
-  async isScreenComplete(screenName: string): Promise<boolean>;
+  async getTourFlowPosition(): Promise<number>;
+  async setTourFlowPosition(position: number): Promise<void>;
 }
 ```
 
@@ -129,87 +135,98 @@ Central registry for all tour content and configurations.
 
 ```javascript
 // TourContentRegistry.js
+const TOUR_FLOW_ORDER = [
+  'POS', 
+  'Cart', 
+  'InvoicePreview', 
+  'Analytics', 
+  'Orders', 
+  'ManageProducts', 
+  'ManageInventory'
+];
+
 const TOUR_FLOWS = {
   POS: {
     interactive: true,
+    flowPosition: 0,
     steps: [
-      {
-        id: 'pos-welcome',
-        title: '🏪 Welcome to POS',
-        text: 'This is your main sales screen where you process customer orders.',
-        highlightBox: 'POS_HEADER',
-        cardPosition: 'bottom',
-        interactive: false
-      },
-      {
-        id: 'pos-add-product',
-        title: '👆 Add a Product',
-        text: 'TAP any product to add it to your cart.',
-        highlightBox: 'POS_FIRST_PRODUCT',
-        cardPosition: 'bottom',
-        interactive: true,
-        actionType: 'tap',
-        actionTarget: 'product-card',
-        hintText: 'Tap on any product card to add it to your cart'
-      },
-      // ... more steps
+      // Welcome, add product, increase qty, remove, add back, cart summary, complete order
+    ]
+  },
+  
+  Cart: {
+    interactive: true,
+    flowPosition: 1,
+    steps: [
+      // Order details summary, Complete Order button
+    ]
+  },
+  
+  InvoicePreview: {
+    interactive: false,
+    flowPosition: 2,
+    waitForExisting: true,
+    steps: [
+      // Wait for existing 10-sec display, then guide to Analytics
+    ]
+  },
+  
+  Analytics: {
+    interactive: false,
+    flowPosition: 3,
+    steps: [
+      // Welcome, metrics, time filter, advanced link
+    ]
+  },
+  
+  Orders: {
+    interactive: false,
+    flowPosition: 4,
+    steps: [
+      // Welcome, order list, order actions
     ]
   },
   
   ManageProducts: {
     interactive: true,
-    steps: [/* ... */]
+    flowPosition: 5,
+    steps: [/* existing steps */]
   },
   
   ManageInventory: {
     interactive: true,
-    steps: [/* ... */]
-  },
-  
-  Orders: {
-    interactive: false,
-    steps: [/* informational only */]
-  },
-  
-  Analytics: {
-    interactive: false,
-    steps: [/* informational only */]
-  },
-  
-  AdvancedAnalytics: {
-    interactive: false,
-    steps: [/* informational only */]
+    flowPosition: 6,
+    steps: [/* existing steps */]
   }
 };
 ```
 
 ### 5. useInteractiveTour Hook
 
-Enhanced hook that manages tour state and action detection.
+Enhanced hook that manages tour state with cross-screen flow support.
 
 ```javascript
 // useInteractiveTour.js
-interface UseInteractiveTourReturn {
-  showTour: boolean;
-  currentStep: TourStep | null;
-  stepIndex: number;
-  totalSteps: number;
-  showHint: boolean;
-  showSkipStep: boolean;
-  
-  startTour: () => void;
-  nextStep: () => void;
-  skipScreen: () => void;
-  skipAll: () => void;
-  skipStep: () => void;
-  completeTour: () => void;
-  
-  // Action detection registration
-  registerActionTarget: (targetId: string, ref: React.RefObject) => void;
-  notifyAction: (actionType: string, targetId: string) => void;
+function useInteractiveTour(screenName: string) {
+  return {
+    showTour,
+    currentStep,
+    stepIndex,
+    totalSteps,
+    showHint,
+    showSkipStep,
+    startTour,
+    nextStep,
+    skipScreen,
+    skipAll,
+    skipStep,
+    completeTour,
+    continueToNextScreen,
+    getCurrentFlowPosition,
+    registerActionTarget,
+    notifyAction,
+  };
 }
-
-function useInteractiveTour(screenName: string): UseInteractiveTourReturn;
 ```
 
 ## Data Models
@@ -221,153 +238,150 @@ interface TourStepConfig {
   id: string;
   title: string;
   text: string;
-  highlightBox: string;        // Key in position registry
+  highlightBox: string;
   cardPosition: 'top' | 'bottom';
   interactive: boolean;
   actionType?: ActionType;
   actionTarget?: string;
   hintText?: string;
   successMessage?: string;
-  demoValues?: Record<string, any>;  // Pre-fill values for forms
+  nextScreen?: string;
+  waitDuration?: number;
+  showNavigationHint?: boolean;
+  navigationHintText?: string;
 }
-
-type ActionType = 'tap' | 'long-press' | 'swipe' | 'text-input' | 'navigation' | 'tab-change' | 'modal-open' | 'modal-close';
 ```
 
 ### Tour Progress State
 
 ```javascript
 interface TourProgressState {
-  // Per-screen completion
+  tourFlowPosition: number;
   completedScreens: {
     POS: boolean;
+    Cart: boolean;
+    InvoicePreview: boolean;
+    Analytics: boolean;
+    Orders: boolean;
     ManageProducts: boolean;
     ManageInventory: boolean;
-    Orders: boolean;
-    Analytics: boolean;
-    AdvancedAnalytics: boolean;
   };
-  
-  // Current position (for resume)
   currentScreen: string | null;
   currentStepIndex: number;
-  
-  // Global flags
   hasSeenTour: boolean;
   skippedAll: boolean;
-  
-  // Timestamps
   startedAt: number | null;
   completedAt: number | null;
 }
 ```
 
+### Highlight Position Registry (Key Updates)
+
+```javascript
+const getResponsivePositions = () => {
+  return {
+    // POS Screen - FIXED positions
+    POS_CART_BAR: {
+      // Must be positioned at actual cart bar location (bottom, above nav)
+      // Use dynamic measurement from ref
+    },
+    POS_COMPLETE_BTN: {
+      // Must be positioned at actual Complete Order button
+      // Use dynamic measurement from ref
+    },
+    
+    // Cart Screen positions (NEW)
+    CART_ORDER_SUMMARY: { /* order details area */ },
+    CART_COMPLETE_BTN: { /* Complete Order button */ },
+    
+    // Invoice Preview positions (NEW)
+    INVOICE_CARD: { /* invoice card area */ },
+    
+    // ... existing positions ...
+  };
+};
+```
+
 ## Correctness Properties
 
-*A property is a characteristic or behavior that should hold true across all valid executions of a system-essentially, a formal statement about what the system should do. Properties serve as the bridge between human-readable specifications and machine-verifiable correctness guarantees.*
-
 ### Property 1: Touch Handling Based on Step Interactivity
-
-*For any* tour step, if the step is marked as interactive, touch events within the highlight zone SHALL pass through to the underlying UI; if the step is non-interactive, all touch events SHALL be blocked.
-
+Touch events within highlight zone pass through for interactive steps, blocked for non-interactive.
 **Validates: Requirements 1.1, 1.3**
 
 ### Property 2: Interactive vs Non-Interactive Style Differentiation
-
-*For any* tour step, the highlight style applied SHALL differ based on whether the step is interactive (pulsing border, pointer icon) or non-interactive (static border, no pointer).
-
+Interactive steps have pulsing border and pointer icon; non-interactive have static style.
 **Validates: Requirements 1.4, 10.1, 10.3**
 
 ### Property 3: Action Detection Triggers Auto-Advance
-
-*For any* interactive tour step, when the required action is completed, the tour SHALL automatically advance to the next step within 800ms (500ms detection + 300ms animation).
-
+When required action is completed, tour advances within 800ms.
 **Validates: Requirements 2.1, 2.2**
 
 ### Property 4: Informational Tours Have No Interactive Steps
-
-*For any* tour flow marked as informational (Orders, Analytics, Advanced Analytics), all steps in that flow SHALL have `interactive: false`.
-
-**Validates: Requirements 6.3, 7.3, 8.3**
+Analytics, Orders, InvoicePreview tours have all steps with `interactive: false`.
+**Validates: Requirements 3.2, 4.4, 5.4**
 
 ### Property 5: Tour Completion Marking
-
-*For any* screen tour, when the final step is completed or skipped, the tour progress manager SHALL mark that specific screen as complete in persistent storage.
-
-**Validates: Requirements 3.2, 5.2, 6.2, 7.2, 8.2**
+Each screen tour completion is marked in persistent storage.
+**Validates: Requirements 3.1, 3.1.4, 4.3, 5.3, 6.2, 7.2**
 
 ### Property 6: Skip Button Presence
-
-*For any* tour step regardless of screen or interactivity, both "Skip" (current screen) and "Skip All" buttons SHALL be visible and functional.
-
+Skip and Skip All buttons visible on every tour step.
 **Validates: Requirements 11.1, 11.2**
 
 ### Property 7: Skip Behavior Scope
-
-*For any* skip action, if "Skip" is pressed, only the current screen's tour SHALL be marked complete; if "Skip All" is pressed, all screen tours SHALL be marked complete.
-
+Skip marks current screen complete; Skip All marks all screens complete.
 **Validates: Requirements 11.3, 11.4**
 
 ### Property 8: Progress Persistence Round-Trip
-
-*For any* tour progress state, saving to AsyncStorage and then loading SHALL produce an equivalent state object.
-
+Save/load produces equivalent state object.
 **Validates: Requirements 9.1, 9.2**
 
 ### Property 9: Separate Screen Tracking
-
-*For any* combination of screen tour completions, each screen's completion status SHALL be tracked independently and not affect other screens' status.
-
+Each screen's completion tracked independently.
 **Validates: Requirements 9.5**
 
 ### Property 10: Hint Display After Timeout
-
-*For any* interactive step where the user has not completed the required action, after 30 seconds the hint message SHALL be displayed.
-
+Hint shown after 30 seconds of inactivity on interactive steps.
 **Validates: Requirements 2.3**
+
+### Property 11: Cross-Screen Tour Flow Order
+Screens visited in order: POS → Cart → InvoicePreview → Analytics → Orders → Manage.
+**Validates: Requirements 8.3**
+
+### Property 12: Invoice Preview Wait Integration
+Tour waits for existing 10-second display feature with countdown.
+**Validates: Requirements 3.2.1, 3.2.2, 3.2.3**
+
+### Property 13: Correct Highlight Positioning
+Positions calculated dynamically from component measurements.
+**Validates: Requirements 12.1, 12.2, 12.3, 12.4, 12.5**
 
 ## Error Handling
 
-### Touch Event Errors
-- If touch detection fails, fall back to manual "Next" button
-- Log touch errors for debugging but don't crash the tour
-
-### Action Detection Failures
-- If action detection times out, show hint and enable "Skip This Step"
-- If action detector throws, gracefully degrade to manual progression
-
-### Storage Errors
-- If AsyncStorage fails to save, continue tour but log warning
-- If AsyncStorage fails to load, start tour from beginning
-
-### Navigation Errors
-- If screen navigation fails during tour transition, pause tour and show error
-- Allow user to manually navigate and resume
+- Touch detection failures: fall back to manual Next button
+- Action detection timeouts: show hint and enable Skip This Step
+- Storage errors: continue tour, log warning
+- Navigation errors: pause tour, allow manual navigation and resume
+- Cross-screen flow errors: offer to resume from current position
 
 ## Testing Strategy
 
 ### Unit Tests
-- Test TourProgressManager save/load operations
-- Test ActionDetectorService action matching logic
-- Test TourContentRegistry step configurations
-- Test highlight position calculations
-
-### Property-Based Tests
-- Property 1: Touch handling based on interactivity
-- Property 4: Informational tours have no interactive steps
-- Property 6: Skip buttons always present
-- Property 7: Skip behavior scope
-- Property 8: Progress persistence round-trip
-- Property 9: Separate screen tracking
+- TourProgressManager save/load operations
+- ActionDetectorService action matching
+- TourContentRegistry step configurations
+- Highlight position calculations
 
 ### Integration Tests
-- Test complete POS tour flow with mocked actions
-- Test Manage tour flow with tab switching
-- Test skip functionality across screens
-- Test resume from interrupted tour
+- Complete POS → Cart → InvoicePreview → Analytics → Orders → Manage flow
+- Skip functionality across screens
+- Resume from interrupted tour
+- Invoice Preview 10-sec wait integration
 
 ### Manual Testing
-- Verify touch-through works on actual device
-- Verify animations are smooth and timing is correct
-- Verify accessibility with screen reader
-- Verify reduced motion setting is respected
+- Touch-through on actual device
+- Animation smoothness and timing
+- Accessibility with screen reader
+- Cart screen tour only allows Complete Order button
+- Invoice Preview waits for existing 10-sec feature
+- Highlight positions correct on POS cart bar and Complete Order button

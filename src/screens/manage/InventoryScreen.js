@@ -17,14 +17,23 @@ import * as Haptics from 'expo-haptics';
 import { colors } from '../../styles/colors';
 import productsService from '../../services/ProductsService';
 import LoadingSpinner from '../../components/LoadingSpinner';
-import { useDataSync } from '../../context/DataSyncContext';
+// Phase A Implementation: Replace useDataSync with ProductFetchCoordinator
+import productFetchCoordinator from '../../services/ProductFetchCoordinator';
+// Phase B Implementation: Add UIUpdatePropagator for post-success UI propagation
+import uiUpdatePropagator from '../../services/UIUpdatePropagator';
 import { getProductImageUrl } from '../../utils/imageUtils';
-import useInteractiveTour from '../../hooks/useInteractiveTour';
-import actionDetectorService, { ACTION_TYPES } from '../../services/ActionDetectorService';
-import InteractiveTourOverlay from '../../components/InteractiveTourOverlay';
+// TOUR TEMPORARILY DISABLED
+// import SimpleTourOverlay from '../../components/SimpleTourOverlay';
+// import useSimpleTour from '../../hooks/useSimpleTour';
+import { useStoreSettings } from '../../context/StoreSettingsContext';
 
 const InventoryScreen = ({ isActive, onTourAction }) => {
-  const { saveProducts: syncProducts } = useDataSync();
+  // Use StoreSettingsContext for low stock threshold
+  const { getBusinessSettings } = useStoreSettings();
+  const businessSettings = getBusinessSettings();
+  const lowStockLimit = businessSettings.lowStockThreshold || 10;
+
+  // Phase A Implementation: Remove useDataSync, use ProductFetchCoordinator instead
   const [products, setProducts] = useState([]);
   const [refreshing, setRefreshing] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -35,239 +44,222 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
   const [isUpdating, setIsUpdating] = useState(false);
   const [isLoading, setIsLoading] = useState(true);
   const hasLoadedOnce = useRef(false);
-  
+
   // Track last fetch timestamp for staleness check (API optimization)
   const lastFetchRef = useRef(0);
 
-  // Interactive Tour for Inventory
-  const {
-    showTour,
-    currentStep,
-    stepIndex,
-    totalSteps,
-    showHint,
-    showSkipStep,
-    startTour,
-    nextStep,
-    skipScreen,
-    skipAll,
-    skipStep,
-    completeTour,
-    notifyAction,
-    setOverlayRef,
-    checkAutoStart,
-  } = useInteractiveTour('ManageInventory');
+  // Use ref to store current stock input value to avoid state timing issues
+  const newStockRef = useRef('');
 
+  // Simple Tour for Inventory
+  // TOUR TEMPORARILY DISABLED
+  // const {
+  //     showTour,
+  //     currentStep,
+  //     stepIndex,
+  //     totalSteps,
+  //     isInitialized,
+  //     nextStep,
+  //     skipTour,
+  //     completeTour,
+  //   } = useSimpleTour('ManageInventory', []);
+
+  // TOUR TEMPORARILY DISABLED
   // Ref for InteractiveTourOverlay
-  const overlayRef = useRef(null);
+  // const overlayRef = useRef(null);
 
-  // Set overlay ref when component mounts
-  useEffect(() => {
-    if (overlayRef.current) {
-      setOverlayRef(overlayRef.current);
-    }
-  }, [setOverlayRef]);
+  // Simple tour doesn't need overlay refs - removed setOverlayRef usage
 
-  // Check for auto-start tour when tab becomes active
-  useEffect(() => {
-    const checkTour = async () => {
-      if (isActive && !isLoading) {
-        await checkAutoStart();
-      }
-    };
-    checkTour();
-  }, [isActive, isLoading, checkAutoStart]);
+  // Simple tour doesn't need auto-start functionality - removed checkAutoStart
 
-  // Handle product item tap for tour
-  const handleProductTapWithTour = useCallback((item) => {
-    // Notify tour of product tap
-    if (showTour && currentStep?.actionTarget === 'inventory-product-item') {
-      console.log('🎯 [InventoryScreen] Product item tapped during tour');
-      notifyAction(ACTION_TYPES.TAP, 'inventory-product-item');
-    }
-    
-    // Open stock modal
+  // Handle product item tap - SIMPLIFIED like ManageScreen
+  const handleProductTap = (item) => {
     setSelectedProduct(item);
-    setNewStock(item.stock.toString());
+    // Use stock_quantity first, then stock as fallback
+    const currentStock = item.stock_quantity ?? item.stock ?? 0;
+    setNewStock(currentStock.toString());
     setShowStockModal(true);
-  }, [showTour, currentStep, notifyAction]);
+  };
 
-  // Handle stock quantity input for tour
-  const handleStockInputChange = useCallback((text) => {
-    setNewStock(text);
-    
-    // Notify tour of text input
-    if (showTour && currentStep?.actionTarget === 'stock-quantity-input' && text.length > 0) {
-      console.log('🎯 [InventoryScreen] Stock quantity entered during tour');
-      notifyAction(ACTION_TYPES.TEXT_INPUT, 'stock-quantity-input');
-    }
-  }, [showTour, currentStep, notifyAction]);
-
-  // Handle stock update button tap for tour
-  const handleStockUpdateWithTour = useCallback(() => {
-    // Notify tour of update stock button tap
-    if (showTour && currentStep?.actionTarget === 'update-stock-btn') {
-      console.log('🎯 [InventoryScreen] Update Stock button tapped during tour');
-      notifyAction(ACTION_TYPES.TAP, 'update-stock-btn');
-    }
-    
-    // Call original handler
-    handleStockUpdate();
-  }, [showTour, currentStep, notifyAction]);
-
-  // Mount-based data fetching with simple guard for rapid remount
+  // Phase A Implementation: Initialize ProductFetchCoordinator and load products
   useEffect(() => {
     const now = Date.now();
     const timeSinceLastFetch = now - lastFetchRef.current;
-    
+
     // Simple guard: skip if fetched recently (within 30 seconds)
     if (lastFetchRef.current && timeSinceLastFetch < 30000) {
-      console.log('📦 [Inventory] Mount - data recently fetched, skipping API call');
+      console.log('📦 [InventoryScreen] Mount - data recently fetched, skipping API call');
       return;
     }
-    
-    console.log('📦 [Inventory] Mount - loading products');
-    loadProducts();
-  }, []); // Phase 1 Optimization: Empty dependency array for mount-only behavior
 
-  const loadProducts = async (isRefresh = false) => {
-    if (isRefresh) {
-      setRefreshing(true);
-    } else if (!hasLoadedOnce.current) {
-      setIsLoading(true);
-    }
+    console.log('📦 [InventoryScreen] Initializing ProductFetchCoordinator and loading products');
+    productFetchCoordinator.initialize();
 
+    // Phase B Implementation: Register with UIUpdatePropagator for product updates
+    console.log('📦 [InventoryScreen] Registering with UIUpdatePropagator');
+
+    // Register for UI updates with callback that handles different update types
+    const handleUIUpdate = (updateType, updateData) => {
+      console.log('📦 [InventoryScreen] Received UI update:', { updateType, hasData: !!updateData });
+
+      if (updateType === 'ORDER_SUCCESS') {
+        // Order was created successfully - refresh products to show updated stock
+        console.log('📦 [InventoryScreen] Order success - refreshing products display');
+        refreshProducts(false); // Use cache if available, don't force API call
+      } else {
+        // Other updates (product changes, etc.)
+        refreshProducts(false);
+      }
+    };
+
+    uiUpdatePropagator.registerScreen('InventoryScreen', handleUIUpdate);
+
+    refreshProducts(false); // Use cache if available
+
+    // Phase B Implementation: Cleanup - unregister from UIUpdatePropagator
+    return () => {
+      console.log('📦 [InventoryScreen] Unregistering from UIUpdatePropagator');
+      uiUpdatePropagator.unregisterScreen('InventoryScreen');
+    };
+  }, [refreshProducts]);
+  const refreshProducts = useCallback(async (forceRefresh = false) => {
     try {
-      // First, load from AsyncStorage for immediate display
-      if (!hasLoadedOnce.current) {
-        try {
-          const storedProducts = await AsyncStorage.getItem('products');
-          if (storedProducts) {
-            const cachedProducts = JSON.parse(storedProducts);
-            setProducts(cachedProducts);
-            console.log('📦 [Inventory] Loaded cached products:', cachedProducts.length);
-            
-            // If we have cached data, hide loading immediately
-            if (!isRefresh) {
-              setIsLoading(false);
-            }
-          }
-        } catch (storageError) {
-          console.error('Error loading cached products:', storageError);
-        }
+      if (forceRefresh) {
+        setRefreshing(true);
+      } else if (!hasLoadedOnce.current) {
+        setIsLoading(true);
       }
 
-      // Then load from backend with timeout
-      const timeoutPromise = new Promise((_, reject) => 
-        setTimeout(() => reject(new Error('Request timeout')), 10000)
-      );
-      
-      const productsPromise = productsService.getProducts();
-      const productsData = await Promise.race([productsPromise, timeoutPromise]);
-      
-      setProducts(productsData);
-      
-      // Update AsyncStorage for future use
-      await AsyncStorage.setItem('products', JSON.stringify(productsData));
-      
-      // Update last fetch timestamp (API optimization)
+      console.log('📦 [InventoryScreen] Fetching products via ProductFetchCoordinator:', { forceRefresh });
+
+      const fetchedProducts = await productFetchCoordinator.fetchProducts({
+        forceRefresh,
+        screenName: 'InventoryScreen',
+        apiOptions: {} // Pass any needed API options
+      });
+
+      setProducts(fetchedProducts);
+
+      // Update AsyncStorage for compatibility
+      await AsyncStorage.setItem('products', JSON.stringify(fetchedProducts));
+
+      // Update last fetch timestamp
       lastFetchRef.current = Date.now();
-      
-      console.log('📦 [Inventory] Loaded fresh products:', productsData.length);
+
+      console.log('📦 [InventoryScreen] Products updated:', fetchedProducts.length);
+
     } catch (error) {
-      console.error('Error loading products:', error);
-      
+      console.error('📦 [InventoryScreen] Error fetching products:', error);
+
       // Fallback to AsyncStorage if backend fails and we haven't loaded cache yet
       if (!hasLoadedOnce.current) {
         try {
           const storedProducts = await AsyncStorage.getItem('products');
           if (storedProducts) {
             setProducts(JSON.parse(storedProducts));
-            console.log('📦 [Inventory] Fallback to cached products');
+            console.log('📦 [InventoryScreen] Fallback to cached products');
           }
         } catch (storageError) {
           console.error('Error loading from storage:', storageError);
         }
       }
     } finally {
-      if (isRefresh) {
+      if (forceRefresh) {
         setRefreshing(false);
       } else if (!hasLoadedOnce.current) {
         setIsLoading(false);
+        hasLoadedOnce.current = true;
       }
     }
-  };
+  }, []);
+
+
 
   const onRefresh = () => {
-    loadProducts(true);
-    // Note: lastFetchRef is updated inside loadProducts() after successful fetch
+    // Phase A Implementation: Use ProductFetchCoordinator for manual refresh
+    refreshProducts(true); // forceRefresh = true for manual refresh
   };
 
   const updateStock = async (productId, newStockValue) => {
     setIsUpdating(true);
     try {
       const stockQuantity = parseInt(newStockValue);
-      
+
       // Update via backend API
-      await productsService.updateProduct(productId, {
+      const updatedProduct = await productsService.updateProduct(productId, {
         stock_quantity: stockQuantity
       });
-      
-      // FIXED: Automatically refresh products from backend with better error handling
-      console.log('🔄 Auto-refreshing inventory after stock update...');
+
+      // Phase B Implementation: Post-success cache updates for product update
+      console.log('✅ [InventoryScreen] Product stock updated successfully - updating cache and propagating UI updates');
+
+      // 1. Update ProductFetchCoordinator cache (post-success only)
+      if (updatedProduct) {
+        productFetchCoordinator.onProductUpdated(productId, updatedProduct);
+      } else {
+        // If updateProduct doesn't return the updated product, use the update data
+        productFetchCoordinator.onProductUpdated(productId, { stock_quantity: stockQuantity });
+      }
+
+      // 2. Propagate UI updates to all registered screens
+      uiUpdatePropagator.propagateProductUpdate();
+
+      // Phase A Implementation: Use ProductFetchCoordinator for refresh after stock update
+      console.log('🔄 Auto-refreshing inventory after stock update via ProductFetchCoordinator...');
       try {
-        const freshProducts = await productsService.getProducts();
+        const freshProducts = await productFetchCoordinator.fetchProducts({
+          forceRefresh: true, // Force refresh to get latest data
+          screenName: 'InventoryScreen',
+          apiOptions: {}
+        });
+
         setProducts(freshProducts);
-        
+
         // Update AsyncStorage for offline access
         await AsyncStorage.setItem('products', JSON.stringify(freshProducts));
-        
-        // FIXED: Notify DataSyncContext to update other screens (ManageScreen Products tab)
-        await syncProducts(freshProducts);
-        console.log('✅ DataSyncContext notified of stock update');
-        
+
+        // Notify ProductFetchCoordinator of the stock update for cache consistency
+        productFetchCoordinator.onProductUpdated(productId, { stock_quantity: stockQuantity });
+
         console.log('✅ Inventory auto-refresh successful');
-        
+
         // Show success feedback
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
         Alert.alert('Success', 'Stock updated successfully');
-        
+
       } catch (refreshError) {
         console.error('❌ Auto-refresh failed:', refreshError);
-        
+
         // FALLBACK: Update local state optimistically if refresh fails
-        const updatedProducts = products.map(product => 
-          product.id === productId 
+        const updatedProducts = products.map(product =>
+          product.id === productId
             ? { ...product, stock: stockQuantity, stock_quantity: stockQuantity }
             : product
         );
         setProducts(updatedProducts);
-        
+
         // Update AsyncStorage with optimistic update
         await AsyncStorage.setItem('products', JSON.stringify(updatedProducts));
-        
-        // FIXED: Also notify DataSyncContext with optimistic update
-        await syncProducts(updatedProducts);
-        
+
         // Show user feedback about refresh failure but successful update
         Alert.alert(
-          'Stock Updated', 
+          'Stock Updated',
           'Stock updated successfully. The inventory list has been refreshed with the latest data.',
           [
             { text: 'OK', style: 'default' },
-            { 
-              text: 'Refresh Again', 
+            {
+              text: 'Refresh Again',
               onPress: () => {
-                // Phase 1 Optimization: Single refresh call, no duplicate
-                loadProducts(true);
+                // Phase A Implementation: Use ProductFetchCoordinator for refresh
+                refreshProducts(true);
               }
             }
           ]
         );
-        
+
         Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       }
-      
+
     } catch (error) {
       console.error('Error updating stock:', error);
       Alert.alert('Error', 'Failed to update stock. Please try again.');
@@ -277,13 +269,22 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
     }
   };
 
+
   const handleStockUpdate = () => {
-    if (!newStock || isNaN(parseInt(newStock)) || parseInt(newStock) < 0) {
-      Alert.alert('Invalid Input', 'Please enter a valid stock quantity');
+    // Simple validation like ManageScreen
+    if (!newStock || newStock.trim() === '') {
+      Alert.alert('Invalid Input', 'Please enter a stock quantity.');
       return;
     }
 
-    updateStock(selectedProduct.id, newStock);
+    const stockValue = parseInt(newStock);
+    if (isNaN(stockValue) || stockValue < 0) {
+      Alert.alert('Invalid Input', 'Please enter a valid stock quantity (0 or greater).');
+      return;
+    }
+
+    // Update stock
+    updateStock(selectedProduct.id, stockValue);
     setShowStockModal(false);
     setSelectedProduct(null);
     setNewStock('');
@@ -303,7 +304,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
     // Apply stock filter
     switch (filterType) {
       case 'low_stock':
-        filtered = filtered.filter(product => product.stock > 0 && product.stock <= 5);
+        filtered = filtered.filter(product => product.stock > 0 && product.stock <= lowStockLimit);
         break;
       case 'out_of_stock':
         filtered = filtered.filter(product => product.stock === 0);
@@ -317,20 +318,22 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
 
   const getStockStatus = (stock) => {
     if (stock === 0) return { text: 'Out of Stock', color: colors.error.main, bg: colors.error.background };
-    if (stock <= 5) return { text: 'Low Stock', color: colors.warning.main, bg: colors.warning.background };
+    if (stock <= lowStockLimit) return { text: 'Low Stock', color: colors.warning.main, bg: colors.warning.background };
     return { text: 'In Stock', color: colors.success.main, bg: colors.success.background };
   };
 
   const renderProduct = ({ item }) => {
-    const status = getStockStatus(item.stock);
+    // Use stock_quantity first, then stock as fallback for consistency
+    const currentStock = item.stock_quantity || item.stock || 0;
+    const status = getStockStatus(currentStock);
     const imageUrl = getProductImageUrl(item);
 
     return (
       <View style={styles.productCard}>
         <View style={styles.productImage}>
           {imageUrl ? (
-            <Image 
-              source={{ uri: imageUrl }} 
+            <Image
+              source={{ uri: imageUrl }}
               style={styles.productImageStyle}
               onError={(error) => {
                 console.log('❌ [Inventory] Image load error:', error.nativeEvent.error);
@@ -342,7 +345,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
             <Ionicons name="cube-outline" size={24} color={colors.text.secondary} />
           )}
         </View>
-        
+
         <View style={styles.productInfo}>
           <Text style={styles.productName}>{item.name}</Text>
           <Text style={styles.productCategory}>{item.category}</Text>
@@ -350,16 +353,16 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
         </View>
 
         <View style={styles.stockInfo}>
-          <Text style={styles.stockQuantity}>{item.stock}</Text>
+          <Text style={styles.stockQuantity}>{currentStock}</Text>
           <View style={[styles.statusBadge, { backgroundColor: status.bg }]}>
             <Text style={[styles.statusText, { color: status.color }]}>
               {status.text}
             </Text>
           </View>
-          
+
           <TouchableOpacity
             style={styles.updateButton}
-            onPress={() => handleProductTapWithTour(item)}
+            onPress={() => handleProductTap(item)}
             activeOpacity={0.7}
           >
             <Text style={styles.updateButtonText}>Update</Text>
@@ -392,7 +395,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
       <Ionicons name="cube-outline" size={64} color={colors.text.secondary} />
       <Text style={styles.emptyTitle}>No Products Found</Text>
       <Text style={styles.emptyText}>
-        {searchQuery || filterType !== 'all' 
+        {searchQuery || filterType !== 'all'
           ? 'Try adjusting your search or filters'
           : 'Add products to start managing inventory'
         }
@@ -406,12 +409,13 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
     <View style={styles.container}>
       {/* Loading Overlay for initial load and stock updates */}
       {(isLoading || isUpdating) && <LoadingSpinner />}
-      
+
       {/* Search Bar */}
       <View style={styles.searchContainer}>
         <TextInput
           style={styles.searchInput}
           placeholder="Search products..."
+          placeholderTextColor={colors.text.secondary}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -468,17 +472,19 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
               <View style={styles.productPreview}>
                 <Text style={styles.productPreviewEmoji}>{selectedProduct.emoji}</Text>
                 <Text style={styles.productPreviewName}>{selectedProduct.name}</Text>
-                <Text style={styles.currentStock}>Current Stock: {selectedProduct.stock}</Text>
+                <Text style={styles.currentStock}>
+                  Current Stock: {selectedProduct.stock_quantity ?? selectedProduct.stock ?? 0}
+                </Text>
               </View>
             )}
 
             <TextInput
               style={styles.stockInput}
               placeholder="Enter new stock quantity"
+              placeholderTextColor={colors.text.secondary}
               value={newStock}
-              onChangeText={handleStockInputChange}
+              onChangeText={setNewStock}
               keyboardType="numeric"
-              autoFocus={true}
             />
 
             <View style={styles.modalButtons}>
@@ -490,7 +496,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.saveButton}
-                onPress={handleStockUpdateWithTour}
+                onPress={handleStockUpdate}
               >
                 <Text style={styles.saveButtonText}>Update Stock</Text>
               </TouchableOpacity>
@@ -499,8 +505,9 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
         </View>
       </Modal>
 
+      {/* TOUR TEMPORARILY DISABLED */}
       {/* Interactive App Tour Overlay */}
-      <InteractiveTourOverlay
+      {/* <InteractiveTourOverlay
         ref={overlayRef}
         visible={showTour}
         currentStep={currentStep}
@@ -513,7 +520,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
         onActionComplete={nextStep}
         showHint={showHint}
         showSkipStep={showSkipStep}
-      />
+      /> */}
     </View>
   );
 };
