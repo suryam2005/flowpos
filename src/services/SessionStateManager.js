@@ -466,11 +466,28 @@ class SessionStateManager {
     console.log(`📱 Handling remote logout for session: ${sessionId}`);
     
     try {
+      // CRITICAL FIX: Actually call the logout API instead of just refreshing data
+      console.log(`🚪 Calling logout device API for session: ${sessionId}`);
+      
+      const response = await networkService.apiCall(`/devices/sessions/${sessionId}`, {
+        method: 'DELETE'
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `HTTP ${response.status}: Failed to logout device`);
+      }
+
+      const result = await response.json();
+      console.log('✅ Logout device API response:', result);
+
       // Remove specific session from cache
       this.sessionCache.delete(sessionId);
       
-      // Fetch fresh data
-      await this.handleSessionOperation('remote_logout', { sessionId });
+      // Invalidate cache and fetch fresh data after successful logout
+      await this.handleSessionOperation('remote_logout', { sessionId, result });
+      
+      return result;
       
     } catch (error) {
       console.error('❌ Error handling remote logout:', error);

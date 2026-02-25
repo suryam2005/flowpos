@@ -45,11 +45,14 @@ const SignupScreen = ({ navigation }) => {
       newErrors.name = 'Name must be at least 2 characters';
     }
 
-    // Phone validation
+    // Phone validation - must be exactly 10 digits
+    const phoneDigits = formData.phone.trim().replace(/\D/g, ''); // Remove non-digits
     if (!formData.phone.trim()) {
       newErrors.phone = 'Phone number is required';
-    } else if (formData.phone.trim().length < 10) {
-      newErrors.phone = 'Phone number must be at least 10 digits';
+    } else if (phoneDigits.length !== 10) {
+      newErrors.phone = 'Phone number must be exactly 10 digits';
+    } else if (!/^[6-9]/.test(phoneDigits)) {
+      newErrors.phone = 'Phone number must start with 6, 7, 8, or 9';
     }
 
 

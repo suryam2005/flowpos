@@ -14,20 +14,12 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../styles/colors';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
-import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const ChangePasswordScreen = ({ navigation }) => {
   const { forgotPassword, user } = useAuth();
   
   const [email, setEmail] = useState(user?.email || '');
   const [isLoading, setIsLoading] = useState(false);
-
-  // Prevent back navigation during password change process
-  useBackPrevention(isLoading, {
-    message: 'Password change is in progress. Please wait for completion to avoid security issues.',
-    title: 'Updating Password',
-    hardBlock: true // No cancellation allowed during password operations
-  });
 
   const handleSendOTP = async () => {
     if (!email.trim()) {

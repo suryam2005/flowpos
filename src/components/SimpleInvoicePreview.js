@@ -9,6 +9,7 @@ import {
   Share,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Svg, { Circle, Path, Defs, LinearGradient, Stop } from 'react-native-svg';
 import * as Haptics from 'expo-haptics';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -354,7 +355,7 @@ const SimpleInvoicePreview = ({
   //
   //     if (result.success) {
   //       Alert.alert(
-  //         'Invoice Sent Automatically! ✅',
+  //         'Invoice Sent Automatically!',
   //         `Invoice has been sent to ${data.customerName} via FlowPOS WhatsApp successfully.`,
   //         [{ text: 'Great!', style: 'default' }]
   //       );
@@ -438,7 +439,7 @@ const SimpleInvoicePreview = ({
       if (result.success) {
         const methodText = result.method === 'flowpos' ? 'FlowPOS WhatsApp' : 'Device WhatsApp';
         Alert.alert(
-          'Invoice Sent! ✅',
+          'Invoice Sent Successfully!',
           `Invoice has been sent to ${data.customerName} via ${methodText} successfully.`,
           [{ text: 'Great!', style: 'default' }]
         );
@@ -580,9 +581,25 @@ const SimpleInvoicePreview = ({
         <View ref={invoiceRef} style={styles.invoiceCard}>
           {/* Success Icon */}
           <View style={styles.successIconContainer}>
-            <View style={styles.successIcon}>
-              <Icon name="checkmark" size={48} color="#ffffff" />
-            </View>
+            <Svg width={80} height={80} viewBox="0 0 128 128">
+              {/* Green Circle with gradient effect */}
+              <Defs>
+                <LinearGradient id="successGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                  <Stop offset="0%" stopColor="#00E676" stopOpacity="1" />
+                  <Stop offset="100%" stopColor="#00C853" stopOpacity="1" />
+                </LinearGradient>
+              </Defs>
+              <Circle cx="64" cy="64" r="60" fill="url(#successGradient)" />
+              {/* White Check Mark with rounded caps */}
+              <Path
+                d="M38 66 L56 84 L92 44"
+                fill="none"
+                stroke="#FFFFFF"
+                strokeWidth="12"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </Svg>
           </View>
 
           {/* Thank You Message */}
@@ -806,15 +823,8 @@ const styles = StyleSheet.create({
   },
   successIconContainer: {
     alignItems: 'center',
-    marginBottom: 20,
-  },
-  successIcon: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#10b981',
-    alignItems: 'center',
-    justifyContent: 'center',
+    marginBottom: 16,
+    marginTop: 8,
   },
   thankYouSection: {
     alignItems: 'center',

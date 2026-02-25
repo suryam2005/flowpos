@@ -58,11 +58,6 @@ const HelpSupportScreen = ({ navigation }) => {
       answer: 'Go to Manage → Store Settings → scroll to UPI Settings. Add your UPI ID (e.g., yourname@upi or yourname@paytm). You can add up to 3 UPI IDs for different payment apps. When processing orders, select "QR Pay" to generate a dynamic payment QR code.',
     },
     {
-      id: 'auto-payment',
-      question: 'What is Auto Payment Detection?',
-      answer: 'When enabled in Settings, FlowPOS can automatically detect UPI payment confirmations from your phone\'s notifications/SMS. After showing the QR code, the app listens for payment confirmation and auto-completes the order when payment is received. Requires notification permissions.',
-    },
-    {
       id: 'whatsapp-invoice',
       question: 'How do I send invoices via WhatsApp?',
       answer: 'After completing an order, you can share the invoice via WhatsApp. Two methods available: 1) Device WhatsApp - opens WhatsApp app with pre-filled message, 2) FlowPOS WhatsApp - sends automatically via backend (requires Twilio setup). Configure in Settings → WhatsApp Setup.',

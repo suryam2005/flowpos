@@ -37,7 +37,7 @@ import WhatsAppSetupScreen from './src/screens/WhatsAppSetupScreen';
 import InvoiceScreen from './src/screens/InvoiceScreen';
 import SimpleInvoicePreviewScreen from './src/screens/SimpleInvoicePreviewScreen';
 import { CartProvider } from './src/context/CartContext';
-import { AuthProvider } from './src/context/AuthContext';
+import { AuthProvider, useAuth } from './src/context/AuthContext';
 import { DataSyncProvider } from './src/context/DataSyncContext';
 import { ThemeProvider } from './src/context/ThemeContext';
 import { SubscriptionProvider } from './src/context/SubscriptionContext';
@@ -182,14 +182,28 @@ function MainTabs() {
   );
 }
 
-export default function App() {
-  const [appState, setAppState] = useState(null); // null, 'welcome', 'setup', 'productOnboarding', 'main'
+// Navigation wrapper that listens to auth state changes
+function AppNavigator() {
+  const [appState, setAppState] = useState(null);
+  const { isAuthenticated, isLoading } = useAuth();
   const { isTablet } = getDeviceInfo();
   const navigationRef = React.useRef(null);
 
+  // Check app state on mount
   useEffect(() => {
     checkAppState();
   }, []);
+
+  // Re-check app state when authentication changes
+  useEffect(() => {
+    if (!isLoading) {
+      console.log('🔄 Auth state changed, re-checking app state...');
+      console.log('   isAuthenticated:', isAuthenticated);
+      console.log('   isLoading:', isLoading);
+      console.log('   Current route:', navigationRef.current?.getCurrentRoute()?.name);
+      checkAppState();
+    }
+  }, [isAuthenticated, isLoading]);
 
   // Set up notification response listener for handling notification taps
   useEffect(() => {
@@ -231,7 +245,26 @@ export default function App() {
       // If not authenticated, always show welcome screen
       if (!isAuthenticated) {
         console.log('👋 No authentication found - showing welcome screen');
+        console.log('   Setting appState to: welcome');
         setAppState('welcome');
+        
+        // Navigate to Welcome if we're not already there
+        if (navigationRef.current) {
+          const currentRoute = navigationRef.current.getCurrentRoute();
+          console.log('   Current route:', currentRoute?.name);
+          if (currentRoute && currentRoute.name !== 'Welcome') {
+            console.log('🔄 Navigating to Welcome screen from:', currentRoute.name);
+            navigationRef.current.reset({
+              index: 0,
+              routes: [{ name: 'Welcome' }],
+            });
+            console.log('✅ Navigation reset complete - should be on Welcome screen now');
+          } else {
+            console.log('✅ Already on Welcome screen, no navigation needed');
+          }
+        } else {
+          console.log('⚠️ navigationRef not available yet');
+        }
         return;
       }
 
@@ -352,7 +385,7 @@ export default function App() {
   };
 
   // Show loading state while checking
-  if (appState === null) {
+  if (appState === null || isLoading) {
     return <LoadingScreen />;
   }
 
@@ -367,6 +400,59 @@ export default function App() {
   };
 
   return (
+    <NavigationContainer ref={navigationRef}>
+      <StatusBar style="dark" />
+      <Stack.Navigator
+        screenOptions={{ headerShown: false }}
+        initialRouteName={getInitialRoute()}
+      >
+        <Stack.Screen name="Welcome" component={WelcomeScreen} />
+        <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
+        <Stack.Screen name="BusinessPreferencesOnboarding" component={BusinessPreferencesOnboardingScreen} />
+        <Stack.Screen name="Main" component={MainTabs} />
+        <Stack.Screen
+          name="Cart"
+          component={isTablet ? TabletCartScreen : CartScreen}
+        />
+        <Stack.Screen name="Invoice" component={InvoiceScreen} />
+        <Stack.Screen name="SimpleInvoicePreview" component={SimpleInvoicePreviewScreen} />
+        <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
+        <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
+        <Stack.Screen name="Settings" component={SettingsScreen} />
+        <Stack.Screen name="Profile" component={ProfileScreen} />
+        <Stack.Screen name="EditProfile" component={EditProfileScreen} />
+        <Stack.Screen name="StoreInformation" component={StoreInformationScreen} />
+        <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
+        <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTPScreen} />
+        <Stack.Screen name="Notifications" component={NotificationsScreen} />
+        <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
+        <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
+        <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
+        <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
+        <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+        <Stack.Screen name="DataExport" component={DataExportScreen} />
+        <Stack.Screen name="PDFReports" component={PDFReportsScreen} />
+        <Stack.Screen name="StorageManagement" component={StorageManagementScreen} />
+        <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
+
+        {/* Auth Screens */}
+        <Stack.Screen name="Signup" component={SignupScreen} />
+        <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
+        <Stack.Screen name="PasswordSetup" component={PasswordSetupScreen} />
+        <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
+        <Stack.Screen name="Login" component={LoginScreen} />
+
+        {/* Forgot Password Screens */}
+        <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
+        <Stack.Screen name="ResetPasswordOTP" component={ResetPasswordOTPScreen} />
+        <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
+      </Stack.Navigator>
+    </NavigationContainer>
+  );
+}
+
+export default function App() {
+  return (
     <ThemeProvider>
       <AuthProvider>
         <StoreSettingsProvider>
@@ -374,54 +460,7 @@ export default function App() {
             <AppSettingsProvider>
               <DataSyncProvider>
                 <CartProvider>
-                  <NavigationContainer ref={navigationRef}>
-                    <StatusBar style="dark" />
-                    <Stack.Navigator
-                      screenOptions={{ headerShown: false }}
-                      initialRouteName={getInitialRoute()}
-                    >
-                      <Stack.Screen name="Welcome" component={WelcomeScreen} />
-                      <Stack.Screen name="ProductOnboarding" component={ProductOnboardingScreen} />
-                      <Stack.Screen name="BusinessPreferencesOnboarding" component={BusinessPreferencesOnboardingScreen} />
-                      <Stack.Screen name="Main" component={MainTabs} />
-                      <Stack.Screen
-                        name="Cart"
-                        component={isTablet ? TabletCartScreen : CartScreen}
-                      />
-                      <Stack.Screen name="Invoice" component={InvoiceScreen} />
-                      <Stack.Screen name="SimpleInvoicePreview" component={SimpleInvoicePreviewScreen} />
-                      <Stack.Screen name="OrderDetails" component={OrderDetailsScreen} />
-                      <Stack.Screen name="AdvancedAnalytics" component={AdvancedAnalyticsScreen} />
-                      <Stack.Screen name="Settings" component={SettingsScreen} />
-                      <Stack.Screen name="Profile" component={ProfileScreen} />
-                      <Stack.Screen name="EditProfile" component={EditProfileScreen} />
-                      <Stack.Screen name="StoreInformation" component={StoreInformationScreen} />
-                      <Stack.Screen name="ChangePassword" component={ChangePasswordScreen} />
-                      <Stack.Screen name="ChangePasswordOTP" component={ChangePasswordOTPScreen} />
-                      <Stack.Screen name="Notifications" component={NotificationsScreen} />
-                      <Stack.Screen name="AccountSettings" component={AccountSettingsScreen} />
-                      <Stack.Screen name="PrivacySecurity" component={PrivacySecurityScreen} />
-                      <Stack.Screen name="HelpSupport" component={HelpSupportScreen} />
-                      <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreen} />
-                      <Stack.Screen name="Subscription" component={SubscriptionScreen} />
-                      <Stack.Screen name="DataExport" component={DataExportScreen} />
-                      <Stack.Screen name="PDFReports" component={PDFReportsScreen} />
-                      <Stack.Screen name="StorageManagement" component={StorageManagementScreen} />
-                      <Stack.Screen name="PerformanceInsights" component={PerformanceInsightsScreen} />
-
-                      {/* Auth Screens */}
-                      <Stack.Screen name="Signup" component={SignupScreen} />
-                      <Stack.Screen name="OTPVerification" component={OTPVerificationScreen} />
-                      <Stack.Screen name="PasswordSetup" component={PasswordSetupScreen} />
-                      <Stack.Screen name="StoreSetup" component={StoreSetupScreen} />
-                      <Stack.Screen name="Login" component={LoginScreen} />
-
-                      {/* Forgot Password Screens */}
-                      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
-                      <Stack.Screen name="ResetPasswordOTP" component={ResetPasswordOTPScreen} />
-                      <Stack.Screen name="NewPassword" component={NewPasswordScreen} />
-                    </Stack.Navigator>
-                  </NavigationContainer>
+                  <AppNavigator />
                 </CartProvider>
               </DataSyncProvider>
             </AppSettingsProvider>

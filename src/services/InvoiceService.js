@@ -218,13 +218,13 @@ class InvoiceService {
       
       // Fallback to AsyncStorage if cache unavailable (backward compatibility)
       const sendInvoiceEnabledSetting = await AsyncStorage.getItem('sendInvoiceEnabled');
-      const sendInvoiceEnabled = sendInvoiceEnabledSetting !== null ? JSON.parse(sendInvoiceEnabledSetting) : true;
+      const sendInvoiceEnabled = sendInvoiceEnabledSetting !== null ? JSON.parse(sendInvoiceEnabledSetting) : false; // Default OFF for new users
       console.log('📄 [InvoiceService] sendInvoiceEnabled fallback to AsyncStorage:', sendInvoiceEnabled);
       return sendInvoiceEnabled;
     } catch (error) {
       console.error('❌ [InvoiceService] Error reading sendInvoiceEnabled:', error);
-      // Return true as default to maintain existing behavior if setting unavailable
-      return true;
+      // Return false as default to maintain new user behavior (OFF by default)
+      return false;
     }
   }
 

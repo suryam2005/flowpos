@@ -70,7 +70,7 @@ const ManageScreen = ({ navigation, route }) => {
   const [userInfo, setUserInfo] = useState(null);
   const [saving, setSaving] = useState(false);
 
-  const [activeTab, setActiveTab] = useState('Products');
+  const [activeTab, setActiveTab] = useState('Inventory');
 
   // Simple tour implementation
   // const tourSteps = getSimpleTourSteps('Manage');
@@ -105,10 +105,13 @@ const ManageScreen = ({ navigation, route }) => {
     tags: [],
     image: null,
   });
+  
+  // Track if user has interacted with tags (to prevent auto-generation override)
+  const [tagsModified, setTagsModified] = useState(false);
 
   const [businessType, setBusinessType] = useState('restaurant');
 
-  const tabs = ['Products', 'Inventory', 'Store Settings'];
+  const tabs = ['Inventory', 'Products', 'Store Settings'];
 
   // Handle initialTab parameter from navigation (e.g., from notifications)
   useEffect(() => {
@@ -633,6 +636,7 @@ const ManageScreen = ({ navigation, route }) => {
       tags: [],
       image: null,
     });
+    setTagsModified(false); // Reset tags modified flag for new product
     setModalVisible(true);
   };
 
@@ -663,6 +667,7 @@ const ManageScreen = ({ navigation, route }) => {
       tags: product.tags || [],
       image: product.image_url || product.image || null,
     });
+    setTagsModified(true); // Editing existing product - tags already set
     setModalVisible(true);
   };
 
@@ -773,20 +778,22 @@ const ManageScreen = ({ navigation, route }) => {
       }
     }
 
-    // For NEW products only: auto-generate tags if none provided
+    // For NEW products only: Keep tags empty if user hasn't provided any
     // For EXISTING products: respect user's choice (even if they removed all tags)
-    let finalTags = formData.tags;
+    let finalTags = Array.isArray(formData.tags) 
+      ? formData.tags.filter(tag => tag && typeof tag === 'string' && tag.trim().length > 0)
+      : [];
+      
     console.log('🏷️ [MANAGE] Tags before save:');
     console.log('  formData.tags:', JSON.stringify(formData.tags));
+    console.log('  formData.tags type:', typeof formData.tags);
+    console.log('  formData.tags isArray:', Array.isArray(formData.tags));
+    console.log('  filtered finalTags:', JSON.stringify(finalTags));
     console.log('  isEditing:', !!editingProduct);
+    console.log('  tagsModified:', tagsModified);
 
-    if (!editingProduct && finalTags.length === 0) {
-      // Only auto-generate for NEW products with no tags
-      finalTags = generateProductTags(formData.name.trim(), businessType);
-      console.log('  Auto-generated tags for new product:', JSON.stringify(finalTags));
-    } else {
-      console.log('  Using user-provided tags (no auto-generation):', JSON.stringify(finalTags));
-    }
+    // REMOVED: Auto-generation of tags - user must add tags manually
+    console.log('  Using user-provided tags only (no auto-generation):', JSON.stringify(finalTags));
 
     try {
       console.log('INSIDE TRY BLOCK - editingProduct:', editingProduct?.id);
@@ -1350,6 +1357,7 @@ const ManageScreen = ({ navigation, route }) => {
                       console.log('  newTags:', JSON.stringify(newTags));
                       console.log('  newTags.length:', newTags.length);
                       setFormData(prev => ({ ...prev, tags: newTags }));
+                      setTagsModified(true); // User has modified tags
                     }}
                     productName={formData.name}
                     businessType={businessType}

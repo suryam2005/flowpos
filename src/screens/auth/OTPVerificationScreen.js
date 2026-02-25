@@ -33,13 +33,12 @@ const OTPVerificationScreen = ({ navigation, route }) => {
   const inputRefs = useRef([]);
   const timerRef = useRef(null);
 
-  // Block back navigation ONLY when not verified yet
-  // Once OTP is verified, allow navigation to proceed normally
+  // Back prevention - active until OTP is verified
   useBackPrevention(!isVerified, {
-    message: 'Please complete OTP verification. Going back will require you to start the signup process again.',
-    title: 'Complete Verification',
-    hardBlock: true, // Hard block until verified
+    title: 'OTP Verification in Progress',
+    message: 'Please complete the OTP verification to continue. Going back will cancel the signup process.',
     showAlert: true,
+    hardBlock: false,
   });
 
   // Single unified timer with expiry handling

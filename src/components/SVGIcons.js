@@ -220,7 +220,7 @@ const SVGIcons = {
     </View>
   ),
 
-  // Checkmark icon
+  // Checkmark icon - REDESIGNED to look like ✅ emoji
   CheckmarkIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -228,26 +228,143 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
+      {/* ✅ CHECKMARK - Short vertical stroke */}
       <View style={{
-        width: size * 0.3,
-        height: 2,
+        width: size * 0.08,
+        height: size * 0.25,
         backgroundColor: color,
+        borderRadius: size * 0.04,
         transform: [{ rotate: '45deg' }],
         position: 'absolute',
-        left: size * 0.2,
-        top: size * 0.6
+        left: size * 0.35,
+        top: size * 0.45
       }} />
+      {/* ✅ CHECKMARK - Long diagonal stroke */}
       <View style={{
-        width: size * 0.6,
-        height: 2,
+        width: size * 0.08,
+        height: size * 0.45,
         backgroundColor: color,
+        borderRadius: size * 0.04,
         transform: [{ rotate: '-45deg' }],
         position: 'absolute',
-        right: size * 0.1,
-        top: size * 0.4
+        right: size * 0.28,
+        top: size * 0.28
       }} />
     </View>
   ),
+
+  // Success Circle Icon - REDESIGNED to look like ✅ emoji
+  SuccessCircleIcon: ({ size = 20, color = '#10B981', style }) => (
+    <View style={[{
+      width: size,
+      height: size,
+      justifyContent: 'center',
+      alignItems: 'center'
+    }, style]}>
+      {/* Circle background */}
+      <View style={{
+        width: size,
+        height: size,
+        borderRadius: size / 2,
+        backgroundColor: color,
+        justifyContent: 'center',
+        alignItems: 'center'
+      }}>
+        {/* ✅ WHITE CHECKMARK - Short vertical stroke */}
+        <View style={{
+          width: size * 0.08,
+          height: size * 0.25,
+          backgroundColor: '#ffffff',
+          borderRadius: size * 0.04,
+          transform: [{ rotate: '45deg' }],
+          position: 'absolute',
+          left: size * 0.35,
+          top: size * 0.45
+        }} />
+        {/* ✅ WHITE CHECKMARK - Long diagonal stroke */}
+        <View style={{
+          width: size * 0.08,
+          height: size * 0.45,
+          backgroundColor: '#ffffff',
+          borderRadius: size * 0.04,
+          transform: [{ rotate: '-45deg' }],
+          position: 'absolute',
+          right: size * 0.28,
+          top: size * 0.28
+        }} />
+      </View>
+    </View>
+  ),
+
+  // Large Success Icon - Professional thick checkmark with 3D depth
+  // Based on SVG: viewBox="0 0 128 128", path="M38 66 L56 84 L92 44", stroke-width="12"
+  LargeSuccessIcon: ({ size = 80, color = '#00C853', style }) => {
+    // Scale factor from 128px viewBox to actual size
+    const scale = size / 128;
+    const strokeWidth = 12 * scale; // Thick stroke as specified in SVG
+    
+    return (
+      <View style={[{
+        width: size,
+        height: size,
+        justifyContent: 'center',
+        alignItems: 'center'
+      }, style]}>
+        {/* Green circle with subtle shadow */}
+        <View style={{
+          width: size,
+          height: size,
+          borderRadius: size / 2,
+          backgroundColor: color,
+          justifyContent: 'center',
+          alignItems: 'center',
+          shadowColor: '#000000',
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.25,
+          shadowRadius: 8,
+          elevation: 8
+        }}>
+          {/* Left stroke of checkmark: from (38,66) to (56,84) */}
+          {/* Length = sqrt((56-38)^2 + (84-66)^2) = sqrt(324+324) = 25.46px */}
+          <View style={{
+            width: strokeWidth,
+            height: 25.46 * scale,
+            backgroundColor: '#FFFFFF',
+            borderRadius: strokeWidth / 2,
+            transform: [{ rotate: '45deg' }],
+            position: 'absolute',
+            left: 38 * scale + (18 * scale / 2) - (strokeWidth / 2),
+            top: 66 * scale + (18 * scale / 2) - (25.46 * scale / 2),
+            // 3D depth effect - inner shadow simulation
+            shadowColor: '#000000',
+            shadowOffset: { width: 1 * scale, height: 1 * scale },
+            shadowOpacity: 0.2,
+            shadowRadius: 2 * scale,
+            elevation: 2
+          }} />
+          
+          {/* Right stroke of checkmark: from (56,84) to (92,44) */}
+          {/* Length = sqrt((92-56)^2 + (44-84)^2) = sqrt(1296+1600) = 53.85px */}
+          <View style={{
+            width: strokeWidth,
+            height: 53.85 * scale,
+            backgroundColor: '#FFFFFF',
+            borderRadius: strokeWidth / 2,
+            transform: [{ rotate: '-48deg' }],
+            position: 'absolute',
+            left: 56 * scale + (36 * scale / 2) - (strokeWidth / 2),
+            top: 84 * scale - (40 * scale / 2) - (53.85 * scale / 2),
+            // 3D depth effect - inner shadow simulation
+            shadowColor: '#000000',
+            shadowOffset: { width: 1 * scale, height: 1 * scale },
+            shadowOpacity: 0.2,
+            shadowRadius: 2 * scale,
+            elevation: 2
+          }} />
+        </View>
+      </View>
+    );
+  },
 
   // Person icon
   PersonIcon: ({ size = 20, color = '#000', style }) => (
@@ -496,7 +613,7 @@ const SVGIcons = {
     </View>
   ),
 
-  // Trending Up icon (for growth/increase)
+  // Additional icons continue here...
   TrendingUpIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -504,7 +621,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Upward trending line */}
       <View style={{
         width: size * 0.8,
         height: 2,
@@ -512,7 +628,6 @@ const SVGIcons = {
         transform: [{ rotate: '-20deg' }],
         position: 'absolute'
       }} />
-      {/* Arrow head */}
       <View style={{
         width: 0,
         height: 0,
@@ -528,7 +643,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Trending Down icon (for decrease)
   TrendingDownIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -536,7 +650,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Downward trending line */}
       <View style={{
         width: size * 0.8,
         height: 2,
@@ -544,7 +657,6 @@ const SVGIcons = {
         transform: [{ rotate: '20deg' }],
         position: 'absolute'
       }} />
-      {/* Arrow head */}
       <View style={{
         width: 0,
         height: 0,
@@ -560,7 +672,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Target icon (for goals/targets)
   TargetIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -568,7 +679,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Outer circle */}
       <View style={{
         width: size * 0.9,
         height: size * 0.9,
@@ -579,7 +689,6 @@ const SVGIcons = {
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        {/* Middle circle */}
         <View style={{
           width: size * 0.6,
           height: size * 0.6,
@@ -590,7 +699,6 @@ const SVGIcons = {
           justifyContent: 'center',
           alignItems: 'center'
         }}>
-          {/* Center dot */}
           <View style={{
             width: size * 0.2,
             height: size * 0.2,
@@ -602,7 +710,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Calendar icon (for date ranges)
   CalendarIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -610,7 +717,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Calendar body */}
       <View style={{
         width: size * 0.8,
         height: size * 0.8,
@@ -620,7 +726,6 @@ const SVGIcons = {
         backgroundColor: 'transparent',
         marginTop: size * 0.1
       }}>
-        {/* Calendar header */}
         <View style={{
           width: '100%',
           height: size * 0.2,
@@ -628,7 +733,6 @@ const SVGIcons = {
           borderTopLeftRadius: 1,
           borderTopRightRadius: 1
         }} />
-        {/* Calendar grid dots */}
         <View style={{
           flexDirection: 'row',
           justifyContent: 'space-around',
@@ -641,7 +745,6 @@ const SVGIcons = {
           <View style={{ width: 2, height: 2, backgroundColor: color, borderRadius: 1 }} />
         </View>
       </View>
-      {/* Calendar rings */}
       <View style={{
         position: 'absolute',
         top: size * 0.02,
@@ -667,7 +770,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Currency icon (for revenue)
   CurrencyIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -675,21 +777,18 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Dollar sign */}
       <View style={{
         width: size * 0.7,
         height: size * 0.9,
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        {/* Vertical line */}
         <View style={{
           width: 2,
           height: size * 0.9,
           backgroundColor: color,
           position: 'absolute'
         }} />
-        {/* Top curve */}
         <View style={{
           width: size * 0.5,
           height: size * 0.3,
@@ -701,7 +800,6 @@ const SVGIcons = {
           position: 'absolute',
           top: size * 0.1
         }} />
-        {/* Bottom curve */}
         <View style={{
           width: size * 0.5,
           height: size * 0.3,
@@ -718,7 +816,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Users icon (for customers)
   UsersIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -726,7 +823,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* First person (left) */}
       <View style={{
         position: 'absolute',
         left: 0,
@@ -735,7 +831,6 @@ const SVGIcons = {
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        {/* Head */}
         <View style={{
           width: size * 0.25,
           height: size * 0.25,
@@ -745,7 +840,6 @@ const SVGIcons = {
           backgroundColor: 'transparent',
           marginBottom: size * 0.05
         }} />
-        {/* Body */}
         <View style={{
           width: size * 0.45,
           height: size * 0.35,
@@ -756,7 +850,6 @@ const SVGIcons = {
           backgroundColor: 'transparent'
         }} />
       </View>
-      {/* Second person (right, slightly overlapped) */}
       <View style={{
         position: 'absolute',
         right: 0,
@@ -765,7 +858,6 @@ const SVGIcons = {
         justifyContent: 'center',
         alignItems: 'center'
       }}>
-        {/* Head */}
         <View style={{
           width: size * 0.25,
           height: size * 0.25,
@@ -775,7 +867,6 @@ const SVGIcons = {
           backgroundColor: 'transparent',
           marginBottom: size * 0.05
         }} />
-        {/* Body */}
         <View style={{
           width: size * 0.45,
           height: size * 0.35,
@@ -789,7 +880,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Location/Address icon
   LocationIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -797,7 +887,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Location pin shape */}
       <View style={{
         width: size * 0.6,
         height: size * 0.8,
@@ -811,7 +900,6 @@ const SVGIcons = {
         alignItems: 'center',
         transform: [{ rotate: '45deg' }]
       }}>
-        {/* Center dot */}
         <View style={{
           width: size * 0.2,
           height: size * 0.2,
@@ -822,7 +910,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Phone/Call icon
   CallIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -830,7 +917,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Phone handset */}
       <View style={{
         width: size * 0.7,
         height: size * 0.8,
@@ -840,7 +926,6 @@ const SVGIcons = {
         backgroundColor: 'transparent',
         transform: [{ rotate: '15deg' }]
       }}>
-        {/* Speaker (top) */}
         <View style={{
           width: size * 0.4,
           height: size * 0.1,
@@ -849,7 +934,6 @@ const SVGIcons = {
           alignSelf: 'center',
           marginTop: size * 0.1
         }} />
-        {/* Microphone (bottom) */}
         <View style={{
           width: size * 0.4,
           height: size * 0.1,
@@ -864,7 +948,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Email/Mail icon
   MailIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -872,7 +955,6 @@ const SVGIcons = {
       justifyContent: 'center',
       alignItems: 'center'
     }, style]}>
-      {/* Envelope body */}
       <View style={{
         width: size * 0.8,
         height: size * 0.6,
@@ -881,7 +963,6 @@ const SVGIcons = {
         borderRadius: 2,
         backgroundColor: 'transparent'
       }}>
-        {/* Envelope flap (top triangle) */}
         <View style={{
           position: 'absolute',
           top: -1.5,
@@ -906,7 +987,6 @@ const SVGIcons = {
     </View>
   ),
 
-  // Document/GST icon (enhanced version)
   DocumentTextIcon: ({ size = 20, color = '#000', style }) => (
     <View style={[{
       width: size,
@@ -925,7 +1005,6 @@ const SVGIcons = {
         alignItems: 'center',
         paddingVertical: size * 0.1
       }}>
-        {/* Document lines */}
         <View style={{
           width: size * 0.5,
           height: 1,
@@ -950,7 +1029,6 @@ const SVGIcons = {
           backgroundColor: color
         }} />
       </View>
-      {/* Corner fold */}
       <View style={{
         position: 'absolute',
         top: size * 0.05,
@@ -976,6 +1054,8 @@ const Icon = ({ name, size = 20, color = '#000', style }) => {
     'cube-outline': SVGIcons.CubeIcon,
     'trash-outline': SVGIcons.TrashIcon,
     'checkmark': SVGIcons.CheckmarkIcon,
+    'checkmark-circle': SVGIcons.SuccessCircleIcon,
+    'success-large': SVGIcons.LargeSuccessIcon,
     'person-outline': SVGIcons.PersonIcon,
     'share-outline': SVGIcons.ShareIcon,
     'download-outline': SVGIcons.DownloadIcon,

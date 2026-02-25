@@ -14,7 +14,6 @@ import { Ionicons } from '@expo/vector-icons';
 import { colors } from '../../styles/colors';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
-import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const ChangePasswordOTPScreen = ({ navigation, route }) => {
   const { email } = route.params;
@@ -29,15 +28,6 @@ const ChangePasswordOTPScreen = ({ navigation, route }) => {
   const [showExpiryModal, setShowExpiryModal] = useState(false);
   
   const inputRefs = useRef([]);
-
-  // ALWAYS block back navigation on OTP screen - user must complete verification
-  // This prevents the issue of going back and triggering resend OTP again
-  useBackPrevention(true, {
-    message: 'Please complete OTP verification. Going back will cancel the password change process.',
-    title: 'Complete Verification',
-    hardBlock: true, // Always hard block - no back allowed
-    showAlert: true,
-  });
 
   // Enhanced timer with expiry handling and visibility
   useEffect(() => {

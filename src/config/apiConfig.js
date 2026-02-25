@@ -3,20 +3,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // Environment-based API configuration
-const ENVIRONMENT = 'production'; // Change to 'production' for Render deployment
+const ENVIRONMENT = 'development'; // Change to 'production' for Render deployment
 
 const API_CONFIGS = {
   development: [
     // LOCAL DEVELOPMENT - Testing (Multiple IPs for fallback)
-    'http://192.168.1.4:3000',     // Primary - Current LAN IP for mobile (from ipconfig)
+    'http://192.168.1.9:3000',     // Primary - Your machine's actual IP (from ipconfig - Feb 25, 2026)
+    'http://192.168.1.3:3000',     // Previous IP (fallback)
+    'http://192.168.1.2:3000',     // Backend detected IP (fallback)
     'http://localhost:3000',        // localhost for same machine
     'http://127.0.0.1:3000',        // Loopback
     'http://10.0.2.2:3000',         // Android emulator
-    'http://192.168.131.92:3000',   // Previous IP (fallback)
+    'http://192.168.1.5:3000',     // Previous IP (fallback)
+    'http://192.168.1.7:3000',     // Previous IP (fallback)
+    'http://192.168.1.4:3000',     // Previous IP (fallback)
   ],
   production: [
     // PRODUCTION - Render hosting
-    'https://flowposbackend.onrender.com',  // Primary production server - UPDATE THIS TO YOUR ACTUAL RENDER URL
+    'https://flowposbackend-2.onrender.com',  // Primary production server
   ],
 };
 

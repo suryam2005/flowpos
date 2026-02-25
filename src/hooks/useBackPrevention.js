@@ -12,7 +12,7 @@ import { useNavigation } from '@react-navigation/native';
  * @param {string} options.title - Alert title
  * @param {boolean} options.showAlert - Whether to show confirmation alert
  * @param {boolean} options.hardBlock - Whether to block without confirmation
- * @param {function} options.onCancel - Callback when user cancels operation
+ * @param {function} options.onCancel - Callback when user cancels operation (allows navigation)
  */
 export const useBackPrevention = (isActive, options = {}) => {
   const {
@@ -26,6 +26,7 @@ export const useBackPrevention = (isActive, options = {}) => {
   // Use refs to always have the latest values in the callback
   const optionsRef = useRef({ message, title, showAlert, hardBlock, onCancel });
   const listenerRef = useRef(null);
+  const allowNavigationRef = useRef(false); // Track if navigation should be allowed
   
   // Update refs when options change
   useEffect(() => {
@@ -44,30 +45,35 @@ export const useBackPrevention = (isActive, options = {}) => {
   useEffect(() => {
     if (!navigation) return;
 
-    // Add a small delay to handle rapid state changes
-    const timeoutId = setTimeout(() => {
-      if (isActive) {
-        // Disable gesture navigation when active
+    if (isActive) {
+      // Disable gesture navigation when active - with small delay for activation
+      const timeoutId = setTimeout(() => {
         navigation.setOptions({
           gestureEnabled: false,
         });
         console.log('🛡️ Gesture navigation disabled');
-      } else {
-        // Re-enable gesture navigation when not active
-        navigation.setOptions({
-          gestureEnabled: true,
-        });
-        console.log('✅ Gesture navigation enabled');
-      }
-    }, 50); // Small delay to handle rapid state changes
+      }, 50);
 
-    return () => {
-      clearTimeout(timeoutId);
-    };
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    } else {
+      // Re-enable gesture navigation IMMEDIATELY when not active (no delay)
+      navigation.setOptions({
+        gestureEnabled: true,
+      });
+      console.log('✅ Gesture navigation enabled');
+    }
   }, [isActive, navigation]);
 
   // Create stable back press handler that reads from refs
   const handleBackPress = useCallback(() => {
+    // If navigation was explicitly allowed, let it through
+    if (allowNavigationRef.current) {
+      allowNavigationRef.current = false; // Reset flag
+      return false; // Allow back navigation
+    }
+
     const { message: msg, title: ttl, showAlert: show, hardBlock: hard, onCancel: cancel } = optionsRef.current;
     
     if (show && !hard) {
@@ -79,23 +85,36 @@ export const useBackPrevention = (isActive, options = {}) => {
           { 
             text: 'Cancel Operation', 
             style: 'destructive', 
-            onPress: cancel || (() => {})
+            onPress: () => {
+              // Execute the onCancel callback if provided
+              if (cancel && typeof cancel === 'function') {
+                cancel();
+              }
+              // Set flag to allow navigation and trigger back press again
+              allowNavigationRef.current = true;
+              // Trigger back navigation programmatically
+              if (navigation) {
+                navigation.goBack();
+              }
+            }
           }
         ]
       );
+      return true; // Prevent back navigation until user chooses
     } else if (hard) {
       // Show a simple message for hard block
       Alert.alert(ttl, msg, [{ text: 'OK', style: 'default' }]);
+      return true; // Always prevent back navigation for hard block
     }
     return true; // Always prevent back navigation when active
-  }, []);
+  }, [navigation]);
 
   // Handle Android hardware back button
   useEffect(() => {
-    // Add a small delay to handle rapid state changes
-    const timeoutId = setTimeout(() => {
-      // Only add listener when isActive is true and on Android
-      if (isActive && Platform.OS === 'android') {
+    // Only add listener when isActive is true and on Android
+    if (isActive && Platform.OS === 'android') {
+      // Add small delay for activation to handle rapid state changes
+      const timeoutId = setTimeout(() => {
         // Remove existing listener if any (with error handling)
         if (listenerRef.current) {
           try {
@@ -114,24 +133,27 @@ export const useBackPrevention = (isActive, options = {}) => {
           console.error('🛡️ [useBackPrevention] Error adding back handler:', error.message);
           listenerRef.current = null;
         }
-      } else {
-        // Remove listener when not active (with error handling)
-        if (listenerRef.current) {
-          try {
-            BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);
-            listenerRef.current = null;
-            console.log('✅ Back prevention deactivated');
-          } catch (error) {
-            console.warn('🛡️ [useBackPrevention] Error removing listener:', error.message);
-            listenerRef.current = null; // Clear reference anyway
-          }
+      }, 50);
+
+      return () => {
+        clearTimeout(timeoutId);
+      };
+    } else {
+      // Remove listener IMMEDIATELY when not active (no delay)
+      if (listenerRef.current) {
+        try {
+          BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);
+          listenerRef.current = null;
+          console.log('✅ Back prevention deactivated');
+        } catch (error) {
+          console.warn('🛡️ [useBackPrevention] Error removing listener:', error.message);
+          listenerRef.current = null; // Clear reference anyway
         }
       }
-    }, 50); // Small delay to handle rapid state changes
+    }
 
-    // Cleanup timeout and listener on unmount or dependency change
+    // Cleanup listener on unmount
     return () => {
-      clearTimeout(timeoutId);
       if (listenerRef.current) {
         try {
           BackHandler.removeEventListener('hardwareBackPress', listenerRef.current);

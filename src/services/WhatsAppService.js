@@ -7,7 +7,7 @@ import { getAppSettingFromCache } from '../context/AppSettingsContext';
 class WhatsAppService {
   constructor() {
     this.whatsappMethod = 'flowpos'; // 'flowpos' or 'device' - FlowPOS is default
-    this.sendInvoiceEnabled = true; // New setting for send invoice feature
+    this.sendInvoiceEnabled = false; // New setting for send invoice feature - OFF by default for new users
     this.loadSettings();
   }
 
@@ -33,7 +33,7 @@ class WhatsAppService {
       } else {
         // Fallback to AsyncStorage if cache unavailable
         const sendEnabled = await AsyncStorage.getItem('sendInvoiceEnabled');
-        this.sendInvoiceEnabled = sendEnabled !== null ? JSON.parse(sendEnabled) : true;
+        this.sendInvoiceEnabled = sendEnabled !== null ? JSON.parse(sendEnabled) : false; // Default OFF for new users
         console.log('📱 [WhatsAppService] sendInvoiceEnabled fallback to AsyncStorage:', this.sendInvoiceEnabled);
       }
     } catch (error) {

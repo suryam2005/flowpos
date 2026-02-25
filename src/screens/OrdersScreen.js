@@ -352,7 +352,7 @@ const OrdersScreen = ({ navigation, route }) => {
 
       if (result.success) {
         Alert.alert(
-          'Invoice Sent! ✅',
+          'Invoice Sent Successfully!',
           `Invoice has been successfully sent to ${order.customerName} via WhatsApp.`,
           [{ text: 'Great!', style: 'default' }]
         );
@@ -364,7 +364,7 @@ const OrdersScreen = ({ navigation, route }) => {
       console.error('Error sending WhatsApp invoice:', error);
       
       Alert.alert(
-        'Send Failed ❌',
+        'Send Failed',
         `Failed to send invoice via WhatsApp: ${error.message}\n\nWould you like to try an alternative method?`,
         [
           { text: 'Cancel', style: 'cancel' },

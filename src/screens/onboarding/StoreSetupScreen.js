@@ -18,8 +18,6 @@ import CustomAlert from '../../components/CustomAlert';
 import { colors, componentColors } from '../../styles/colors';
 import { createButtonStyle, createButtonTextStyle, createCardStyle, createInputStyle } from '../../styles/theme';
 import { getCurrencySymbol, getSupportedCurrencies } from '../../utils/currencyUtils';
-import notificationPaymentReader from '../../services/NotificationPaymentReader';
-import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 const StoreSetupScreen = ({ navigation }) => {
   const [currentStep, setCurrentStep] = useState(0);
@@ -28,14 +26,6 @@ const StoreSetupScreen = ({ navigation }) => {
   const [setupCompleted, setSetupCompleted] = useState(false); // Track setup completion
   const scrollViewRef = useRef(null);
   // No animations needed
-
-  // Block back navigation during setup, but allow it after completion
-  useBackPrevention(!setupCompleted, {
-    message: 'Store setup is in progress. Going back will require you to start over. Are you sure you want to cancel?',
-    title: 'Cancel Setup?',
-    hardBlock: false,
-    showAlert: true,
-  });
 
   // Store Information
   const [storeData, setStoreData] = useState({
@@ -47,6 +37,8 @@ const StoreSetupScreen = ({ navigation }) => {
     address: '',
     businessType: 'Retail Store',
     customBusinessType: '',
+    hasGST: null, // null = not answered, true = yes, false = no
+    enableGST: false, // Derived from hasGST
     gstNumber: '',
     gstPercentage: '',
     currency: 'INR',
@@ -57,7 +49,10 @@ const StoreSetupScreen = ({ navigation }) => {
     upiId3: '',
     paymentMethods: [], // No default - user must explicitly select
 
-    // Step 4: Overview
+    // Step 4: Business Preferences
+    requireCustomerDetails: false, // Ask yes/no
+
+    // Step 5: Overview
     timezone: 'Asia/Kolkata',
   });
 
@@ -76,6 +71,11 @@ const StoreSetupScreen = ({ navigation }) => {
       title: 'Payment Setup',
       subtitle: 'Configure payment methods and UPI options',
       fields: ['paymentMethods', 'upiId'],
+    },
+    {
+      title: 'Business Preferences',
+      subtitle: 'Configure your business settings',
+      fields: [],
     },
     {
       title: 'Setup Overview',
@@ -118,8 +118,11 @@ const StoreSetupScreen = ({ navigation }) => {
       if (field === 'currency' && !storeData.currency) {
         return 'Please select a currency';
       }
-      if (field === 'paymentMethods' && storeData.paymentMethods.length === 0) {
-        return 'Please select at least one payment method';
+      if (field === 'paymentMethods') {
+        console.log('🔍 Validating payment methods:', storeData.paymentMethods);
+        if (!storeData.paymentMethods || storeData.paymentMethods.length === 0) {
+          return 'Please select at least one payment method';
+        }
       }
       if (field === 'upiId' && storeData.paymentMethods.includes('QR Pay')) {
         const hasValidUpiId = (storeData.upiId && storeData.upiId.trim()) || 
@@ -134,12 +137,17 @@ const StoreSetupScreen = ({ navigation }) => {
 
 
 
-    // GST validation
-    if (storeData.gstNumber && storeData.gstNumber.trim() && !storeData.gstPercentage) {
-      return 'Please enter GST percentage when GST number is provided';
-    }
-    if (storeData.gstPercentage && (isNaN(storeData.gstPercentage) || storeData.gstPercentage < 0 || storeData.gstPercentage > 100)) {
-      return 'GST percentage must be a number between 0 and 100';
+    // GST validation - only if user said yes to having GST
+    if (storeData.hasGST === true) {
+      if (!storeData.gstNumber || !storeData.gstNumber.trim()) {
+        return 'Please enter GST number';
+      }
+      if (!storeData.gstPercentage) {
+        return 'Please enter GST percentage';
+      }
+      if (isNaN(storeData.gstPercentage) || storeData.gstPercentage < 0 || storeData.gstPercentage > 100) {
+        return 'GST percentage must be a number between 0 and 100';
+      }
     }
 
     // UPI ID validation
@@ -214,16 +222,19 @@ const StoreSetupScreen = ({ navigation }) => {
         businessType: storeData.businessType === 'Other' ? storeData.customBusinessType : storeData.businessType,
         originalBusinessType: storeData.businessType,
         customBusinessType: storeData.customBusinessType,
-        gst_number: storeData.gstNumber,
-        gstNumber: storeData.gstNumber, // Keep for backward compatibility
-        gstPercentage: storeData.gstPercentage,
-        hasGst: !!(storeData.gstNumber && storeData.gstNumber.trim()),
+        hasGST: storeData.hasGST,
+        enableGST: storeData.hasGST === true,
+        gst_number: storeData.hasGST === true ? storeData.gstNumber : '',
+        gstNumber: storeData.hasGST === true ? storeData.gstNumber : '', // Keep for backward compatibility
+        gstPercentage: storeData.hasGST === true ? storeData.gstPercentage : '',
+        hasGst: storeData.hasGST === true && !!(storeData.gstNumber && storeData.gstNumber.trim()),
         upiId: storeData.upiId,
         upiId2: storeData.upiId2,
         upiId3: storeData.upiId3,
         paymentMethods: storeData.paymentMethods,
         currency: storeData.currency,
         timezone: storeData.timezone,
+        requireCustomerDetails: storeData.requireCustomerDetails,
         setupCompleted: true,
         setupDate: new Date().toISOString(),
       };
@@ -242,18 +253,29 @@ const StoreSetupScreen = ({ navigation }) => {
             store_name: storeData.storeName,
             store_address: storeData.address,
             business_type: storeData.businessType === 'Other' ? storeData.customBusinessType : storeData.businessType,
-            gst_number: storeData.gstNumber || null,
+            gst_number: storeData.hasGST === true ? (storeData.gstNumber || null) : null,
             currency: storeData.currency,
             upi_id: storeData.upiId || null,
             upi_id_2: storeData.upiId2 || null,
             upi_id_3: storeData.upiId3 || null,
-            payment_methods: storeData.paymentMethods, // Send payment methods to backend
+            payment_methods: storeData.paymentMethods, // REQUIRED: User must select at least one
             tax_settings: {
-              enableGST: !!(storeData.gstNumber && storeData.gstNumber.trim()),
-              gstRate: parseFloat(storeData.gstPercentage) || 18,
+              enableGST: storeData.hasGST === true,
+              gstRate: storeData.hasGST === true ? (parseFloat(storeData.gstPercentage) || 18) : 0,
               includeTaxInPrice: false,
             },
+            app_settings: {
+              requireCustomerDetails: storeData.requireCustomerDetails === true,
+              notifications: true,
+              showStoreNameOnInvoice: false, // Default OFF for new users
+              whatsappMethod: 'flowpos',
+              sendInvoiceEnabled: false,
+            },
           };
+          
+          console.log('📤 Backend store data:', JSON.stringify(backendStoreData, null, 2));
+          console.log('📤 Payment methods being sent:', backendStoreData.payment_methods);
+          console.log('📤 requireCustomerDetails being sent:', backendStoreData.app_settings.requireCustomerDetails);
           
           const response = await apiCallWithFallback('/store', {
             method: 'POST',
@@ -264,16 +286,29 @@ const StoreSetupScreen = ({ navigation }) => {
             body: JSON.stringify(backendStoreData),
           });
           
-          if (response.success) {
+          const responseData = await response.json();
+          
+          if (response.ok && responseData.success) {
             console.log('✅ Store data synced to backend successfully');
           } else {
-            console.warn('⚠️ Failed to sync store data to backend:', response.message);
-            // Don't block onboarding if backend sync fails
+            console.warn('⚠️ Failed to sync store data to backend:', responseData.message || 'Unknown error');
+            throw new Error(responseData.message || 'Backend sync failed');
           }
+        } else {
+          throw new Error('No auth token available');
         }
       } catch (syncError) {
-        console.error('⚠️ Error syncing store data to backend:', syncError);
-        // Don't block onboarding if backend sync fails
+        console.error('❌ Error syncing store data to backend:', syncError);
+        // Show error to user but allow retry
+        Alert.alert(
+          'Setup Error',
+          `Failed to save store data: ${syncError.message}. Please try again.`,
+          [
+            { text: 'Retry', onPress: () => handleComplete() },
+            { text: 'Cancel', style: 'cancel' }
+          ]
+        );
+        return; // Stop the flow
       }
 
       // Mark onboarding as completed
@@ -432,35 +467,6 @@ const StoreSetupScreen = ({ navigation }) => {
                 ))}
               </View>
             </View>
-
-            <View style={styles.inputGroup}>
-              <Text style={styles.inputLabel}>GST Number (Optional)</Text>
-              <TextInput
-                style={styles.textInput}
-                placeholder="Enter GST number if applicable"
-                value={storeData.gstNumber}
-                onChangeText={(text) => updateStoreData('gstNumber', text.toUpperCase())}
-                autoCapitalize="characters"
-                maxLength={15}
-              />
-            </View>
-
-            {storeData.gstNumber && storeData.gstNumber.trim() && (
-              <View style={styles.inputGroup}>
-                <Text style={styles.inputLabel}>GST Percentage *</Text>
-                <TextInput
-                  style={styles.textInput}
-                  placeholder="Enter GST percentage (e.g., 18)"
-                  value={storeData.gstPercentage}
-                  onChangeText={(text) => updateStoreData('gstPercentage', text)}
-                  keyboardType="numeric"
-                  maxLength={5}
-                />
-                <Text style={styles.inputHint}>
-                  This percentage will be added to bills when GST is applicable
-                </Text>
-              </View>
-            )}
           </View>
         );
 
@@ -499,29 +505,18 @@ const StoreSetupScreen = ({ navigation }) => {
                       const currentMethods = storeData.paymentMethods;
                       let newMethods;
                       
+                      console.log('🔍 Payment method toggle - Current:', currentMethods);
+                      console.log('🔍 Payment method toggle - Clicked:', method.id);
+                      
                       if (currentMethods.includes(method.id)) {
                         // Remove method - allow empty selection (validation will catch it)
                         newMethods = currentMethods.filter(m => m !== method.id);
                       } else {
                         // Add method
                         newMethods = [...currentMethods, method.id];
-                        
-                        // Prompt for notification access when QR Pay is enabled (for auto payment detection)
-                        if (method.id === 'QR Pay' && Platform.OS === 'android') {
-                          notificationPaymentReader.promptNotificationAccess().then((granted) => {
-                            if (granted) {
-                              console.log('✅ Notification access granted for payment detection');
-                            } else {
-                              Alert.alert(
-                                'Auto Payment Detection',
-                                'For automatic payment detection from GPay, PhonePe, and Paytm, you can enable notification access later in Settings.\n\nYou can still confirm payments manually.',
-                                [{ text: 'OK' }]
-                              );
-                            }
-                          });
-                        }
                       }
                       
+                      console.log('🔍 Payment method toggle - New methods:', newMethods);
                       updateStoreData('paymentMethods', newMethods);
                     }}
                     activeOpacity={0.8}
@@ -592,6 +587,133 @@ const StoreSetupScreen = ({ navigation }) => {
       case 3:
         return (
           <View style={styles.formContainer}>
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>GST Registration</Text>
+              <Text style={styles.inputHint}>
+                Do you have a GST registration number?
+              </Text>
+              <View style={styles.yesNoContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.yesNoOption,
+                    storeData.hasGST === true && styles.yesNoOptionSelected
+                  ]}
+                  onPress={() => {
+                    updateStoreData('hasGST', true);
+                    updateStoreData('enableGST', true);
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.yesNoText,
+                    storeData.hasGST === true && styles.yesNoTextSelected
+                  ]}>
+                    Yes
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.yesNoOption,
+                    storeData.hasGST === false && styles.yesNoOptionSelected
+                  ]}
+                  onPress={() => {
+                    updateStoreData('hasGST', false);
+                    updateStoreData('enableGST', false);
+                    updateStoreData('gstNumber', '');
+                    updateStoreData('gstPercentage', '');
+                  }}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.yesNoText,
+                    storeData.hasGST === false && styles.yesNoTextSelected
+                  ]}>
+                    No
+                  </Text>
+                </TouchableOpacity>
+              </View>
+            </View>
+
+            {storeData.hasGST === true && (
+              <>
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>GST Number *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter GST number"
+                    value={storeData.gstNumber}
+                    onChangeText={(text) => updateStoreData('gstNumber', text.toUpperCase())}
+                    autoCapitalize="characters"
+                    maxLength={15}
+                  />
+                </View>
+
+                <View style={styles.inputGroup}>
+                  <Text style={styles.inputLabel}>GST Percentage *</Text>
+                  <TextInput
+                    style={styles.textInput}
+                    placeholder="Enter GST percentage (e.g., 18)"
+                    value={storeData.gstPercentage}
+                    onChangeText={(text) => updateStoreData('gstPercentage', text)}
+                    keyboardType="numeric"
+                    maxLength={5}
+                  />
+                  <Text style={styles.inputHint}>
+                    This percentage will be added to bills when GST is applicable
+                  </Text>
+                </View>
+              </>
+            )}
+
+            <View style={styles.inputGroup}>
+              <Text style={styles.inputLabel}>Customer Details Requirement</Text>
+              <Text style={styles.inputHint}>
+                Do you want to make customer name and phone number mandatory during checkout?
+              </Text>
+              <View style={styles.yesNoContainer}>
+                <TouchableOpacity
+                  style={[
+                    styles.yesNoOption,
+                    storeData.requireCustomerDetails === true && styles.yesNoOptionSelected
+                  ]}
+                  onPress={() => updateStoreData('requireCustomerDetails', true)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.yesNoText,
+                    storeData.requireCustomerDetails === true && styles.yesNoTextSelected
+                  ]}>
+                    Yes, Required
+                  </Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={[
+                    styles.yesNoOption,
+                    storeData.requireCustomerDetails === false && styles.yesNoOptionSelected
+                  ]}
+                  onPress={() => updateStoreData('requireCustomerDetails', false)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={[
+                    styles.yesNoText,
+                    storeData.requireCustomerDetails === false && styles.yesNoTextSelected
+                  ]}>
+                    No, Optional
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <Text style={styles.inputHint}>
+                {storeData.requireCustomerDetails 
+                  ? 'Customers must provide their details before checkout' 
+                  : 'Customer details will be optional during checkout'}
+              </Text>
+            </View>
+          </View>
+        );
+
+      case 4:
+        return (
+          <View style={styles.formContainer}>
             <View style={styles.overviewContainer}>
               <Text style={styles.overviewTitle}>🎉 Setup Complete!</Text>
               <Text style={styles.overviewSubtitle}>
@@ -615,12 +737,26 @@ const StoreSetupScreen = ({ navigation }) => {
                 <Text style={styles.summaryLabel}>Currency:</Text>
                 <Text style={styles.summaryValue}>{getCurrencySymbol(storeData.currency)} {storeData.currency}</Text>
               </View>
-              {storeData.gstNumber && (
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>GST Enabled:</Text>
+                <Text style={styles.summaryValue}>{storeData.hasGST === true ? 'Yes' : 'No'}</Text>
+              </View>
+              {storeData.hasGST === true && storeData.gstNumber && (
                 <View style={styles.summaryItem}>
-                  <Text style={styles.summaryLabel}>GST:</Text>
+                  <Text style={styles.summaryLabel}>GST Details:</Text>
                   <Text style={styles.summaryValue}>{storeData.gstNumber} ({storeData.gstPercentage}%)</Text>
                 </View>
               )}
+            </View>
+
+            <View style={styles.setupSummary}>
+              <Text style={styles.summaryTitle}>Business Preferences</Text>
+              <View style={styles.summaryItem}>
+                <Text style={styles.summaryLabel}>Customer Details:</Text>
+                <Text style={styles.summaryValue}>
+                  {storeData.requireCustomerDetails ? 'Required' : 'Optional'}
+                </Text>
+              </View>
             </View>
 
             <View style={styles.setupSummary}>
@@ -1109,6 +1245,35 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: colors.success.main,
     lineHeight: 20,
+  },
+  yesNoContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 12,
+  },
+  yesNoOption: {
+    flex: 1,
+    backgroundColor: colors.background.surface,
+    borderWidth: 2,
+    borderColor: colors.border.light,
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yesNoOptionSelected: {
+    borderColor: colors.primary.main,
+    borderWidth: 2,
+    backgroundColor: colors.primary.background,
+  },
+  yesNoText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text.primary,
+  },
+  yesNoTextSelected: {
+    color: colors.primary.main,
+    fontWeight: '700',
   },
 });
 

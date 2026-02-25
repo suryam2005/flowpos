@@ -53,7 +53,7 @@ This design implements database persistence and caching for 6 critical app setti
 │        "autoPaymentDetection": true,                             │
 │        "requireCustomerDetails": false,                          │
 │        "showStoreNameOnInvoice": true,                           │
-│        "sendInvoiceEnabled": true,                               │
+│        "sendInvoiceEnabled": false,                              │
 │        "whatsappMethod": "flowpos",                              │
 │        "notifications": true                                     │
 │      }                                                           │

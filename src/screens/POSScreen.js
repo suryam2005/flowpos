@@ -8,6 +8,8 @@ import {
   RefreshControl,
   Image,
   TextInput,
+  BackHandler,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 // Removed useFocusEffect import - Phase 1 optimization eliminates focus-based API calls
@@ -47,9 +49,6 @@ const POSScreen = ({ navigation, route }) => {
   // TOUR TEMPORARILY DISABLED
   // const [showTourResumePrompt, setShowTourResumePrompt] = useState(true);
   const { items, addItem, removeItem, clearCart, getItemCount, getTotal } = useCart();
-
-  // Track if initial load is done
-  const initialLoadDone = useRef(false);
 
   // Track last fetch timestamp for staleness check (API optimization)
   const lastFetchRef = useRef(0);
@@ -105,9 +104,6 @@ const POSScreen = ({ navigation, route }) => {
   const storeName = storeProfile?.store_name || 'My Store';
 
   // Initialize feature service and trigger initial load
-  // Simple timestamp guard to prevent rapid refetches on remount (30 seconds)
-  const REMOUNT_GUARD_MS = 30 * 1000;
-
   useEffect(() => {
     // Phase A Optimization: Initialize ProductFetchCoordinator and fetch products
     console.log('🏪 [POS] Initializing ProductFetchCoordinator');
@@ -125,8 +121,9 @@ const POSScreen = ({ navigation, route }) => {
         console.log('🏪 [POS] Order success - refreshing products display');
         refreshProducts(false); // Use cache if available, don't force API call
       } else {
-        // Other updates (product changes, etc.)
-        refreshProducts(false);
+        // Other updates (product changes, etc.) - force refresh to get latest data
+        console.log('🏪 [POS] Product update - forcing refresh to show changes');
+        refreshProducts(true); // Force refresh to ensure tags and other changes are visible
       }
     };
 
@@ -135,25 +132,44 @@ const POSScreen = ({ navigation, route }) => {
     // Initialize feature service
     featureService.initialize();
 
-    // Simple guard: check if we fetched recently to prevent rapid remount refetches
-    const now = Date.now();
-    const timeSinceLastFetch = now - lastFetchRef.current;
+    // FIXED: Always fetch products on mount - removed initialLoadDone check
+    // This ensures products are fetched every time user navigates to POS screen
+    // The ProductFetchCoordinator handles caching internally to prevent unnecessary API calls
+    console.log('🏪 [POS] Fetching products via ProductFetchCoordinator');
+    refreshProducts(false).then(() => {
+      lastFetchRef.current = Date.now();
+      console.log('🏪 [POS] Initial fetch completed successfully');
+    }).catch((error) => {
+      console.error('🏪 [POS] Initial fetch failed:', error);
+    });
 
-    if (timeSinceLastFetch > REMOUNT_GUARD_MS || lastFetchRef.current === 0) {
-      // Trigger initial products fetch - single API call per mount
-      console.log('🏪 [POS] Initial mount - fetching products via ProductFetchCoordinator');
-      refreshProducts(false); // Use cache if available
-      lastFetchRef.current = now; // Track fetch timestamp
-    } else {
-      console.log('🏪 [POS] Mount guard active - skipping API call (recently fetched)');
-    }
-
-    initialLoadDone.current = true;
+    // Exit confirmation on back press
+    const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+      Alert.alert(
+        'Exit FlowPOS',
+        'Are you sure you want to exit the app?',
+        [
+          {
+            text: 'Cancel',
+            onPress: () => null,
+            style: 'cancel'
+          },
+          {
+            text: 'Exit',
+            onPress: () => BackHandler.exitApp(),
+            style: 'destructive'
+          }
+        ],
+        { cancelable: true }
+      );
+      return true; // Prevent default back behavior
+    });
 
     // Phase B Implementation: Cleanup - unregister from UIUpdatePropagator
     return () => {
       console.log('🏪 [POS] Unregistering from UIUpdatePropagator');
       uiUpdatePropagator.unregisterScreen('POSScreen');
+      backHandler.remove();
     };
   }, [refreshProducts]);
 
@@ -455,7 +471,7 @@ const POSScreen = ({ navigation, route }) => {
               <TextInput
                 style={styles.searchInput}
                 placeholder="Search products..."
-                placeholderTextColor={colors.text.tertiary}
+                placeholderTextColor={colors.gray[500]}
                 value={searchQuery}
                 onChangeText={setSearchQuery}
                 autoFocus

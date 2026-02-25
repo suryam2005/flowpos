@@ -116,7 +116,9 @@ class ProductsService {
         discount_percentage: parseFloat(productData.discount_percentage) || 0,
         weight: parseFloat(productData.weight) || 0,
         dimensions: productData.dimensions || {},
-        tags: productData.tags || [],
+        tags: Array.isArray(productData.tags) 
+          ? productData.tags.filter(tag => tag && typeof tag === 'string' && tag.trim().length > 0)
+          : [],
         is_active: productData.is_active !== false,
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -368,6 +370,7 @@ class ProductsService {
   async createProductInCloud(productData) {
     try {
       console.log('🌐 [MOBILE DEBUG] createProductInCloud called with:', productData);
+      console.log('🏷️ [MOBILE DEBUG] Tags from productData:', JSON.stringify(productData.tags));
       
       const requestBody = {
         name: productData.name,
@@ -377,10 +380,12 @@ class ProductsService {
         sku: productData.sku,
         stock_quantity: productData.stock_quantity,
         track_stock: productData.track_stock,
-        image_url: productData.image_url
+        image_url: productData.image_url,
+        tags: productData.tags || []
       };
       
       console.log('🌐 [MOBILE DEBUG] Request body:', requestBody);
+      console.log('🏷️ [MOBILE DEBUG] Tags in request body:', JSON.stringify(requestBody.tags));
       console.log('🌐 [MOBILE DEBUG] Making API call to /products...');
       
       const response = await networkService.apiCall('/products', {
@@ -497,6 +502,9 @@ class ProductsService {
       console.log('  track_stock type:', typeof updateData.track_stock);
       console.log('  track_stock === false:', updateData.track_stock === false);
       console.log('  track_stock === true:', updateData.track_stock === true);
+      console.log('🏷️  tags value:', JSON.stringify(updateData.tags));
+      console.log('🏷️  tags type:', typeof updateData.tags);
+      console.log('🏷️  tags isArray:', Array.isArray(updateData.tags));
       
       const requestBody = JSON.stringify(updateData);
       console.log('📤 Request body string:', requestBody);

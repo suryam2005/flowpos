@@ -203,7 +203,7 @@ export const componentColors = {
     focusBorder: colors.primary.main,
     errorBorder: colors.error.main,
     text: colors.text.primary,
-    placeholder: colors.text.secondary,
+    placeholder: colors.gray[500], // Darker gray for better visibility on all devices
   },
 
   card: {

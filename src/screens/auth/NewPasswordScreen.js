@@ -27,12 +27,14 @@ const NewPasswordScreen = ({ navigation, route }) => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [passwordReset, setPasswordReset] = useState(false); // Track if password is reset
 
-  // FIXED: Prevent back navigation during password reset to avoid security issues
-  useBackPrevention(isLoading, {
-    message: 'Password reset is in progress. Please wait for completion.',
-    title: 'Resetting Password',
-    hardBlock: true // No cancellation allowed during password operations
+  // Back prevention - active until password is successfully reset
+  useBackPrevention(!passwordReset, {
+    title: 'Password Reset in Progress',
+    message: 'Please complete setting your new password. Going back will cancel the password reset process.',
+    showAlert: true,
+    hardBlock: false,
   });
 
   const validatePassword = (password) => {
@@ -77,6 +79,9 @@ const NewPasswordScreen = ({ navigation, route }) => {
     setIsLoading(true);
     try {
       await resetPassword(email, formData.password);
+
+      // Mark password as reset BEFORE showing alert to disable back prevention
+      setPasswordReset(true);
 
       Alert.alert(
         'Password Reset Successful',

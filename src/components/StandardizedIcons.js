@@ -145,8 +145,8 @@ export const WhatsAppIcon = ({ size = 'md', color = '#25D366', style }) => (
 // Status Icons with better designs
 export const SuccessIcon = ({ size = 'md', color = '#10B981', style }) => (
   <BaseIcon size={size} color={color} style={style}>
-    <Circle cx="12" cy="12" r="10" fill="none" stroke={color} strokeWidth="2"/>
-    <Path d="M9 12l2 2 4-4" stroke={color} strokeWidth="2" fill="none"/>
+    <Circle cx="12" cy="12" r="10" fill={color} stroke="none"/>
+    <Path d="M9 12l2 2 4-4" stroke="#ffffff" strokeWidth="2.5" fill="none" strokeLinecap="round" strokeLinejoin="round"/>
   </BaseIcon>
 );
 

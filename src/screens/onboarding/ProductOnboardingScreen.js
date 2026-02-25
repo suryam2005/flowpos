@@ -27,6 +27,7 @@ import { useStoreSettings } from '../../context/StoreSettingsContext';
 import productFetchCoordinator from '../../services/ProductFetchCoordinator';
 // Phase B Implementation: Add UIUpdatePropagator for post-success UI propagation
 import uiUpdatePropagator from '../../services/UIUpdatePropagator';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 // Enhanced product validation and security utilities
 const ProductValidation = {
@@ -226,9 +227,18 @@ const ProductOnboardingScreen = ({ navigation }) => {
   });
   const [isCreating, setIsCreating] = useState(false);
   const [isAddingSamples, setIsAddingSamples] = useState(false);
+  const [onboardingCompleted, setOnboardingCompleted] = useState(false); // Track if onboarding is completed
 
   // Validation error states
   const [validationErrors, setValidationErrors] = useState({});
+
+  // Back prevention - active until onboarding is completed (user clicks Continue or Skip)
+  useBackPrevention(!onboardingCompleted, {
+    title: 'Product Setup in Progress',
+    message: 'Please complete the product setup or skip to continue. Going back will return to store setup.',
+    showAlert: true,
+    hardBlock: true, // Hard block - no option to cancel
+  });
 
   // Clear validation error for specific field
   const clearValidationError = (field) => {
@@ -785,10 +795,12 @@ const ProductOnboardingScreen = ({ navigation }) => {
     try {
       const sanitizedData = validation.sanitizedData;
       
-      let finalTags = sanitizedData.tags;
-      if (finalTags.length === 0) {
-        finalTags = generateProductTags(sanitizedData.name, businessType);
-      }
+      // Keep tags empty if user hasn't provided any - no auto-generation
+      let finalTags = Array.isArray(sanitizedData.tags)
+        ? sanitizedData.tags.filter(tag => tag && typeof tag === 'string' && tag.trim().length > 0)
+        : [];
+        
+      console.log('🏷️ [ProductOnboarding] Using user-provided tags only (no auto-generation):', JSON.stringify(finalTags));
 
       const productData = {
         name: sanitizedData.name,
@@ -887,7 +899,10 @@ const ProductOnboardingScreen = ({ navigation }) => {
     }
 
     try {
-      // Mark onboarding as completed
+      // Mark onboarding as completed FIRST to disable back prevention
+      setOnboardingCompleted(true);
+      
+      // Mark onboarding as completed in storage
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');
       await AsyncStorage.setItem('productsOnboardingCompleted', 'true');
       console.log('✅ Onboarding marked as completed');
@@ -909,6 +924,9 @@ const ProductOnboardingScreen = ({ navigation }) => {
 
   const handleSkip = async () => {
     try {
+      // Mark onboarding as completed FIRST to disable back prevention
+      setOnboardingCompleted(true);
+      
       // Mark onboarding as completed even with fewer products
       // Skip does NOT add any sample products - user explicitly chose to skip
       await AsyncStorage.setItem('hasCompletedOnboarding', 'true');

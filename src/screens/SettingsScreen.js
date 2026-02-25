@@ -52,7 +52,6 @@ const SettingsScreen = ({ navigation }) => {
 
   // Local state for UI (initialized to null - will be set from context)
   // Using null as initial state to distinguish "not loaded" from "loaded as false"
-  const [autoPaymentDetection, setAutoPaymentDetection] = useState(null);
   const [notifications, setNotifications] = useState(null);
   const [requireCustomerDetails, setRequireCustomerDetails] = useState(null);
 
@@ -145,7 +144,6 @@ const SettingsScreen = ({ navigation }) => {
     }
 
     // Read from context cache (no async needed - already in memory)
-    const autoDetection = getSetting('autoPaymentDetection');
     const notificationsValue = getSetting('notifications');
     const customerDetailsRequired = getSetting('requireCustomerDetails');
     const invoiceStoreName = getSetting('showStoreNameOnInvoice');
@@ -153,7 +151,6 @@ const SettingsScreen = ({ navigation }) => {
     const sendInvoiceValue = getSetting('sendInvoiceEnabled');
 
     console.log('[SettingsScreen] Loading settings from context:', {
-      autoDetection,
       notificationsValue,
       customerDetailsRequired,
       invoiceStoreName,
@@ -162,14 +159,12 @@ const SettingsScreen = ({ navigation }) => {
     });
 
     // Update local state from context
-    // If value is undefined (not set in DB), default to FALSE for auto-detection (safety)
-    // Other settings default to true for better UX
-    setAutoPaymentDetection(autoDetection !== undefined ? autoDetection : false);
+    // Settings default to true for better UX (except sendInvoiceEnabled which defaults to false)
     setNotifications(notificationsValue !== undefined ? notificationsValue : true);
     setRequireCustomerDetails(customerDetailsRequired !== undefined ? customerDetailsRequired : true);
     setShowStoreNameOnInvoice(invoiceStoreName !== undefined ? invoiceStoreName : true);
     setWhatsappMethod(whatsappMethodValue !== undefined ? whatsappMethodValue : 'flowpos');
-    setSendInvoiceEnabled(sendInvoiceValue !== undefined ? sendInvoiceValue : true);
+    setSendInvoiceEnabled(sendInvoiceValue !== undefined ? sendInvoiceValue : false); // Default OFF for new users
   };
 
   /**
@@ -193,126 +188,6 @@ const SettingsScreen = ({ navigation }) => {
    * Uses write-through cache update via context
    * Requests SMS permissions when enabled
    */
-
-  const handleAutoPaymentDetectionToggle = async (value) => {
-    console.log('🔄 [DEBUG] Toggle handler called with value:', value);
-    console.log('🔄 [DEBUG] Current autoPaymentDetection state:', autoPaymentDetection);
-    
-    const previousValue = autoPaymentDetection;
-    console.log('🔄 [DEBUG] Previous value stored:', previousValue);
-
-    // If turning ON, request permissions first
-    if (value === true) {
-      try {
-        console.log('🔄 [DEBUG] Attempting to turn ON auto payment detection');
-        
-        // Import the notification payment reader to request permissions
-        console.log('🔄 [DEBUG] Importing NotificationPaymentReader...');
-        const { default: notificationPaymentReader } = await import('../services/NotificationPaymentReader');
-        console.log('🔄 [DEBUG] NotificationPaymentReader imported successfully');
-
-        // Request SMS permissions
-        console.log('🔄 [DEBUG] Requesting permissions...');
-        const permissions = await notificationPaymentReader.requestPermissions();
-        console.log('🔄 [DEBUG] Permission status received:', permissions);
-
-        // Check if SMS permission was granted
-        if (!permissions.sms) {
-          console.log('🔄 [DEBUG] SMS permission not granted, showing alert');
-          // Show alert explaining why permissions are needed
-          Alert.alert(
-            'SMS Permission Required',
-            'To automatically detect UPI payments, FlowPOS needs SMS permission to read bank payment confirmations.\n\nPlease grant SMS permission to use this feature.',
-            [
-              {
-                text: 'Cancel',
-                style: 'cancel',
-                onPress: () => {
-                  console.log('🔄 [DEBUG] User cancelled permission request');
-                  // Don't enable the setting
-                  setAutoPaymentDetection(false);
-                }
-              },
-              {
-                text: 'Try Again',
-                onPress: async () => {
-                  console.log('🔄 [DEBUG] User wants to try permission request again');
-                  // Try requesting permissions again
-                  const retryPermissions = await notificationPaymentReader.requestPermissions();
-                  console.log('🔄 [DEBUG] Retry permission status:', retryPermissions);
-                  if (retryPermissions.sms) {
-                    console.log('🔄 [DEBUG] Retry successful, enabling setting');
-                    // Permissions granted, enable the setting
-                    setAutoPaymentDetection(true);
-                    const success = await updateSetting('autoPaymentDetection', true);
-                    console.log('🔄 [DEBUG] Setting update result:', success);
-                    if (!success) {
-                      console.log('🔄 [DEBUG] Setting update failed, reverting');
-                      setAutoPaymentDetection(false);
-                      Alert.alert('Error', 'Failed to save setting.');
-                    } else {
-                      console.log('🔄 [DEBUG] Setting saved successfully');
-                      Alert.alert(
-                        'Payment Detection Enabled',
-                        'FlowPOS will now automatically detect UPI payment confirmations from bank SMS when you show a QR code.',
-                        [{ text: 'OK' }]
-                      );
-                    }
-                  } else {
-                    console.log('🔄 [DEBUG] Retry failed, keeping disabled');
-                    setAutoPaymentDetection(false);
-                  }
-                }
-              }
-            ]
-          );
-          return;
-        }
-
-        console.log('🔄 [DEBUG] SMS permission granted, proceeding with enable');
-        // SMS permission granted, proceed with enabling
-        setAutoPaymentDetection(true);
-        console.log('🔄 [DEBUG] State updated to true, calling updateSetting');
-        
-        const success = await updateSetting('autoPaymentDetection', true);
-        console.log('🔄 [DEBUG] updateSetting result:', success);
-        
-        if (!success) {
-          console.log('🔄 [DEBUG] updateSetting failed, reverting state');
-          setAutoPaymentDetection(previousValue);
-          Alert.alert('Error', 'Failed to save setting. Please try again.');
-        } else {
-          console.log('🔄 [DEBUG] Setting saved successfully, showing success message');
-          // Show success message
-          Alert.alert(
-            'Payment Detection Enabled',
-            'FlowPOS will now automatically detect UPI payment confirmations from bank SMS when you show a QR code.',
-            [{ text: 'OK' }]
-          );
-        }
-      } catch (error) {
-        console.error('🔄 [DEBUG] Error in toggle handler:', error);
-        setAutoPaymentDetection(previousValue);
-        Alert.alert('Error', 'Failed to request permissions. Please try again.');
-      }
-    } else {
-      console.log('🔄 [DEBUG] Attempting to turn OFF auto payment detection');
-      // Turning OFF - just update the setting
-      setAutoPaymentDetection(value);
-      console.log('🔄 [DEBUG] State updated to false, calling updateSetting');
-      
-      const success = await updateSetting('autoPaymentDetection', value);
-      console.log('🔄 [DEBUG] updateSetting result:', success);
-      
-      if (!success) {
-        console.log('🔄 [DEBUG] updateSetting failed, reverting state');
-        setAutoPaymentDetection(previousValue);
-        Alert.alert('Error', 'Failed to save setting. Please try again.');
-      } else {
-        console.log('🔄 [DEBUG] Setting disabled successfully');
-      }
-    }
-  };
 
   /**
    * Handle notifications toggle
@@ -701,13 +576,6 @@ const SettingsScreen = ({ navigation }) => {
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Business Settings</Text>
-
-          <SettingItem
-            title="Auto Payment Detection"
-            description="Automatically detect UPI payment confirmations from SMS messages"
-            value={autoPaymentDetection}
-            onToggle={handleAutoPaymentDetectionToggle}
-          />
 
           <SettingItem
             title="Require Customer Details"

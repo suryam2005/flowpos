@@ -345,15 +345,36 @@ export const generateTagsFromBusinessType = (businessType) => {
 
 export const generateProductTags = (productName, businessType = '', customTags = []) => {
   const allTags = new Set();
-  generateTagsFromName(productName).forEach(tag => allTags.add(tag));
-  generateTagsFromBusinessType(businessType).forEach(tag => allTags.add(tag));
-  if (Array.isArray(customTags)) {
-    customTags.forEach(tag => {
-      const formatted = formatTag(tag);
-      if (formatted) allTags.add(formatted);
+  
+  // Generate tags from product name
+  if (productName && typeof productName === 'string') {
+    generateTagsFromName(productName).forEach(tag => {
+      if (tag && tag.trim()) allTags.add(tag);
     });
   }
-  return Array.from(allTags).map(formatTag).filter(t => t && t.length >= 1).slice(0, 20);
+  
+  // Generate tags from business type
+  if (businessType && typeof businessType === 'string') {
+    generateTagsFromBusinessType(businessType).forEach(tag => {
+      if (tag && tag.trim()) allTags.add(tag);
+    });
+  }
+  
+  // Add custom tags
+  if (Array.isArray(customTags)) {
+    customTags.forEach(tag => {
+      if (tag && typeof tag === 'string') {
+        const formatted = formatTag(tag);
+        if (formatted && formatted.length >= 1) allTags.add(formatted);
+      }
+    });
+  }
+  
+  // Convert to array, format, filter, and limit
+  return Array.from(allTags)
+    .map(formatTag)
+    .filter(t => t && t.length >= 1 && t.length <= 30)
+    .slice(0, 20);
 };
 
 export const getSuggestedTags = (input, limit = 10) => {

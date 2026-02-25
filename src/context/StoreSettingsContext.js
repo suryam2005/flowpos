@@ -139,10 +139,10 @@ export const StoreSettingsProvider = ({ children }) => {
       getReceiptSettings: () => {
         const rs = storeSettingsRef.current?.receipt_settings;
         return {
-          showAddress: rs?.showAddress !== undefined ? rs.showAddress : true,
-          showPhone: rs?.showPhone !== undefined ? rs.showPhone : true,
+          showAddress: rs?.showAddress !== undefined ? rs.showAddress : false,
+          showPhone: rs?.showPhone !== undefined ? rs.showPhone : false,
           showEmail: rs?.showEmail !== undefined ? rs.showEmail : false,
-          showGST: rs?.showGST !== undefined ? rs.showGST : true
+          showGST: rs?.showGST !== undefined ? rs.showGST : false
         };
       },
       getTaxSettings: () => {
@@ -784,21 +784,21 @@ export const StoreSettingsProvider = ({ children }) => {
    * Get receipt settings with proper boolean handling
    * 
    * CRITICAL: Uses !== undefined checks for booleans
-   * - showAddress: defaults to true (common to show)
-   * - showPhone: defaults to true (common to show)
-   * - showEmail: defaults to false (less common)
-   * - showGST: defaults to true (compliance requirement)
+   * - showAddress: defaults to false (opt-in feature)
+   * - showPhone: defaults to false (opt-in feature)
+   * - showEmail: defaults to false (opt-in feature)
+   * - showGST: defaults to false (opt-in feature)
    * 
    * @returns {Object} Receipt settings with proper defaults
    */
   const getReceiptSettings = useCallback(() => {
     const rs = storeSettings?.receipt_settings;
     return {
-      // Boolean: use !== undefined check, NOT || operator
-      showAddress: rs?.showAddress !== undefined ? rs.showAddress : true,
-      showPhone: rs?.showPhone !== undefined ? rs.showPhone : true,
+      // Boolean: use !== undefined check, NOT || operator - all default to FALSE (opt-in)
+      showAddress: rs?.showAddress !== undefined ? rs.showAddress : false,
+      showPhone: rs?.showPhone !== undefined ? rs.showPhone : false,
       showEmail: rs?.showEmail !== undefined ? rs.showEmail : false,
-      showGST: rs?.showGST !== undefined ? rs.showGST : true
+      showGST: rs?.showGST !== undefined ? rs.showGST : false
     };
   }, [storeSettings]);
 
@@ -807,7 +807,9 @@ export const StoreSettingsProvider = ({ children }) => {
    * 
    * CRITICAL: Uses !== undefined checks
    * - lowStockThreshold: defaults to 10 (reasonable threshold)
-   * - enableNotifications: defaults to true (opt-out feature)
+   * - enableNotifications: defaults to false (opt-in feature)
+   * - enableWhatsAppInvoice: defaults to false (opt-in feature)
+   * - enableEmailInvoice: defaults to false (opt-in feature)
    * 
    * @returns {Object} Business settings with proper defaults
    */
@@ -816,8 +818,10 @@ export const StoreSettingsProvider = ({ children }) => {
     return {
       // Number: use !== undefined check for 0 to be valid
       lowStockThreshold: bs?.lowStockThreshold !== undefined ? bs.lowStockThreshold : 10,
-      // Boolean: use !== undefined check
-      enableNotifications: bs?.enableNotifications !== undefined ? bs.enableNotifications : true
+      // Boolean: use !== undefined check - all invoice settings default to FALSE (opt-in)
+      enableNotifications: bs?.enableNotifications !== undefined ? bs.enableNotifications : false,
+      enableWhatsAppInvoice: bs?.enableWhatsAppInvoice !== undefined ? bs.enableWhatsAppInvoice : false,
+      enableEmailInvoice: bs?.enableEmailInvoice !== undefined ? bs.enableEmailInvoice : false
     };
   }, [storeSettings]);
 

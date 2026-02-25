@@ -39,7 +39,6 @@ import { colors } from '../styles/colors';
 import { buttonStyles } from '../styles/buttonStyles';
 import { typography } from '../styles/typographyStyles';
 import { useTheme } from '../context/ThemeContext';
-import { useBackPrevention } from '../hooks/useBackPrevention';
 import WhatsAppService from '../services/WhatsAppService';
 
 const CartScreen = ({ navigation }) => {
@@ -57,10 +56,20 @@ const CartScreen = ({ navigation }) => {
   const [customerNameError, setCustomerNameError] = useState('');
   const [availablePaymentMethods, setAvailablePaymentMethods] = useState(['Cash']);
   const [phoneNumberError, setPhoneNumberError] = useState('');
-  const [requireCustomerDetails, setRequireCustomerDetails] = useState(true);
+  // FIXED: No default value - will be loaded from backend/cache only
+  const [requireCustomerDetails, setRequireCustomerDetails] = useState(false);
 
   const [showAlert, setShowAlert] = useState(false);
   const [alertConfig, setAlertConfig] = useState({});
+  
+  // Order completion states - MUST be defined before useEffect that uses them
+  const [completingOrder, setCompletingOrder] = useState(false);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [orderCompleted, setOrderCompleted] = useState(false);
+  
+  // Track user interaction to prevent auto-close during data entry
+  const [userInteracting, setUserInteracting] = useState(false);
+  const interactionTimerRef = useRef(null);
   
   // QR Payment hook
   const { isQRVisible, paymentData, generatePaymentQR, closeQR, handlePaymentComplete } = useQRPayment();
@@ -76,13 +85,20 @@ const CartScreen = ({ navigation }) => {
     }, [])
   );
 
-  // Auto-close cart when empty and navigate back to POS (but not during order completion)
+  // DISABLED: Auto-close cart feature removed to prevent accidental navigation
+  // Cart will only close when user explicitly navigates away or completes an order
+  // useEffect(() => {
+  //   // Auto-close logic disabled
+  // }, [items.length, navigation, completingOrder, orderCompleted, userInteracting]);
+  
+  // Cleanup interaction timer on unmount
   useEffect(() => {
-    if (items.length === 0 && !completingOrder && !orderCompleted) {
-      // Immediate navigation without delay to prevent flash
-      safeGoBack(navigation, 'Main', { screen: 'POS' });
-    }
-  }, [items.length, navigation, completingOrder, orderCompleted]);
+    return () => {
+      if (interactionTimerRef.current) {
+        clearTimeout(interactionTimerRef.current);
+      }
+    };
+  }, []);
 
   // Reset order completed flag when component unmounts
   useEffect(() => {
@@ -109,13 +125,15 @@ const CartScreen = ({ navigation }) => {
         setRequireCustomerDetails(JSON.parse(setting));
         console.log('🛒 [CartScreen] requireCustomerDetails fallback to AsyncStorage:', JSON.parse(setting));
       } else {
-        // Default to true if no setting exists (existing behavior)
-        setRequireCustomerDetails(true);
-        console.log('🛒 [CartScreen] requireCustomerDetails using default: true');
+        // FIXED: No default - keep as false (optional) if not set
+        // User must explicitly choose during store setup
+        setRequireCustomerDetails(false);
+        console.log('🛒 [CartScreen] requireCustomerDetails not set, using false (optional)');
       }
     } catch (error) {
       console.error('Error loading customer details requirement:', error);
-      // Keep default value (true) on error to maintain existing behavior
+      // FIXED: On error, default to false (optional) instead of true
+      setRequireCustomerDetails(false);
     }
   };
 
@@ -222,13 +240,6 @@ const CartScreen = ({ navigation }) => {
       clearDynamicPosition('CART_ORDER_SUMMARY');
     };
   }, []);
-
-  // Prevent back navigation only during order completion, not during form filling
-  useBackPrevention(completingOrder, {
-    message: 'Order is being processed. Please wait for completion to avoid data loss.',
-    title: 'Processing Order',
-    hardBlock: true // No cancellation allowed during order processing
-  });
 
   const loadAvailablePaymentMethods = async () => {
     try {
@@ -390,6 +401,19 @@ const CartScreen = ({ navigation }) => {
   const handleCustomerNameChange = (text) => {
     setCustomerName(text);
     setCustomerNameError(validateCustomerName(text));
+    
+    // Mark user as actively interacting
+    setUserInteracting(true);
+    
+    // Clear existing timer
+    if (interactionTimerRef.current) {
+      clearTimeout(interactionTimerRef.current);
+    }
+    
+    // Reset interaction flag after 3 seconds of inactivity
+    interactionTimerRef.current = setTimeout(() => {
+      setUserInteracting(false);
+    }, 3000);
   };
 
   const handlePhoneNumberChange = (text) => {
@@ -397,6 +421,19 @@ const CartScreen = ({ navigation }) => {
     const cleanText = text.replace(/\D/g, '');
     setPhoneNumber(cleanText);
     setPhoneNumberError(validatePhoneNumber(cleanText));
+    
+    // Mark user as actively interacting
+    setUserInteracting(true);
+    
+    // Clear existing timer
+    if (interactionTimerRef.current) {
+      clearTimeout(interactionTimerRef.current);
+    }
+    
+    // Reset interaction flag after 3 seconds of inactivity
+    interactionTimerRef.current = setTimeout(() => {
+      setUserInteracting(false);
+    }, 3000);
   };
 
   const validateCustomerDetails = () => {
@@ -590,9 +627,12 @@ const CartScreen = ({ navigation }) => {
   //   }
   // };
 
-  const [completingOrder, setCompletingOrder] = useState(false);
-  const [confirmingPayment, setConfirmingPayment] = useState(false);
-  const [orderCompleted, setOrderCompleted] = useState(false);
+  // REMOVED: Duplicate state definitions - moved to top of component (after line 53)
+  // const [completingOrder, setCompletingOrder] = useState(false);
+  // const [confirmingPayment, setConfirmingPayment] = useState(false);
+  // const [orderCompleted, setOrderCompleted] = useState(false);
+  // const [userInteracting, setUserInteracting] = useState(false);
+  // const interactionTimerRef = useRef(null);
 
   const handleCompleteOrder = async (paymentDetails = null) => {
     // Prevent duplicate order creation

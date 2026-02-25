@@ -31,13 +31,12 @@ const ResetPasswordOTPScreen = ({ navigation, route }) => {
   
   const inputRefs = useRef([]);
 
-  // Block back navigation ONLY when not verified yet
-  // Once OTP is verified, allow navigation to proceed normally
+  // Back prevention - active until OTP is verified
   useBackPrevention(!isVerified, {
-    message: 'Please complete OTP verification. Going back will require you to restart the password reset process.',
-    title: 'Complete Verification',
-    hardBlock: true, // Hard block until verified
+    title: 'OTP Verification in Progress',
+    message: 'Please complete the OTP verification to reset your password. Going back will cancel the process.',
     showAlert: true,
+    hardBlock: false,
   });
 
   // Enhanced timer with expiry handling and visibility

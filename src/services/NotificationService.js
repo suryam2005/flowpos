@@ -72,7 +72,7 @@ class NotificationService {
 
             const lastNotifTime = await AsyncStorage.getItem(this.STORAGE_KEY);
             const now = Date.now();
-            const COOLDOWN = 1 * 60 * 1000; // 1 minute for testing (change to 24 * 60 * 60 * 1000 for production)
+            const COOLDOWN = 30 * 60 * 1000; // 30 minutes cooldown for low stock notifications
 
             if (lastNotifTime && (now - parseInt(lastNotifTime)) < COOLDOWN) {
                 console.log('🔔 [NotificationService] Cooldown active, skipping notification');

@@ -11,6 +11,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { safeGoBack, safeNavigate } from '../utils/navigationUtils';
 import { colors } from '../styles/colors';
+import Icon from '../components/SVGIcons';
 
 const OrderDetailsScreen = ({ navigation, route }) => {
   const { order } = route.params;
@@ -64,9 +65,7 @@ const OrderDetailsScreen = ({ navigation, route }) => {
       <ScrollView style={styles.scrollContainer} showsVerticalScrollIndicator={false}>
         <View style={styles.receiptCard}>
           <View style={styles.orderHeader}>
-            <View style={styles.successIcon}>
-              <Text style={styles.checkmark}>✓</Text>
-            </View>
+            <Icon name="success-large" size={64} color="#10b981" />
             <Text style={styles.orderStatus}>Order Completed!</Text>
             <Text style={styles.orderId}>Order ID: {order.id}</Text>
           </View>
@@ -176,20 +175,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 24,
     marginBottom: 24,
-  },
-  successIcon: {
-    width: 64,
-    height: 64,
-    borderRadius: 32,
-    backgroundColor: colors.success.background,
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginBottom: 16,
-  },
-  checkmark: {
-    fontSize: 28,
-    color: colors.success.main,
-    fontWeight: 'bold',
   },
   orderStatus: {
     fontSize: 20,

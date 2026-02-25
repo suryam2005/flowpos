@@ -415,7 +415,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
         <TextInput
           style={styles.searchInput}
           placeholder="Search products..."
-          placeholderTextColor={colors.text.secondary}
+          placeholderTextColor={colors.gray[500]}
           value={searchQuery}
           onChangeText={setSearchQuery}
         />
@@ -481,7 +481,7 @@ const InventoryScreen = ({ isActive, onTourAction }) => {
             <TextInput
               style={styles.stockInput}
               placeholder="Enter new stock quantity"
-              placeholderTextColor={colors.text.secondary}
+              placeholderTextColor={colors.gray[500]}
               value={newStock}
               onChangeText={setNewStock}
               keyboardType="numeric"

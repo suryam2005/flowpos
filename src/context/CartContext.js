@@ -4,8 +4,8 @@ import { AppState } from 'react-native';
 
 const CartContext = createContext();
 
-// Inactivity timeout in milliseconds (30 seconds for testing)
-const INACTIVITY_TIMEOUT = 30 * 1000;
+// Inactivity timeout in milliseconds (30 minutes)
+const INACTIVITY_TIMEOUT = 30 * 60 * 1000;
 
 const cartReducer = (state, action) => {
   switch (action.type) {

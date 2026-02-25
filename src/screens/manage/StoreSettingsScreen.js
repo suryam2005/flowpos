@@ -602,18 +602,7 @@ const StoreSettingsScreen = ({ navigation }) => {
                             // Check and prompt for notification listener permission
                             // This runs asynchronously without blocking the UI
                             setTimeout(() => {
-                              notificationPaymentReader.promptNotificationAccess().then((granted) => {
-                                if (granted) {
-                                  console.log('✅ Notification access granted for payment detection');
-                                } else {
-                                  // Show info about manual payment confirmation
-                                  Alert.alert(
-                                    'Auto Payment Detection',
-                                    'For automatic payment detection from GPay, PhonePe, and Paytm, you can enable notification access later in Settings.\n\nYou can still confirm payments manually.',
-                                    [{ text: 'OK' }]
-                                  );
-                                }
-                              });
+                              // QR Pay enabled - no notification prompt needed
                             }, 100); // Small delay to ensure UI updates first
                           }
                         } : undefined}

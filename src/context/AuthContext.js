@@ -21,6 +21,7 @@ import { apiDeduplicator, ENDPOINT_KEYS } from '../utils/APIDeduplicator';
 import serviceStatusCoordinator from '../services/ServiceStatusCoordinator';
 import productFetchCoordinator from '../services/ProductFetchCoordinator';
 import sessionStateManager from '../services/SessionStateManager';
+import SessionValidationService from '../services/SessionValidationService';
 
 const AuthContext = createContext();
 
@@ -42,6 +43,39 @@ export const AuthProvider = ({ children }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [lockoutEndTime, setLockoutEndTime] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
+
+  /**
+   * Handle session invalidation from SessionValidationService
+   * This is called when the backend reports the session is no longer valid
+   */
+  const handleSessionInvalidated = async (reason) => {
+    console.log(`🚨 Session invalidated: ${reason}`);
+    console.log('📍 Current auth state before logout:', { isAuthenticated, hasUser: !!user });
+    
+    // Perform logout first (clears all data and updates state)
+    await logout();
+    
+    console.log('📍 Auth state after logout:', { isAuthenticated, hasUser: !!user });
+    
+    // Force a re-check of auth status to trigger navigation
+    console.log('🔄 Force re-checking auth status after session invalidation...');
+    await checkAuthStatus();
+    
+    console.log('📍 Auth state after checkAuthStatus:', { isAuthenticated, hasUser: !!user });
+    
+    // Show alert to user after logout
+    try {
+      const { Alert } = require('react-native');
+      Alert.alert(
+        'Session Ended',
+        'Your session has been logged out from another device.',
+        [{ text: 'OK' }]
+      );
+      console.log('✅ Alert shown to user');
+    } catch (error) {
+      console.log('Could not show alert:', error);
+    }
+  };
 
   useEffect(() => {
     // Clear network cache on app start to ensure fresh API URL detection
@@ -69,6 +103,8 @@ export const AuthProvider = ({ children }) => {
 
   const checkAuthStatus = async () => {
     try {
+      console.log('🔍 [AuthContext] Checking auth status...');
+      
       // Check for cloud authentication first
       const [token, userData, pinCompleted, lockoutTime] = await Promise.all([
         AsyncStorage.getItem('accessToken'),
@@ -76,6 +112,12 @@ export const AuthProvider = ({ children }) => {
         getItemAsync('pinSetupCompleted'),
         getItemAsync('lockoutEndTime')
       ]);
+
+      console.log('🔍 [AuthContext] Auth check results:', {
+        hasToken: !!token,
+        hasUserData: !!userData,
+        hasPinCompleted: !!pinCompleted
+      });
 
       // Cloud authentication
       if (token && userData) {
@@ -85,12 +127,19 @@ export const AuthProvider = ({ children }) => {
         setIsAuthenticated(true);
         setPinSetupCompleted(true);
 
+        console.log('✅ [AuthContext] User authenticated:', parsedUserData.email);
+
         // Initialize ProductFetchCoordinator for session-level caching (UI Performance Optimization)
         console.log('🎯 Initializing ProductFetchCoordinator on app restart...');
         productFetchCoordinator.initialize();
 
+        // Start session validation service for automatic logout
+        console.log('🔄 Starting session validation service on app restart...');
+        SessionValidationService.start(handleSessionInvalidated);
 
       } else {
+        console.log('❌ [AuthContext] No authentication found');
+        
         // Legacy local authentication
         setPinSetupCompleted(!!pinCompleted);
 
@@ -101,6 +150,10 @@ export const AuthProvider = ({ children }) => {
         // Clear ServiceStatusCoordinator session (Phase D optimization)
         console.log('🔧 Clearing ServiceStatusCoordinator session - not authenticated...');
         serviceStatusCoordinator.clearCache();
+        
+        setIsAuthenticated(false);
+        setUser(null);
+        setAccessToken(null);
       }
 
       if (lockoutTime) {
@@ -113,6 +166,9 @@ export const AuthProvider = ({ children }) => {
       }
     } catch (error) {
       console.error('Error checking auth status:', error);
+      setIsAuthenticated(false);
+      setUser(null);
+      setAccessToken(null);
     } finally {
       setIsLoading(false);
     }
@@ -276,6 +332,10 @@ export const AuthProvider = ({ children }) => {
       console.log('🎯 Initializing ProductFetchCoordinator after password setup...');
       productFetchCoordinator.initialize();
 
+      // Start session validation service for automatic logout
+      console.log('🔄 Starting session validation service...');
+      SessionValidationService.start(handleSessionInvalidated);
+
       // Trigger subscription fetch after successful password setup (non-blocking)
       // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
       console.log('📦 Triggering subscription fetch after password setup (non-blocking)...');
@@ -367,6 +427,10 @@ export const AuthProvider = ({ children }) => {
       console.error('⚠️ SessionStateManager login handling failed (non-blocking):', sessionError);
     }
 
+    // Start session validation service for automatic logout
+    console.log('🔄 Starting session validation service...');
+    SessionValidationService.start(handleSessionInvalidated);
+
     // Trigger subscription fetch after successful login (non-blocking)
     // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
     console.log('📦 Triggering subscription fetch (non-blocking)...');
@@ -440,6 +504,10 @@ export const AuthProvider = ({ children }) => {
       setUser(response.user);
       setIsAuthenticated(true);
       setPinSetupCompleted(true);
+
+      // Start session validation service for automatic logout
+      console.log('🔄 Starting session validation service...');
+      SessionValidationService.start(handleSessionInvalidated);
 
       // Trigger subscription fetch after password reset (non-blocking)
       // This does NOT delay navigation or block post-login UI (Requirement 2.5, 2.6)
@@ -718,6 +786,10 @@ export const AuthProvider = ({ children }) => {
     logout._inProgress = true;
     
     try {
+      // Stop session validation service
+      console.log('🛑 Stopping session validation service...');
+      SessionValidationService.stop();
+
       // Call logout API only if authenticated with cloud and have valid token
       if (accessToken && isAuthenticated) {
         try {

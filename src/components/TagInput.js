@@ -17,8 +17,10 @@ const TagInput = ({
   placeholder = 'Add tags...',
   maxTags = 10 
 }) => {
-  // Ensure tags is always an array
-  const safeTags = Array.isArray(tags) ? tags : [];
+  // Ensure tags is always an array and filter out any invalid values
+  const safeTags = Array.isArray(tags) 
+    ? tags.filter(tag => tag && typeof tag === 'string' && tag.trim().length > 0)
+    : [];
   
   const [inputValue, setInputValue] = useState('');
   const [suggestions, setSuggestions] = useState([]);
@@ -76,23 +78,18 @@ const TagInput = ({
     }
   };
 
-  const generateAutoTags = () => {
-    const autoTags = generateProductTags(productName, businessType, []);
-    const newTags = [...new Set([...safeTags, ...autoTags])].slice(0, maxTags);
-    onTagsChange(newTags);
-  };
+  // REMOVED: Auto-generate feature per user request
+  // Users must add tags manually only
+  // const generateAutoTags = () => {
+  //   const autoTags = generateProductTags(productName, businessType, []);
+  //   const newTags = [...new Set([...safeTags, ...autoTags])].slice(0, maxTags);
+  //   onTagsChange(newTags);
+  // };
 
   return (
     <View style={styles.container}>
       <View style={styles.header}>
-        <Text style={styles.label}>Product Tags</Text>
-        <TouchableOpacity 
-          style={styles.autoGenerateButton}
-          onPress={generateAutoTags}
-          activeOpacity={0.7}
-        >
-          <Text style={styles.autoGenerateText}>✨ Auto Generate</Text>
-        </TouchableOpacity>
+        <Text style={styles.label}>Product Tags (Optional)</Text>
       </View>
 
       {/* Current Tags */}

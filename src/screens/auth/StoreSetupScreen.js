@@ -19,8 +19,8 @@ import { authColors as colors } from '../../styles/authColors';
 import { buttonStyles } from '../../styles/buttonStyles';
 import LoadingSpinner from '../../components/LoadingSpinner';
 import { useAuth } from '../../context/AuthContext';
-import { useBackPrevention } from '../../hooks/useBackPrevention';
 import { useStoreSettings } from '../../context/StoreSettingsContext';
+import { useBackPrevention } from '../../hooks/useBackPrevention';
 
 // Enhanced input validation and security utilities for Store Setup
 const StoreValidation = {
@@ -174,7 +174,9 @@ const StoreSetupScreen = ({ navigation, route }) => {
     store_email: user?.email || '',
     store_website: '',
     business_type: '',
+    hasGST: null, // null = not answered, true = yes, false = no
     gst_number: '',
+    requireCustomerDetails: null, // null = not answered, true = required, false = optional
     // Payment methods (Cash and UPI selected by default)
     accepts_cash: true,
     accepts_upi: true,
@@ -185,18 +187,20 @@ const StoreSetupScreen = ({ navigation, route }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [setupCompleted, setSetupCompleted] = useState(false);
   const [currentStep, setCurrentStep] = useState(1);
-
-  // Prevent back navigation during store setup completion, but allow after completion
-  useBackPrevention(isLoading && !setupCompleted, {
-    message: 'Store setup is in progress. Please wait for completion to avoid losing your setup data.',
-    title: 'Setting Up Store',
-    hardBlock: true // No cancellation allowed during store setup
-  });
   const [showBusinessTypeModal, setShowBusinessTypeModal] = useState(false);
   const totalSteps = 4;
 
   // Validation error states
   const [validationErrors, setValidationErrors] = useState({});
+
+  // Back prevention - active during onboarding until setup is completed
+  // Allows back between steps but prevents going back to signup
+  useBackPrevention(isOnboarding && !setupCompleted, {
+    title: 'Store Setup Required',
+    message: 'Store setup is required to continue using FlowPOS. Please complete the setup to access all features.',
+    showAlert: true,
+    hardBlock: true, // Hard block - no option to cancel
+  });
 
   // Clear validation error for specific field
   const clearValidationError = (field) => {
@@ -292,6 +296,12 @@ const StoreSetupScreen = ({ navigation, route }) => {
         break;
 
       case 3:
+        // Validate at least one payment method is selected
+        if (!storeData.accepts_cash && !storeData.accepts_upi) {
+          errors.payment_methods = 'Please select at least one payment method';
+          isValid = false;
+        }
+        
         // Validate UPI ID if UPI is enabled
         if (storeData.accepts_upi) {
           const upiValidation = StoreValidation.validateUpiId(storeData.upi_id, true);
@@ -310,11 +320,13 @@ const StoreSetupScreen = ({ navigation, route }) => {
         break;
 
       case 4:
-        // Validate GST number (optional)
-        const gstValidation = StoreValidation.validateGstNumber(storeData.gst_number);
-        if (!gstValidation.isValid) {
-          errors.gst_number = gstValidation.error;
-          isValid = false;
+        // Validate GST number only if user said yes to having GST
+        if (storeData.hasGST === true) {
+          const gstValidation = StoreValidation.validateGstNumber(storeData.gst_number);
+          if (!gstValidation.isValid) {
+            errors.gst_number = gstValidation.error;
+            isValid = false;
+          }
         }
         break;
 
@@ -366,6 +378,24 @@ const StoreSetupScreen = ({ navigation, route }) => {
   const handleSubmit = async () => {
     setIsLoading(true);
     try {
+      // Build payment_methods array from boolean flags
+      const paymentMethods = [];
+      if (storeData.accepts_cash) paymentMethods.push('Cash');
+      if (storeData.accepts_upi) paymentMethods.push('QR Pay');
+      
+      // Validate at least one payment method is selected
+      if (paymentMethods.length === 0) {
+        Alert.alert(
+          'Validation Error',
+          'Please select at least one payment method (Cash or UPI).',
+          [{ text: 'OK' }]
+        );
+        setIsLoading(false);
+        return;
+      }
+      
+      console.log('🔍 Payment methods selected:', paymentMethods);
+      
       // Prepare store data (Frontend-only - SQL schema fields only)
       const completeStoreData = {
         store_name: storeData.store_name.trim(),
@@ -375,18 +405,29 @@ const StoreSetupScreen = ({ navigation, route }) => {
         store_email: storeData.store_email?.trim() || '',
         store_website: storeData.store_website?.trim() || '',
         business_type: storeData.business_type || '',
-        gst_number: storeData.gst_number?.trim() || '',
+        gst_number: storeData.hasGST === true ? (storeData.gst_number?.trim() || '') : '',
         // Payment method data
+        payment_methods: paymentMethods, // REQUIRED: Send payment methods array
         upi_id: storeData.accepts_upi ? storeData.upi_id?.trim() || '' : '',
         upi_id_2: storeData.accepts_upi ? storeData.upi_id_2?.trim() || '' : '',
         // Additional fields
         store_logo_url: null,
-        social_media: {}
+        social_media: {},
+        // App settings - customer details requirement
+        app_settings: {
+          requireCustomerDetails: storeData.requireCustomerDetails === true,
+          notifications: true,
+          showStoreNameOnInvoice: false, // Default OFF for new users
+          whatsappMethod: 'flowpos',
+          sendInvoiceEnabled: false,
+        }
       };
 
       // 🔍 Store setup with backend integration
       console.log('🔍 Store setup with backend API:');
       console.log('📊 Complete store data:', JSON.stringify(completeStoreData, null, 2));
+      console.log('📊 requireCustomerDetails value:', storeData.requireCustomerDetails);
+      console.log('📊 app_settings.requireCustomerDetails:', completeStoreData.app_settings.requireCustomerDetails);
       
       // Validation
       if (!completeStoreData.store_name || completeStoreData.store_name.trim() === '') {
@@ -806,21 +847,6 @@ const StoreSetupScreen = ({ navigation, route }) => {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>Store Tagline</Text>
-        <View style={styles.inputContainer}>
-          <Ionicons name="pricetag-outline" size={20} color={colors.text.secondary} style={styles.inputIcon} />
-          <TextInput
-            style={styles.inputWithIcon}
-            value={storeData.store_tagline}
-            onChangeText={(value) => handleInputChange('store_tagline', value)}
-            placeholder="Your store's catchy tagline"
-            maxLength={100}
-          />
-        </View>
-        <Text style={styles.inputHint}>A memorable phrase that describes your store</Text>
-      </View>
-
-      <View style={styles.inputGroup}>
         <Text style={styles.inputLabel}>Payment Methods Accepted</Text>
         <Text style={styles.paymentMethodsHelpText}>
           💡 Cash and UPI are pre-selected. Tap to toggle on/off.
@@ -876,6 +902,9 @@ const StoreSetupScreen = ({ navigation, route }) => {
             </Text>
           </TouchableOpacity>
         </View>
+        {validationErrors.payment_methods && (
+          <Text style={styles.errorText}>{validationErrors.payment_methods}</Text>
+        )}
         
         {/* UPI IDs Input - Show only when UPI is selected */}
         {storeData.accepts_upi && (
@@ -946,24 +975,118 @@ const StoreSetupScreen = ({ navigation, route }) => {
       </View>
 
       <View style={styles.inputGroup}>
-        <Text style={styles.inputLabel}>GST Number</Text>
-        <View style={[styles.inputContainer, validationErrors.gst_number && styles.inputError]}>
-          <Ionicons name="receipt-outline" size={20} color={validationErrors.gst_number ? colors.error : colors.textSecondary} style={styles.inputIcon} />
-          <TextInput
-            style={styles.inputWithIcon}
-            value={storeData.gst_number}
-            onChangeText={(value) => handleInputChange('gst_number', value.toUpperCase())}
-            placeholder="22AAAAA0000A1Z5"
-            autoCapitalize="characters"
-            maxLength={15}
-            editable={!isLoading}
-          />
+        <Text style={styles.inputLabel}>GST Registration</Text>
+        <Text style={styles.inputHint}>
+          Do you have a GST registration number?
+        </Text>
+        <View style={styles.yesNoContainer}>
+          <TouchableOpacity
+            style={[
+              styles.yesNoOption,
+              storeData.hasGST === true && styles.yesNoOptionSelected
+            ]}
+            onPress={() => handleInputChange('hasGST', true)}
+            activeOpacity={0.7}
+            disabled={isLoading}
+          >
+            <Text style={[
+              styles.yesNoText,
+              storeData.hasGST === true && styles.yesNoTextSelected
+            ]}>
+              Yes
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.yesNoOption,
+              storeData.hasGST === false && styles.yesNoOptionSelected
+            ]}
+            onPress={() => {
+              handleInputChange('hasGST', false);
+              handleInputChange('gst_number', '');
+            }}
+            activeOpacity={0.7}
+            disabled={isLoading}
+          >
+            <Text style={[
+              styles.yesNoText,
+              storeData.hasGST === false && styles.yesNoTextSelected
+            ]}>
+              No
+            </Text>
+          </TouchableOpacity>
         </View>
-        {validationErrors.gst_number ? (
-          <Text style={styles.errorText}>{validationErrors.gst_number}</Text>
-        ) : (
-          <Text style={styles.inputHint}>15-digit GST identification number (optional)</Text>
-        )}
+      </View>
+
+      {storeData.hasGST === true && (
+        <View style={styles.inputGroup}>
+          <Text style={styles.inputLabel}>GST Number *</Text>
+          <View style={[styles.inputContainer, validationErrors.gst_number && styles.inputError]}>
+            <Ionicons name="receipt-outline" size={20} color={validationErrors.gst_number ? colors.error : colors.textSecondary} style={styles.inputIcon} />
+            <TextInput
+              style={styles.inputWithIcon}
+              value={storeData.gst_number}
+              onChangeText={(value) => handleInputChange('gst_number', value.toUpperCase())}
+              placeholder="22AAAAA0000A1Z5"
+              autoCapitalize="characters"
+              maxLength={15}
+              editable={!isLoading}
+            />
+          </View>
+          {validationErrors.gst_number ? (
+            <Text style={styles.errorText}>{validationErrors.gst_number}</Text>
+          ) : (
+            <Text style={styles.inputHint}>15-digit GST identification number</Text>
+          )}
+        </View>
+      )}
+
+      <View style={styles.inputGroup}>
+        <Text style={styles.inputLabel}>Customer Details Requirement</Text>
+        <Text style={styles.inputHint}>
+          Do you want to make customer name and phone number mandatory during checkout?
+        </Text>
+        <View style={styles.yesNoContainer}>
+          <TouchableOpacity
+            style={[
+              styles.yesNoOption,
+              storeData.requireCustomerDetails === true && styles.yesNoOptionSelected
+            ]}
+            onPress={() => handleInputChange('requireCustomerDetails', true)}
+            activeOpacity={0.7}
+            disabled={isLoading}
+          >
+            <Text style={[
+              styles.yesNoText,
+              storeData.requireCustomerDetails === true && styles.yesNoTextSelected
+            ]}>
+              Yes, Required
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[
+              styles.yesNoOption,
+              storeData.requireCustomerDetails === false && styles.yesNoOptionSelected
+            ]}
+            onPress={() => handleInputChange('requireCustomerDetails', false)}
+            activeOpacity={0.7}
+            disabled={isLoading}
+          >
+            <Text style={[
+              styles.yesNoText,
+              storeData.requireCustomerDetails === false && styles.yesNoTextSelected
+            ]}>
+              No, Optional
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.inputHint}>
+          {storeData.requireCustomerDetails === true
+            ? 'Customers must provide their details before checkout'
+            : storeData.requireCustomerDetails === false
+            ? 'Customer details will be optional during checkout'
+            : 'Choose whether customer details are required'}
+        </Text>
       </View>
 
       <View style={styles.completionCard}>
@@ -1629,6 +1752,37 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: colors.text,
     backgroundColor: colors.surface,
+  },
+  // Yes/No button styles - Consistent with onboarding design
+  yesNoContainer: {
+    flexDirection: 'row',
+    gap: 12,
+    marginTop: 8,
+  },
+  yesNoOption: {
+    flex: 1,
+    paddingVertical: 14,
+    paddingHorizontal: 20,
+    borderRadius: 12,
+    borderWidth: 2,
+    borderColor: colors.border.light,
+    backgroundColor: colors.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  yesNoOptionSelected: {
+    borderColor: colors.primary.main,
+    borderWidth: 2,
+    backgroundColor: colors.primaryLight,
+  },
+  yesNoText: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: colors.text,
+  },
+  yesNoTextSelected: {
+    color: colors.primary.main,
+    fontWeight: '700',
   },
 });
 
